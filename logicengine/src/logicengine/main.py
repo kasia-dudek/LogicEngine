@@ -2,6 +2,7 @@ from .parser import LogicParser, LogicExpressionError
 from .truth_table import generate_truth_table, TruthTableError
 from .ast import generate_ast, ASTError
 from .onp import to_onp, ONPError
+from .kmap import simplify_kmap, KMapError
 import json
 
 def main():
@@ -19,7 +20,11 @@ def main():
         onp = to_onp(expr)
         print("ONP:")
         print(onp)
-    except (LogicExpressionError, TruthTableError, ASTError, ONPError) as e:
+        kmap = simplify_kmap(expr)
+        print("Kroki Mapy Karnaugh:")
+        print(json.dumps(kmap["steps"], ensure_ascii=False, indent=2))
+        print(f"Uproszczone wyrażenie (K-map): {kmap['result']}")
+    except (LogicExpressionError, TruthTableError, ASTError, ONPError, KMapError) as e:
         print(f"Błąd: {e}")
 
 if __name__ == "__main__":
