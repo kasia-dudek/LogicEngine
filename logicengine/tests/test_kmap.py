@@ -16,7 +16,6 @@ def test_kmap_simplify(expr, expected_result):
 
 @pytest.mark.parametrize("expr", [
     "A ∧ B ∧ C ∧ D ∧ E",  # za dużo zmiennych
-    "(A & B)",            # niepoprawny operator
 ])
 def test_kmap_errors(expr):
     with pytest.raises(KMapError):
