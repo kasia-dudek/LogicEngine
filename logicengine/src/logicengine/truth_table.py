@@ -5,6 +5,16 @@ from .parser import LogicParser, LogicExpressionError
 class TruthTableError(Exception):
     pass
 
+def _replace_operators(expr: str) -> str:
+    """Zamienia operatory logiczne na odpowiedniki Pythona."""
+    return (
+        expr.replace('¬', ' not ')
+            .replace('∧', ' and ')
+            .replace('∨', ' or ')
+            .replace('→', ' <= ')
+            .replace('↔', ' == ')
+    )
+
 def generate_truth_table(expr: str, force_vars: List[str] = None) -> List[Dict[str, Any]]:
     """Generuje tabelę prawdy dla wyrażenia logicznego.
 
@@ -35,7 +45,7 @@ def generate_truth_table(expr: str, force_vars: List[str] = None) -> List[Dict[s
         elif expr == '1':
             row['result'] = 1
         else:
-            eval_expr = parsed_expr.replace('¬', ' not ').replace('∧', ' and ').replace('∨', ' or ')
+            eval_expr = _replace_operators(parsed_expr)
             for var, val in row.items():
                 eval_expr = eval_expr.replace(var, str(val))
             try:

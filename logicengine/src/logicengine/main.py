@@ -5,6 +5,7 @@ from .onp import to_onp, ONPError
 from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 import json
+from logicengine.engine import LogicEngine
 
 def main():
     expr = input("Podaj wyrażenie logiczne: ")
@@ -34,4 +35,11 @@ def main():
         print(f"Błąd: {e}")
 
 if __name__ == "__main__":
+    # Przykładowe wyrażenie logiczne
+    expr = "(A ∧ B) ∨ ¬C"
+    # Analiza wyrażenia przez LogicEngine
+    result = LogicEngine.analyze(expr)
+    # Wypisz wynik w formacie JSON (ładnie sformatowany)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+
     main() 
