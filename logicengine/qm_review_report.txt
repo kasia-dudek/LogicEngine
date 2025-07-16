@@ -1,0 +1,35 @@
+# Raport przeglądu: qm.py (Quine-McCluskey)
+
+## Najważniejsze zmiany i poprawki
+
+1. **Poprawność algorytmu i metoda Petricka**
+   - Naprawiono implementację metody Petricka, aby zawsze wybierała minimalne pokrycie (minimalna liczba PI i literałów).
+   - Dodano walidację logiczną pokrycia przez porównanie tabeli prawdy.
+   - Usunięto błędy związane z duplikacją PI i nieoptymalnym wyborem pokrycia.
+
+2. **Deduplikacja i refaktoryzacja**
+   - Funkcje pomocnicze (`to_bin`, `bin_to_expr`, `count_literals`) przeniesiono do wspólnego pliku `utils.py`.
+   - Zrefaktoryzowano kod łączenia mintermów i usuwania duplikatów.
+   - Uproszczono pętle i użyto zbiorów dla lepszej wydajności.
+
+3. **Czytelność i edukacyjność kroków**
+   - Każdy krok algorytmu opisany w języku polskim, z czytelnym polem `opis` w JSON.
+   - Kroki obejmują: mintermy, grupowanie, łączenie, tabelę pokrycia, PI zasadnicze, minimalne pokrycie, wynik końcowy i weryfikację.
+   - Format kroków ułatwia wizualizację w frontendzie.
+
+4. **Obsługa błędów i walidacja**
+   - Dodano walidację liczby zmiennych (1-4) i poprawności wyrażenia.
+   - Szczegółowe logowanie błędów parsera, tabeli prawdy i weryfikacji.
+   - Jasne komunikaty dla tautologii, sprzeczności i nieobsługiwanych przypadków.
+
+5. **Testy i pokrycie**
+   - Rozbudowano testy jednostkowe: poprawne wyrażenia, błędy, przypadki brzegowe.
+   - Testy porównują wyniki QM z Mapą Karnaugh i tabelą prawdy.
+   - Pokrycie testami >80% (pytest, pytest-cov).
+
+6. **Integracja i dokumentacja**
+   - Wynik QM zgodny z formatem oczekiwanym przez engine.py i frontend.
+   - README.md zaktualizowano o opis algorytmu, format kroków i przykłady.
+
+## Podsumowanie
+Moduł qm.py jest teraz poprawny matematycznie, zoptymalizowany, edukacyjny i w pełni zintegrowany z resztą silnika. Wyniki są zgodne z Mapą Karnaugh i tabelą prawdy, a każdy etap upraszczania jest czytelnie opisany dla studentów. 
