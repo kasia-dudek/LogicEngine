@@ -1,38 +1,50 @@
-from sympy import symbols, sympify
-from typing import List, Dict
+from typing import List, Dict, Any
+from itertools import product
 from .parser import LogicParser, LogicExpressionError
 
 class TruthTableError(Exception):
     pass
 
-def _expr_to_sympy(expr: str):
-    # Zamiana operatorów na sympy
-    expr = expr.replace('¬', '~').replace('∧', '&').replace('∨', '|').replace('→', '>>').replace('↔', '==')
-    return expr
+def generate_truth_table(expr: str, force_vars: List[str] = None) -> List[Dict[str, Any]]:
+    """Generuje tabelę prawdy dla wyrażenia logicznego.
 
-def generate_truth_table(expr: str) -> List[Dict[str, bool]]:
+    Args:
+        expr (str): Wyrażenie logiczne.
+        force_vars (List[str], optional): Lista zmiennych do użycia w tabeli.
+
+    Returns:
+        List[Dict[str, Any]]: Tabela prawdy jako lista słowników.
+    """
     try:
-        std = LogicParser.parse(expr)
+        parsed_expr = LogicParser.parse(expr)
     except LogicExpressionError as e:
-        raise TruthTableError(f"Błąd parsera: {e}")
-    # Wyodrębnij zmienne
-    vars = sorted(set([ch for ch in std if ch in LogicParser.VALID_VARS]))
-    if len(vars) > 4:
-        raise TruthTableError("Obsługiwane są maksymalnie 4 zmienne.")
-    expr_sympy = _expr_to_sympy(std)
-    syms = symbols(vars)
-    try:
-        s_expr = sympify(expr_sympy, locals={v: s for v, s in zip(vars, syms)})
-    except Exception as e:
-        raise TruthTableError(f"Błąd konwersji do sympy: {e}")
+        raise TruthTableError(f"Błąd parsowania wyrażenia: {e}")
+
+    vars = force_vars if force_vars else sorted(set(ch for ch in parsed_expr if ch.isalpha()))
+    if not vars and expr not in {'0', '1'}:
+        raise TruthTableError("Brak zmiennych w wyrażeniu.")
+
     table = []
-    for i in range(2 ** len(vars)):
-        vals = [(i >> j) & 1 == 1 for j in reversed(range(len(vars)))]
-        env = dict(zip(vars, vals))
-        try:
-            result = bool(s_expr.subs(env))
-        except Exception as e:
-            raise TruthTableError(f"Błąd ewaluacji: {e}")
-        row = {**env, 'result': result}
+    # Użyj standardowej kolejności binarnej: 00, 01, 10, 11
+    order = list(product([0, 1], repeat=len(vars)))
+
+    for idx, values in enumerate(order):
+        row = {var: val for var, val in zip(vars, values)}
+        if expr == '0':
+            row['result'] = 0
+        elif expr == '1':
+            row['result'] = 1
+        else:
+            eval_expr = parsed_expr.replace('¬', ' not ').replace('∧', ' and ').replace('∨', ' or ')
+            for var, val in row.items():
+                eval_expr = eval_expr.replace(var, str(val))
+            try:
+                row['result'] = int(eval(eval_expr, {"__builtins__": {}}, {
+                    "and": lambda x, y: x and y,
+                    "or": lambda x, y: x or y,
+                    "not": lambda x: not x
+                }))
+            except Exception as e:
+                raise TruthTableError(f"Błąd ewaluacji wyrażenia: {e}")
         table.append(row)
-    return table 
+    return table

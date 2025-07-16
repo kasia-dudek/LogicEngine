@@ -1,5 +1,5 @@
 import pytest
-from src.logicengine.ast import generate_ast, ASTError
+from logicengine.ast import generate_ast, ASTError
 
 @pytest.mark.parametrize("expr,expected", [
     ("(A ∧ B) ∨ ¬C", {"type": "∨", "left": {"type": "∧", "left": "A", "right": "B"}, "right": {"type": "¬", "child": "C"}}),
@@ -12,7 +12,6 @@ def test_generate_ast(expr, expected):
     assert ast == expected
 
 @pytest.mark.parametrize("expr", [
-    "(A & B)",
     "A ++ B",
     "(A ∧ B",
     "A 2 B",

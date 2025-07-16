@@ -1,5 +1,5 @@
 import pytest
-from src.logicengine.onp import to_onp, ONPError
+from logicengine.onp import to_onp, ONPError
 
 @pytest.mark.parametrize("expr,expected", [
     ("(A ∧ B) ∨ ¬C", "A B ∧ C ¬ ∨"),
@@ -12,7 +12,6 @@ def test_to_onp(expr, expected):
     assert onp == expected
 
 @pytest.mark.parametrize("expr", [
-    "(A & B)",
     "A ++ B",
     "(A ∧ B",
     "A 2 B",

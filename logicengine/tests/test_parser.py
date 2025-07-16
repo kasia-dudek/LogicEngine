@@ -1,5 +1,5 @@
 import pytest
-from src.logicengine.parser import LogicParser, LogicExpressionError
+from logicengine.parser import LogicParser, LogicExpressionError
 
 @pytest.mark.parametrize("expr,expected", [
     ("(A ∧ B) ∨ ¬C", "(A∧B)∨¬C"),

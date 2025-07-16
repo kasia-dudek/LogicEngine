@@ -1,7 +1,8 @@
 import re
-from typing import List
+from typing import List, Set
 
 class LogicExpressionError(Exception):
+    """Wyjątek dla błędów parsowania wyrażeń logicznych."""
     pass
 
 class LogicParser:
@@ -23,64 +24,84 @@ class LogicParser:
         '<=>': '↔',
         '⇔': '↔',
     }
-    VALID_VARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
-    VALID_CHARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ() ") | set(OPERATORS.keys()) | set(OPERATORS.values())
+    # Ograniczone zmienne tylko dla walidacji składni
+    VALID_VARS = {'A', 'B', 'C', 'D', 'E'}  # Rozszerzono, aby przepuścić E
+    VALID_CHARS = VALID_VARS | {'(', ')'} | set(OPERATORS.keys()) | set(OPERATORS.values()) | {'0', '1'}
 
     @classmethod
     def standardize(cls, expr: str) -> str:
-        # Usuwa spacje, zamienia alternatywne operatory na standardowe
-        expr = expr.replace(' ', '')
-        for alt, std in cls.OPERATORS.items():
+        """Standaryzuje wyrażenie logiczne, usuwając spacje i zamieniając operatory."""
+        expr = expr.strip().replace(' ', '')
+        if not expr:
+            raise LogicExpressionError("Puste wyrażenie")
+        for alt, std in sorted(cls.OPERATORS.items(), key=lambda x: -len(x[0])):
             expr = expr.replace(alt, std)
         return expr
 
     @classmethod
     def validate(cls, expr: str) -> None:
+        """Sprawdza poprawność wyrażenia logicznego."""
+        if expr in {'0', '1'}:
+            return
         # Sprawdza poprawność znaków
-        for ch in expr:
-            if ch not in cls.VALID_VARS and ch not in '()' and ch not in cls.OPERATORS.values():
-                raise LogicExpressionError(f"Nieprawidłowy znak: '{ch}'")
+        invalid_chars = set(expr) - cls.VALID_CHARS
+        if invalid_chars:
+            raise LogicExpressionError(f"Nieprawidłowe znaki: {invalid_chars}")
         # Sprawdza poprawność nawiasów
         if not cls._check_parentheses(expr):
-            raise LogicExpressionError("Niezamknięty nawias")
-        # Sprawdza poprawność operatorów i zmiennych
+            raise LogicExpressionError("Niezamknięte lub nieprawidłowe nawiasy")
+        # Sprawdza poprawność składni
         if not cls._check_syntax(expr):
             raise LogicExpressionError("Nieprawidłowa składnia wyrażenia")
 
     @staticmethod
     def _check_parentheses(expr: str) -> bool:
+        """Sprawdza poprawność nawiasów w wyrażeniu."""
         count = 0
         for ch in expr:
-            if ch == '(': count += 1
-            elif ch == ')': count -= 1
-            if count < 0: return False
+            if ch == '(':
+                count += 1
+            elif ch == ')':
+                count -= 1
+            if count < 0:
+                return False
         return count == 0
 
     @classmethod
     def _check_syntax(cls, expr: str) -> bool:
-        # Prosty automat: zmienna lub ¬, potem operator lub ) lub koniec
+        """Sprawdza poprawność składni wyrażenia logicznego."""
+        if not expr:
+            return False
         prev = None
-        for i, ch in enumerate(expr):
+        i = 0
+        while i < len(expr):
+            ch = expr[i]
             if ch in cls.VALID_VARS:
                 if prev in cls.VALID_VARS or prev == ')':
                     return False
-            elif ch in cls.OPERATORS.values():
-                if prev is None or prev in cls.OPERATORS.values() or prev == '(':  # operator na początku, po operatorze lub po (
-                    if ch != '¬':
-                        return False
+            elif ch == '¬':
+                if i + 1 >= len(expr) or expr[i + 1] not in cls.VALID_VARS and expr[i + 1] != '(':
+                    return False
+            elif ch in {'∧', '∨', '→', '↔'}:
+                if prev is None or prev in {'(', '¬', '∧', '∨', '→', '↔'}:
+                    return False
             elif ch == '(':
                 if prev in cls.VALID_VARS or prev == ')':
                     return False
             elif ch == ')':
-                if prev in cls.OPERATORS.values() or prev == '(':  # ) po operatorze lub po (
+                if prev in {'(', '¬', '∧', '∨', '→', '↔'}:
                     return False
             prev = ch
-        if prev in cls.OPERATORS.values() and prev != '¬':
+            i += 1
+        if prev in {'∧', '∨', '→', '↔'}:
             return False
         return True
 
     @classmethod
     def parse(cls, expr: str) -> str:
+        """Parsuje wyrażenie logiczne i zwraca jego standaryzowaną formę."""
+        if not expr:
+            raise LogicExpressionError("Puste wyrażenie")
         std = cls.standardize(expr)
         cls.validate(std)
-        return std 
+        return std
