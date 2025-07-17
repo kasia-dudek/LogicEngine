@@ -1,0 +1,23 @@
+import React from 'react';
+import { render, screen } from '@testing-library/react';
+import KMapDisplay from '../KMapDisplay';
+
+describe('KMapDisplay', () => {
+  it('renders K-Map table and highlights groups', () => {
+    const kmap = [ [0, 1], [0, 1] ];
+    const groups = [ { cells: [[0, 1], [1, 1]], expr: 'B' } ];
+    render(<KMapDisplay kmap={kmap} groups={groups} result="B" />);
+    expect(screen.getByText('B')).toBeInTheDocument();
+    // Sprawdź, czy wartości 1 są w tabeli
+    expect(screen.getAllByText('1').length).toBeGreaterThan(0);
+    // Sprawdź, czy podpis uproszczonego wyrażenia jest widoczny
+    expect(screen.getByText(/Uproszczone/)).toBeInTheDocument();
+    // Sprawdź, czy grupy są podpisane
+    expect(screen.getByText('B')).toBeInTheDocument();
+  });
+
+  it('shows message when no kmap', () => {
+    render(<KMapDisplay kmap={[]} groups={[]} result="" />);
+    expect(screen.getByText(/Brak danych/)).toBeInTheDocument();
+  });
+}); 
