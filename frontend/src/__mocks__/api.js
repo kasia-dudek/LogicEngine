@@ -25,6 +25,48 @@ export async function analyze(expression) {
         groups: [
           { cells: [[0, 1], [1, 1]], size: 2, minterms: [1, 3], expr: 'B' }
         ]
+      },
+      ast: {
+        node: '∨',
+        left: {
+          node: '∧',
+          left: 'A',
+          right: 'B'
+        },
+        right: {
+          node: '¬',
+          child: 'C'
+        }
+      }
+    };
+  }
+  // Przykład dla (A ∧ B) ∨ ¬C
+  if (expression === '(A ∧ B) ∨ ¬C') {
+    return {
+      expression,
+      truth_table: [
+        { A: 0, B: 0, C: 0, result: 1 },
+        { A: 0, B: 0, C: 1, result: 0 },
+        { A: 0, B: 1, C: 0, result: 1 },
+        { A: 0, B: 1, C: 1, result: 0 },
+        { A: 1, B: 0, C: 0, result: 1 },
+        { A: 1, B: 0, C: 1, result: 0 },
+        { A: 1, B: 1, C: 0, result: 1 },
+        { A: 1, B: 1, C: 1, result: 0 }
+      ],
+      qm: { result: 'A ∧ B ∨ ¬C', steps: [] },
+      kmap: { result: 'A ∧ B ∨ ¬C', kmap: [[1,0],[1,0],[1,0],[1,0]], groups: [] },
+      ast: {
+        node: '∨',
+        left: {
+          node: '∧',
+          left: 'A',
+          right: 'B'
+        },
+        right: {
+          node: '¬',
+          child: 'C'
+        }
       }
     };
   }
@@ -33,6 +75,7 @@ export async function analyze(expression) {
     expression,
     truth_table: [],
     qm: { result: '', steps: [] },
-    kmap: { result: '', kmap: [], order: [], groups: [] }
+    kmap: { result: '', kmap: [], order: [], groups: [] },
+    ast: null
   };
 } 

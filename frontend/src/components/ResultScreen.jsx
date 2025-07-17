@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import QMSteps from './QMSteps';
 import KMapDisplay from './KMapDisplay';
+import ASTDisplay from './ASTDisplay';
+import Toast from './Toast';
+import ExportResults from './ExportResults';
 import { analyze } from '../__mocks__/api';
 
 const TABS = [
   { key: 'truth', label: 'Tabela prawdy' },
   { key: 'qm', label: 'Quine-McCluskey' },
   { key: 'kmap', label: 'K-Map' },
+  { key: 'ast', label: 'AST' },
 ];
 
 function ResultScreen({ input, onBack }) {
@@ -14,19 +18,41 @@ function ResultScreen({ input, onBack }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [data, setData] = useState(null);
+  const [toast, setToast] = useState({ message: '', type: 'success' });
 
   useEffect(() => {
     setLoading(true);
     setError('');
-    analyze(input)
-      .then(res => {
+    setToast({ message: '', type: 'success' });
+    // Wersja z prawdziwym API (jeśli ustawiono REACT_APP_API_URL)
+    const apiUrl = process.env.REACT_APP_API_URL;
+    const fetchData = async () => {
+      try {
+        let res;
+        if (apiUrl) {
+          const response = await fetch(`${apiUrl}/api/analyze`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ expression: input })
+          });
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || 'API error');
+          }
+          res = await response.json();
+        } else {
+          res = await analyze(input);
+        }
         setData(res);
         setLoading(false);
-      })
-      .catch(() => {
-        setError('Błąd pobierania danych z API.');
+        setToast({ message: 'Expression analyzed successfully!', type: 'success' });
+      } catch (e) {
+        setError(e.message || 'API error');
         setLoading(false);
-      });
+        setToast({ message: `Error: ${e.message}`, type: 'error' });
+      }
+    };
+    fetchData();
   }, [input]);
 
   if (loading) return <div className="text-center p-8">Ładowanie...</div>;
@@ -35,6 +61,7 @@ function ResultScreen({ input, onBack }) {
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
+      <Toast message={toast.message} type={toast.type} onClose={() => setToast({ message: '', type: 'success' })} />
       <div className="max-w-2xl w-full bg-white rounded-lg shadow-lg p-8">
         <button className="mb-4 text-blue-600 hover:underline" onClick={onBack}>&larr; Wróć</button>
         <h1 className="text-2xl font-bold mb-4 text-center">Wynik analizy</h1>
@@ -86,8 +113,12 @@ function ResultScreen({ input, onBack }) {
             {tab === 'kmap' && (
               <KMapDisplay kmap={data.kmap?.kmap} groups={data.kmap?.groups} result={data.kmap?.result} />
             )}
+            {tab === 'ast' && (
+              <ASTDisplay ast={data.ast} />
+            )}
           </div>
         </div>
+        <ExportResults data={data} />
         <div className="mt-6">
           <h2 className="text-lg font-semibold mb-2">Przyszłe funkcje (placeholder)</h2>
           <div className="bg-gray-100 rounded p-2 text-sm text-gray-500">Tu pojawią się kolejne analizy, np. minimalizacja, ONP, K-map, QM, tautologie.</div>
