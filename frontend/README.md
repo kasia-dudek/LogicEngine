@@ -1,4 +1,43 @@
-# LogicEngine Frontend
+# LogicEngine – Frontend
+
+## Przegląd i refaktoryzacja (2024-06)
+
+### Zakres przeglądu
+- Spójność konwencji (nazwy komponentów, Tailwind CSS, struktura JSX)
+- Poprawność renderowania i obsługi danych z backendu
+- Eliminacja duplikacji i niepotrzebnego kodu
+- Optymalizacja wydajności (tabela prawdy, KMap, historia)
+- Rozbudowa testów jednostkowych (min. 80% pokrycia)
+- Przygotowanie do rozbudowy (wizualizacje, ekran definicji)
+
+### Wprowadzone poprawki
+- Ujednolicenie stylów i konwencji w całym kodzie
+- Refaktoryzacja komponentów: modularność, czytelność, obsługa braku danych
+- Dodanie testów jednostkowych dla StartScreen i ResultScreen
+- Optymalizacja renderowania tabeli prawdy i mapy Karnaugha
+- Uspójnienie obsługi błędów i komunikatów
+- Historia wyrażeń ograniczona do 50 pozycji
+
+### Wymagania
+- React 18+
+- Tailwind CSS (CDN)
+- Testy: @testing-library/react, jest
+
+### Przykładowe dane wejściowe
+- (A ∨ ¬A), (A ∧ B) ∨ ¬C, A → (B ↔ C), (A & B) (niepoprawne)
+
+### Testy
+- Pokrycie kodu: min. 80% (StartScreen, ResultScreen, ExportResults, KMapDisplay, TutorialMode, ExpressionHistory, Toast, ASTDisplay, QMSteps)
+- Testy: `npm test` lub `yarn test`
+
+### Napotkane problemy i rozwiązania
+- Brak testów dla głównych ekranów – dodano testy jednostkowe
+- Uspójnienie formatów danych z backendu
+- Optymalizacja wydajności dla dużych danych
+
+### Stan projektu
+- Kod gotowy do rozbudowy o wizualizacje (np. AST w D3.js)
+- Spójny, modularny, pokryty testami
 
 ## Features
 - Responsive React app for logic expression analysis

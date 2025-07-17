@@ -1,4 +1,41 @@
-# LogicEngine
+# LogicEngine – Backend
+
+## Przegląd i refaktoryzacja (2024-06)
+
+### Zakres przeglądu
+- Spójność nazewnictwa, struktury, formatowania (PEP 8)
+- Poprawność logiki i matematyki (parser, tabela prawdy, AST, ONP, KMap, QM, tautologia)
+- Eliminacja duplikacji i niepotrzebnego kodu
+- Optymalizacja wydajności (KMap, QM, tabela prawdy)
+- Rozbudowa testów jednostkowych i integracyjnych (min. 80% pokrycia)
+- Spójność formatu JSON z frontendem
+
+### Wprowadzone poprawki
+- Refaktoryzacja parsera, AST, ONP, KMap, QM, tautologii
+- Wydzielenie funkcji pomocniczych do utils.py
+- Uspójnienie obsługi błędów i komunikatów
+- Rozbudowa testów jednostkowych i integracyjnych
+- Optymalizacja algorytmów dla 4 zmiennych
+
+### Wymagania
+- Python 3.10+
+- sympy, pytest, pytest-cov
+
+### Przykładowe dane wejściowe
+- (A ∨ ¬A), (A ∧ B) ∨ ¬C, A → (B ↔ C), (A & B) (niepoprawne)
+
+### Testy
+- Pokrycie kodu: min. 80% (`pytest --cov`)
+- Testy: `pytest`
+
+### Napotkane problemy i rozwiązania
+- Duplikacja funkcji pomocniczych – wydzielono do utils.py
+- Uspójnienie formatów danych dla frontendu
+- Optymalizacja algorytmów uproszczeń
+
+### Stan projektu
+- Kod gotowy do rozbudowy, modularny, pokryty testami
+- Wyniki w formacie JSON zgodnym z frontendem
 
 ## Opis
 LogicEngine to modularny silnik do nauki logiki zdań, obsługujący parser, tabelę prawdy, ONP, AST, Mapę Karnaugh i algorytm Quine'a-McCluskeya (QM). Każdy moduł generuje czytelne, edukacyjne kroki w formacie JSON, gotowe do wizualizacji w frontendzie.
@@ -8,10 +45,6 @@ LogicEngine to modularny silnik do nauki logiki zdań, obsługujący parser, tab
 - Standaryzacja wyrażeń
 - Generowanie tabeli prawdy (do 4 zmiennych)
 - Przygotowana struktura pod rozbudowę (Mapa Karnaugh, Quine-McCluskey, AST, ONP)
-
-## Wymagania
-- Python 3.10+
-- [Poetry](https://python-poetry.org/)
 
 ## Instalacja
 ```bash
