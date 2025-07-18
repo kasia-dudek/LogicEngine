@@ -71,7 +71,16 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
                 "opis": verification_desc
             }
         })
-        return {"result": "0", "steps": steps, "expr_for_tests": contradiction_expr}
+        kmap, kmap_order = _generate_kmap(minterms, n, vars)
+        groups = _find_groups(kmap, n, kmap_order, vars)
+        simplified, group_exprs = _groups_to_expr(groups, vars, n, kmap_order)
+        return {
+            "kmap": kmap,
+            "groups": groups,
+            "result": simplified,
+            "steps": steps,
+            "expr_for_tests": contradiction_expr
+        }
 
     if len(minterms) == 2**n:
         tautology_expr = ' ∨ '.join([f'{v} ∨ ¬{v}' for v in vars]) if vars else '1'
@@ -106,9 +115,20 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
                 "opis": verification_desc
             }
         })
-        return {"result": "1", "steps": steps, "expr_for_tests": tautology_expr}
+        kmap, kmap_order = _generate_kmap(minterms, n, vars)
+        groups = _find_groups(kmap, n, kmap_order, vars)
+        simplified, group_exprs = _groups_to_expr(groups, vars, n, kmap_order)
+        return {
+            "kmap": kmap,
+            "groups": groups,
+            "result": simplified,
+            "steps": steps,
+            "expr_for_tests": tautology_expr
+        }
 
     kmap, kmap_order = _generate_kmap(minterms, n, vars)
+    groups = _find_groups(kmap, n, kmap_order, vars)
+    simplified, group_exprs = _groups_to_expr(groups, vars, n, kmap_order)
     steps.append({
         "step": "Krok 2: Utwórz mapę Karnaugh",
         "data": {
@@ -118,7 +138,6 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
         }
     })
 
-    groups = _find_groups(kmap, n, kmap_order, vars)
     steps.append({
         "step": "Krok 3: Grupowanie mintermów",
         "data": {
@@ -127,7 +146,6 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
         }
     })
 
-    simplified, group_exprs = _groups_to_expr(groups, vars, n, kmap_order)
     steps.append({
         "step": "Krok 4: Uproszczenie",
         "data": {
@@ -156,7 +174,13 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
     })
 
     logger.info(f"Uproszczone wyrażenie: {simplified}")
-    return {"result": simplified, "steps": steps, "expr_for_tests": simplified}
+    return {
+        "kmap": kmap,
+        "groups": groups,
+        "result": simplified,
+        "steps": steps,
+        "expr_for_tests": simplified
+    }
 
 def _generate_kmap(minterms: List[int], n: int, vars: List[str]) -> Tuple[List[List[int]], List[int]]:
     """Generuje mapę Karnaugh w formacie 2D i kolejność Graya."""

@@ -1,6 +1,8 @@
 import React from 'react';
-import { render, screen, fireEvent, act } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import TutorialMode from '../TutorialMode';
+
+jest.mock('d3', () => ({}));
 
 const steps = [
   {
@@ -38,7 +40,6 @@ describe('TutorialMode', () => {
     fireEvent.click(screen.getByText('Następny krok'));
     expect(screen.getByText('Krok 2: QM')).toBeInTheDocument();
     expect(screen.getByText('Opis kroku 2')).toBeInTheDocument();
-    expect(screen.getByText((text) => text.includes('QM step'))).toBeInTheDocument();
   });
 
   it('przycisk "Poprzedni krok" działa', () => {

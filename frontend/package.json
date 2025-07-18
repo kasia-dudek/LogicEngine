@@ -5,6 +5,7 @@
   "dependencies": {
     "cra-template-pwa-typescript": "2.0.0",
     "d3": "^7.9.0",
+    "jspdf": "^3.0.1",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-scripts": "5.0.1",
@@ -22,11 +23,6 @@
       "react-app/jest"
     ]
   },
-  "jest": {
-    "moduleNameMapper": {
-      "^d3$": "jest-transform-stub"
-    }
-  },
   "browserslist": {
     "production": [
       ">0.2%",
@@ -43,7 +39,10 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@types/jest": "^30.0.0",
-    "typescript": "^4.9.5",
-    "jest-transform-stub": "^2.0.0"
+    "autoprefixer": "^10.4.21",
+    "jest-transform-stub": "^2.0.0",
+    "postcss": "^8.5.6",
+    "tailwindcss": "^3.4.3",
+    "typescript": "^4.9.5"
   }
 }

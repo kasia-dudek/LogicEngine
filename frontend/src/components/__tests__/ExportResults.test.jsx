@@ -1,14 +1,16 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import ExportResults from '../ExportResults';
 
 jest.mock('jspdf', () => {
-  return jest.fn().mockImplementation(() => ({
-    setFont: jest.fn(),
-    setFontSize: jest.fn(),
-    text: jest.fn(),
-    save: jest.fn(),
-  }));
+  return function () {
+    return {
+      setFont: jest.fn(),
+      setFontSize: jest.fn(),
+      text: jest.fn(),
+      save: jest.fn(),
+    };
+  };
 });
 
 global.URL.createObjectURL = jest.fn(() => 'blob:url');
@@ -25,27 +27,35 @@ describe('ExportResults', () => {
     ast: { node: '∨', left: {}, right: {} },
   };
 
-  it('eksportuje do PDF i wyświetla Toast', () => {
+  it('eksportuje do PDF i wyświetla Toast', async () => {
     render(<ExportResults data={data} />);
-    fireEvent.click(screen.getByText('Eksportuj do PDF'));
-    expect(screen.getByText('Eksport do PDF zakończony pomyślnie')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Eksportuj do PDF'));
+    });
+    expect(await screen.findByText(/Eksport do PDF zakończony pomyślnie/)).toBeInTheDocument();
   });
 
-  it('eksportuje do JSON i wyświetla Toast', () => {
+  it('eksportuje do JSON i wyświetla Toast', async () => {
     render(<ExportResults data={data} />);
-    fireEvent.click(screen.getByText('Eksportuj do JSON'));
-    expect(screen.getByText('Eksport do JSON zakończony pomyślnie')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Eksportuj do JSON'));
+    });
+    expect(await screen.findByText(/Eksport do JSON zakończony pomyślnie/)).toBeInTheDocument();
   });
 
-  it('obsługuje brak danych przy eksporcie PDF', () => {
+  it('obsługuje brak danych przy eksporcie PDF', async () => {
     render(<ExportResults data={null} />);
-    fireEvent.click(screen.getByText('Eksportuj do PDF'));
-    expect(screen.getByText('Błąd eksportu PDF: brak danych')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Eksportuj do PDF'));
+    });
+    expect(await screen.findByText(/Błąd eksportu PDF: brak danych/)).toBeInTheDocument();
   });
 
-  it('obsługuje brak danych przy eksporcie JSON', () => {
+  it('obsługuje brak danych przy eksporcie JSON', async () => {
     render(<ExportResults data={null} />);
-    fireEvent.click(screen.getByText('Eksportuj do JSON'));
-    expect(screen.getByText('Błąd eksportu JSON: brak danych')).toBeInTheDocument();
+    await act(async () => {
+      fireEvent.click(screen.getByText('Eksportuj do JSON'));
+    });
+    expect(await screen.findByText(/Błąd eksportu JSON: brak danych/)).toBeInTheDocument();
   });
 }); 

@@ -105,3 +105,21 @@ class LogicParser:
         std = cls.standardize(expr)
         cls.validate(std)
         return std
+
+    def validate_and_standardize(self, expr: str) -> str:
+        if not expr or not expr.strip():
+            raise LogicExpressionError('Wyrażenie nie może być puste.')
+        # Dopuszczalne znaki: litery, cyfry, operatory logiczne, nawiasy, spacje
+        if re.search(r'[^A-Za-z0-9¬∧∨→↔()\s]', expr):
+            raise LogicExpressionError('Wyrażenie zawiera niedozwolone znaki.')
+        # Standaryzacja: usuwanie zbędnych spacji
+        return expr.replace(' ', '')
+
+def validate_and_standardize(expr: str) -> str:
+    if not expr or not expr.strip():
+        raise LogicExpressionError('Wyrażenie nie może być puste.')
+    # Dopuszczalne znaki: litery, cyfry, operatory logiczne, nawiasy, spacje
+    if re.search(r'[^A-Za-z0-9¬∧∨→↔()\s]', expr):
+        raise LogicExpressionError('Wyrażenie zawiera niedozwolone znaki.')
+    # Standaryzacja: usuwanie zbędnych spacji
+    return expr.replace(' ', '')

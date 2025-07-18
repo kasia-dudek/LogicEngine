@@ -16,7 +16,6 @@ def generate_ast(expr: str):
     def parse_expr(s):
         # Pomocnicze funkcje
         def find_main_operator(s):
-            # Zwraca indeks głównego operatora (najniższy priorytet poza nawiasami)
             min_prio = 100
             idx = -1
             depth = 0
@@ -30,25 +29,47 @@ def generate_ast(expr: str):
                         idx = i
             return idx
         s = s.strip()
+        logger.info(f'parse_expr: wejście: {s}')
         if not s:
+            logger.error('Puste wyrażenie')
             raise ASTError("Puste wyrażenie")
-        if s[0] == '(' and s[-1] == ')' and LogicParser._check_parentheses(s):
-            # Zdejmij zewnętrzne nawiasy
-            return parse_expr(s[1:-1])
-        # Operator unarny ¬
-        if s[0] == '¬':
-            return {"type": "¬", "child": parse_expr(s[1:])}
+        # Zdejmuj zewnętrzne nawiasy tylko jeśli całe wyrażenie jest w nawiasach
+        while s and s[0] == '(' and s[-1] == ')' and LogicParser._check_parentheses(s):
+            depth = 0
+            is_outer = True
+            for i, ch in enumerate(s):
+                if ch == '(': depth += 1
+                elif ch == ')': depth -= 1
+                if depth == 0 and i != len(s) - 1:
+                    is_outer = False
+                    break
+            if is_outer:
+                logger.info(f'Zdejmuję zewnętrzne nawiasy: {s}')
+                s = s[1:-1].strip()
+            else:
+                break
+        if s and s[0] == '¬':
+            logger.info(f'Operator unarny ¬: {s}')
+            node = {"node": "¬", "child": parse_expr(s[1:])}
+            logger.info(f'Zwracam węzeł: {node}')
+            return node
         idx = find_main_operator(s)
+        logger.info(f'Główny operator w "{s}": idx={idx}, znak={s[idx] if idx!=-1 else None}')
         if idx == -1:
-            # Zmienna
             if s in LogicParser.VALID_VARS:
+                logger.info(f'Zmienna: {s}')
                 return s
+            logger.error(f'Nieprawidłowy atom: {s}')
             raise ASTError(f"Nieprawidłowy atom: {s}")
         op = s[idx]
         left = s[:idx]
         right = s[idx+1:]
+        logger.info(f'Lewy: {left}, Operator: {op}, Prawy: {right}')
         if op in {"∧", "∨", "→", "↔"}:
-            return {"type": op, "left": parse_expr(left), "right": parse_expr(right)}
+            node = {"node": op, "left": parse_expr(left), "right": parse_expr(right)}
+            logger.info(f'Zwracam węzeł: {node}')
+            return node
+        logger.error(f'Nieznany operator: {op}')
         raise ASTError(f"Nieznany operator: {op}")
     # Priorytety operatorów (niższa liczba = niższy priorytet)
     OP_PRIOS = {"↔": 1, "→": 2, "∨": 3, "∧": 4}
