@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import * as d3 from 'd3';
 
-const OP_DEFS = {
+export const OP_DEFS = {
   '∧': {
     name: 'Koniunkcja (AND)',
     desc: 'Prawda tylko gdy oba argumenty są prawdziwe.',
@@ -54,7 +54,51 @@ const OP_DEFS = {
       [0, 1],
       [1, 0],
     ]
-  }
+  },
+  '⊕': {
+    name: 'Alternatywa wykluczająca (XOR)',
+    desc: 'Prawda, gdy dokładnie jeden argument jest prawdziwy.',
+    table: [
+      ['A', 'B', 'A ⊕ B'],
+      [0, 0, 0],
+      [0, 1, 1],
+      [1, 0, 1],
+      [1, 1, 0],
+    ]
+  },
+  '↑': {
+    name: 'NAND (negacja koniunkcji)',
+    desc: 'Prawda, gdy nie oba argumenty są prawdziwe.',
+    table: [
+      ['A', 'B', 'A ↑ B'],
+      [0, 0, 1],
+      [0, 1, 1],
+      [1, 0, 1],
+      [1, 1, 0],
+    ]
+  },
+  '↓': {
+    name: 'NOR (negacja alternatywy)',
+    desc: 'Prawda, gdy oba argumenty są fałszywe.',
+    table: [
+      ['A', 'B', 'A ↓ B'],
+      [0, 0, 1],
+      [0, 1, 0],
+      [1, 0, 0],
+      [1, 1, 0],
+    ]
+  },
+  '≡': {
+    name: 'Równoważność (XNOR)',
+    desc: 'Prawda, gdy oba argumenty mają tę samą wartość.',
+    table: [
+      ['A', 'B', 'A ≡ B'],
+      [0, 0, 1],
+      [0, 1, 0],
+      [1, 0, 0],
+      [1, 1, 1],
+    ]
+  },
 };
 
 function getSubtreeExpr(node) {

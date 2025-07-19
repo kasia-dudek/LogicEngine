@@ -13,7 +13,7 @@ class LogicParser:
         '!': '¬',
         '∧': '∧',
         '&': '∧',
-        '^': '∧',
+        '^': '⊕',
         '∨': '∨',
         '|': '∨',
         '+': '∨',
@@ -23,6 +23,10 @@ class LogicParser:
         '↔': '↔',
         '<=>': '↔',
         '⇔': '↔',
+        '⊕': '⊕',
+        '↑': '↑',
+        '↓': '↓',
+        '≡': '≡',
     }
     # Ograniczone zmienne tylko dla walidacji składni
     VALID_VARS = {'A', 'B', 'C', 'D', 'E'}  # Rozszerzono, aby przepuścić E
@@ -82,18 +86,18 @@ class LogicParser:
             elif ch == '¬':
                 if i + 1 >= len(expr) or expr[i + 1] not in cls.VALID_VARS and expr[i + 1] != '(':
                     return False
-            elif ch in {'∧', '∨', '→', '↔'}:
-                if prev is None or prev in {'(', '¬', '∧', '∨', '→', '↔'}:
+            elif ch in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
+                if prev is None or prev in {'(', '¬', '∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
                     return False
             elif ch == '(':
                 if prev in cls.VALID_VARS or prev == ')':
                     return False
             elif ch == ')':
-                if prev in {'(', '¬', '∧', '∨', '→', '↔'}:
+                if prev in {'(', '¬', '∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
                     return False
             prev = ch
             i += 1
-        if prev in {'∧', '∨', '→', '↔'}:
+        if prev in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
             return False
         return True
 

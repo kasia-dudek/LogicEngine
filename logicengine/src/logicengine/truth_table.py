@@ -13,6 +13,10 @@ def _replace_operators(expr: str) -> str:
             .replace('∨', ' or ')
             .replace('→', ' <= ')
             .replace('↔', ' == ')
+            .replace('⊕', ' != ')
+            .replace('↑', ' nand ')
+            .replace('↓', ' nor ')
+            .replace('≡', ' == ')
     )
 
 def generate_truth_table(expr: str, force_vars: List[str] = None) -> List[Dict[str, Any]]:
@@ -52,7 +56,9 @@ def generate_truth_table(expr: str, force_vars: List[str] = None) -> List[Dict[s
                 row['result'] = int(eval(eval_expr, {"__builtins__": {}}, {
                     "and": lambda x, y: x and y,
                     "or": lambda x, y: x or y,
-                    "not": lambda x: not x
+                    "not": lambda x: not x,
+                    "nand": lambda x, y: not (x and y),
+                    "nor": lambda x, y: not (x or y)
                 }))
             except Exception as e:
                 raise TruthTableError(f"Błąd ewaluacji wyrażenia: {e}")

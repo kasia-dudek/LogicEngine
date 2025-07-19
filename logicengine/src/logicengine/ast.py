@@ -65,14 +65,14 @@ def generate_ast(expr: str):
         left = s[:idx]
         right = s[idx+1:]
         logger.info(f'Lewy: {left}, Operator: {op}, Prawy: {right}')
-        if op in {"∧", "∨", "→", "↔"}:
+        if op in {"∧", "∨", "→", "↔", "⊕", "↑", "↓", "≡"}:
             node = {"node": op, "left": parse_expr(left), "right": parse_expr(right)}
             logger.info(f'Zwracam węzeł: {node}')
             return node
         logger.error(f'Nieznany operator: {op}')
         raise ASTError(f"Nieznany operator: {op}")
     # Priorytety operatorów (niższa liczba = niższy priorytet)
-    OP_PRIOS = {"↔": 1, "→": 2, "∨": 3, "∧": 4}
+    OP_PRIOS = {"↔": 1, "≡": 1, "→": 2, "⊕": 3, "↑": 3, "↓": 3, "∨": 4, "∧": 5}
     # ¬ jest unarny, obsługiwany osobno
     try:
         return parse_expr(std)

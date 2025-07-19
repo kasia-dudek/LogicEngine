@@ -15,7 +15,7 @@ def to_onp(expr: str) -> str:
     output = []
     stack = []
     # Priorytety operatorów (wyższa liczba = wyższy priorytet)
-    priors = {"¬": 5, "∧": 4, "∨": 3, "→": 2, "↔": 1}
+    priors = {"¬": 6, "∧": 5, "∨": 4, "⊕": 4, "↑": 4, "↓": 4, "→": 3, "↔": 2, "≡": 2}
     right_assoc = {"¬"}
     i = 0
     while i < len(std):
