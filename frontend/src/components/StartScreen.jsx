@@ -3,16 +3,52 @@ import { OP_DEFS } from './ASTDisplay';
 
 console.log('OP_DEFS:', OP_DEFS);
 
-function StartScreen({ onSubmit, onDefinitions, onExamples }) {
+function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');
   const [opTooltip, setOpTooltip] = useState({ visible: false, x: 0, y: 0, content: null });
   const wrapperRef = React.useRef(null);
 
+  // Mapowanie alternatywnych znaków na standardowe operatory
+  const ALT_OPS = [
+    { re: /&/g, to: '∧' },
+    { re: /\|/g, to: '∨' },
+    { re: /~/g, to: '¬' },
+    { re: /!/g, to: '¬' },
+    { re: /=>/g, to: '→' },
+    { re: /->/g, to: '→' },
+    { re: /<=>/g, to: '↔' },
+    { re: /<->/g, to: '↔' },
+    { re: /\^/g, to: '⊕' },
+  ];
+
+  // Standaryzacja: zamiana alternatywnych znaków na standardowe
+  const standardize = (expr) => {
+    let s = expr;
+    ALT_OPS.forEach(({ re, to }) => {
+      s = s.replace(re, to);
+    });
+    return s;
+  };
+
+  // Sprawdzenie poprawności nawiasów
+  const checkParentheses = (expr) => {
+    let count = 0;
+    for (let ch of expr) {
+      if (ch === '(') count++;
+      if (ch === ')') count--;
+      if (count < 0) return false;
+    }
+    return count === 0;
+  };
+
   const validate = (expr) => {
     if (!expr.trim()) return 'Wyrażenie nie może być puste.';
-    if (/[^A-Za-z0-9¬∧∨→↔⊕↑↓≡()\s]/.test(expr)) return 'Wyrażenie zawiera niedozwolone znaki.';
-    // Możesz dodać więcej reguł walidacji
+    const std = standardize(expr);
+    // Niedozwolone znaki (po zamianie alternatyw)
+    if (/[^A-Za-z0-9¬∧∨→↔⊕↑↓≡()\s]/.test(std)) return 'Wyrażenie zawiera niedozwolone znaki.';
+    if (!checkParentheses(std)) return 'Nawiasy są niepoprawne lub niezrównoważone.';
+    // Możesz dodać więcej reguł walidacji (np. podwójne operatory, puste nawiasy)
     return '';
   };
 
@@ -24,8 +60,8 @@ function StartScreen({ onSubmit, onDefinitions, onExamples }) {
       return;
     }
     setError('');
-    // Standaryzacja: usuwanie zbędnych spacji
-    const standardized = input.replace(/\s+/g, '');
+    // Standaryzacja: usuwanie zbędnych spacji i zamiana alternatywnych znaków
+    const standardized = standardize(input.replace(/\s+/g, ''));
     onSubmit(standardized);
   };
 
@@ -125,6 +161,13 @@ function StartScreen({ onSubmit, onDefinitions, onExamples }) {
             onClick={onDefinitions}
           >
             <span role="img" aria-label="definitions">📖</span> Definicje pojęć
+          </button>
+          <button
+            type="button"
+            className="w-full bg-gray-100 text-blue-700 py-3 rounded-xl hover:bg-blue-200 transition-all font-semibold text-lg shadow-sm border border-blue-100"
+            onClick={onHistory}
+          >
+            <span role="img" aria-label="history">🕑</span> Historia wyrażeń
           </button>
         </div>
         {/* Tooltip panel boczny */}

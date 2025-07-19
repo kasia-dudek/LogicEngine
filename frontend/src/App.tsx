@@ -17,12 +17,15 @@ const EXAMPLES = [
   'A ∧ B ∧ C',
   'A ∨ ¬A',
   'A ∧ ¬A',
-  // Dłuższe, ale max 4 zmienne:
   '((A ∧ B) ∨ (C ∧ D)) → (¬D ∨ (A ∧ C))',
   '¬((A ∨ B) ∧ (C ∨ D)) ∨ (D ∧ (A → D))',
   '((A ↔ B) ∧ (C → D)) ∨ (¬A ∧ (B ∨ C))',
   '((A ∧ (B ∨ C)) → (D ∨ A)) ∧ (¬B ∨ (C ∧ D))',
   '((A ∨ B ∨ C) ∧ (D ∨ A)) → (A ∧ ¬D)',
+  'A ⊕ B',
+  'A ↑ B',
+  'A ↓ B',
+  'A ≡ B',
 ];
 
 function App() {
@@ -82,6 +85,8 @@ function App() {
           <StartScreen
             onSubmit={handleAnalyze}
             onDefinitions={handleShowDefinitions}
+            onExamples={() => setShowExamples(true)}
+            onHistory={handleShowHistory}
           />
           {showExamples && (
             <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
@@ -107,7 +112,7 @@ function App() {
       )}
       {screen === 'result' && <ResultScreen input={input} onBack={() => setScreen('start')} />}
       {screen === 'definitions' && <DefinitionsScreen onBack={() => setScreen('start')} />}
-      {screen === 'history' && <ExpressionHistory onLoad={handleLoadHistory} />}
+      {screen === 'history' && <ExpressionHistory onLoad={handleLoadHistory} onBack={() => setScreen('start')} />}
       {loading && (
         <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-30 z-50">
           <div className="bg-white p-6 rounded shadow text-lg">Ładowanie...</div>
