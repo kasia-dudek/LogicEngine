@@ -2,7 +2,7 @@ import logging
 from .truth_table import generate_truth_table, TruthTableError
 from .parser import LogicExpressionError
 
-logger = logging.getLogger(__name__)
+# Usuń lub zakomentuj logger.error (zostaw tylko krytyczne błędy produkcyjne)
 
 def is_tautology(expr: str) -> bool:
     """
@@ -17,5 +17,5 @@ def is_tautology(expr: str) -> bool:
         # Tautologia: wszystkie wyniki muszą być True (1)
         return all(row['result'] for row in table)
     except (LogicExpressionError, TruthTableError) as e:
-        logger.error(f"Błąd sprawdzania tautologii: {e}")
+        # logger.error(f"Błąd sprawdzania tautologii: {e}")
         return False 

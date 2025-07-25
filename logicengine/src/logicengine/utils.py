@@ -18,7 +18,7 @@ def bin_to_expr(b: str, vars: List[str]) -> str:
         elif ch == '0':
             terms.append(f'¬{vars[i]}')
     expr = '∧'.join(terms) if terms else '1'
-    logger.info(f"bin_to_expr: {b} -> {expr}")
+    # logger.info(f"bin_to_expr: {b} -> {expr}")
     return expr
 
 def count_literals(b: str) -> int:

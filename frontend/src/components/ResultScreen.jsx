@@ -13,14 +13,12 @@ const TABS = [
   { key: 'ast', label: 'AST' },
 ];
 
-// Funkcja pomocnicza: postorder AST (zwraca listę poddrzew w kolejności obliczania, bez duplikowania zmiennych)
 function getAstStepsNoVars(ast, variables) {
   const steps = [];
   const seen = new Set();
   function traverse(node) {
     if (!node) return;
     if (typeof node === 'string') {
-      // Zmienne nie są dodawane do steps (będą jako kolumny na początku)
       return;
     }
     if (node.node === '¬') {
@@ -44,7 +42,6 @@ function getAstStepsNoVars(ast, variables) {
   return steps;
 }
 
-// Funkcja pomocnicza: zwraca string wyrażenia dla poddrzewa
 function getAstExpr(node) {
   if (!node) return '?';
   if (typeof node === 'string') return node;
@@ -54,14 +51,10 @@ function getAstExpr(node) {
   return '?';
 }
 
-// Funkcja: oblicza wartości poddrzewa dla wszystkich wierszy tabeli prawdy
 function computeStepValues(step, truthTable, variables) {
-  // step.node: AST node
-  // truthTable: [{A:0,B:1,...,result:1}, ...]
   return truthTable.map(row => evalAst(step.node, row));
 }
 
-// Funkcja: ewaluacja AST dla danego wiersza
 function evalAst(node, row) {
   if (!node) return null;
   if (typeof node === 'string') return row[node];
@@ -73,7 +66,6 @@ function evalAst(node, row) {
   return null;
 }
 
-// Funkcja: zwraca listę argumentów (nazwy kolumn) dla danego kroku
 function getStepArgs(step) {
   if (!step || !step.node) return [];
   if (step.node.node === '¬') return [getAstExpr(step.node.child)];
@@ -100,7 +92,6 @@ function ResultScreen({ input, onBack }) {
       try {
         let res;
         if (apiUrl) {
-          // Wysyłamy równolegle żądania do wszystkich endpointów FastAPI
           const [stdRes, astRes, onpRes, truthRes, kmapRes, qmRes, tautRes] = await Promise.all([
             fetch(`${apiUrl}/standardize`, {
               method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ expr: input })
@@ -224,7 +215,6 @@ function ResultScreen({ input, onBack }) {
                       (() => {
                         const variables = Object.keys(data.truth_table[0]).filter(k => k !== 'result');
                         const steps = getAstStepsNoVars(data.ast, variables);
-                        // Generuj wartości dla każdej kolumny (zmienne + kroki)
                         const allColNames = [...variables, ...steps.map(s => s.expr)];
                         const allColNodes = [...variables.map(v => ({ expr: v, node: v })), ...steps];
                         const allColValues = allColNodes.map(col =>
@@ -232,11 +222,8 @@ function ResultScreen({ input, onBack }) {
                             ? data.truth_table.map(row => row[col.node])
                             : computeStepValues(col, data.truth_table, variables)
                         );
-                        // Slajdy: slideStep od 0 do steps.length-1
-                        // slideStep wskazuje na steps[slideStep], więc kolumny: zmienne + steps[0..slideStep]
                         const shownColNames = [...variables, ...steps.slice(0, slideStep+1).map(s => s.expr)];
                         const shownColValues = [...allColValues.slice(0, variables.length + slideStep + 1)];
-                        // Podświetlanie: aktualny krok i jego argumenty
                         const currentStep = steps[slideStep];
                         const argNames = getStepArgs(currentStep);
                         return (

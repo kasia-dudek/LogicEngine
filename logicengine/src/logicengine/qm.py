@@ -178,7 +178,7 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
             "opis": "Iteracyjne łączenie mintermów w celu znalezienia wszystkich implikantów pierwszorzędnych."
         }
     })
-    logger.info(f"Prime implicants: {all_prime_implicants}")
+    # logger.info(f"Prime implicants: {all_prime_implicants}")
 
     table_cover: Dict[int, List[str]] = {}
     for b, ms in all_prime_implicants:
@@ -213,7 +213,8 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
     if remaining:
         minterm_to_pis = [[b for b, ms in all_prime_implicants if m in ms] for m in remaining]
         if not minterm_to_pis:
-            logger.warning("Brak dodatkowych implikantów dla pozostałych mintermów.")
+            # logger.warning("Brak dodatkowych implikantów dla pozostałych mintermów.")
+            pass
         else:
             all_combos = list(product(*minterm_to_pis))
             best_combo = None
@@ -280,5 +281,5 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
         }
     })
 
-    logger.info(f"Uproszczone wyrażenie: {simplified}")
+    # logger.info(f"Uproszczone wyrażenie: {simplified}")
     return {"result": simplified, "steps": steps, "expr_for_tests": simplified}

@@ -1,8 +1,6 @@
 import React, { useState } from 'react';
 import { OP_DEFS } from './ASTDisplay';
 
-console.log('OP_DEFS:', OP_DEFS);
-
 function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
   const [input, setInput] = useState('');
   const [error, setError] = useState('');

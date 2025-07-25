@@ -9,7 +9,6 @@ export default function ExportResults({ data }) {
       setToast({ message: 'Błąd eksportu PDF: brak danych', type: 'error' });
       return;
     }
-    // Warunkowy import jsPDF tylko podczas eksportu
     const jsPDF = (await import('jspdf')).default;
     const doc = new jsPDF();
     doc.setFont('helvetica');

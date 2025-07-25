@@ -1,7 +1,114 @@
 import React, { useState } from 'react';
 import { analyze } from '../__mocks__/api';
+import ASTDisplay from './ASTDisplay';
 
 const CONCEPTS = [
+  {
+    key: 'and',
+    name: 'Koniunkcja (AND)',
+    description: 'Koniunkcja jest prawdziwa tylko wtedy, gdy oba argumenty są prawdziwe.',
+    tip: 'Najprostszy operator logiczny – odpowiada "i" w języku naturalnym.',
+    icon: '∧',
+    learn: 'Koniunkcja (AND) to operacja logiczna, która daje wynik 1 tylko wtedy, gdy oba argumenty są równe 1.',
+    examples: [
+      'A ∧ B',
+      'A ∧ (B ∨ C)',
+      '(A ∧ B) ∧ C',
+      'A ∧ ¬B',
+    ]
+  },
+  {
+    key: 'or',
+    name: 'Alternatywa (OR)',
+    description: 'Alternatywa jest prawdziwa, gdy przynajmniej jeden argument jest prawdziwy.',
+    tip: 'Odpowiada "lub" w języku naturalnym.',
+    icon: '∨',
+    learn: 'Alternatywa (OR) to operacja logiczna, która daje wynik 1, gdy przynajmniej jeden argument jest równy 1.',
+    examples: [
+      'A ∨ B',
+      'A ∨ (B ∧ C)',
+      '(A ∨ B) ∨ C',
+      'A ∨ ¬B',
+    ]
+  },
+  {
+    key: 'not',
+    name: 'Negacja (NOT)',
+    description: 'Negacja zamienia wartość logiczną na przeciwną.',
+    tip: 'Odpowiada "nie" w języku naturalnym.',
+    icon: '¬',
+    learn: 'Negacja (NOT) to operacja logiczna, która zamienia 1 na 0 i 0 na 1.',
+    examples: [
+      '¬A',
+      '¬(A ∧ B)',
+      '¬(A ∨ B)',
+    ]
+  },
+  {
+    key: 'xor',
+    name: 'Alternatywa wykluczająca (XOR)',
+    description: 'Prawda, gdy dokładnie jeden argument jest prawdziwy.',
+    tip: 'Często używana w arytmetyce binarnej.',
+    icon: '⊕',
+    learn: 'XOR (alternatywa wykluczająca) daje wynik 1, gdy dokładnie jeden z argumentów jest równy 1.',
+    examples: [
+      'A ⊕ B',
+      'A ⊕ (B ∧ C)',
+      '(A ∨ B) ⊕ (C ∧ D)',
+    ]
+  },
+  {
+    key: 'imp',
+    name: 'Implikacja (A → B)',
+    description: 'Fałsz tylko wtedy, gdy A=1 i B=0.',
+    tip: 'Odpowiada "jeśli... to..." w języku naturalnym.',
+    icon: '→',
+    learn: 'Implikacja (A → B) jest fałszywa tylko wtedy, gdy A=1 i B=0, w pozostałych przypadkach prawdziwa.',
+    examples: [
+      'A → B',
+      '(A ∧ B) → C',
+      'A → (B ∨ C)',
+    ]
+  },
+  {
+    key: 'eq',
+    name: 'Równoważność (A ↔ B)',
+    description: 'Prawda, gdy oba argumenty mają tę samą wartość.',
+    tip: 'Odpowiada "wtedy i tylko wtedy, gdy".',
+    icon: '↔',
+    learn: 'Równoważność (A ↔ B) jest prawdziwa, gdy oba argumenty są równe.',
+    examples: [
+      'A ↔ B',
+      '(A ∧ B) ↔ (C ∨ D)',
+      'A ↔ (B ∧ C)',
+    ]
+  },
+  {
+    key: 'tautology',
+    name: 'Tautologia',
+    description: 'Wyrażenie logiczne, które jest zawsze prawdziwe.',
+    tip: 'Tautologie są podstawą dowodzenia w logice.',
+    icon: '♾️',
+    learn: 'Tautologia to wyrażenie, które przyjmuje wartość 1 dla każdej możliwej kombinacji zmiennych.',
+    examples: [
+      'A ∨ ¬A',
+      '(A → B) ∨ (B → A)',
+      '(A ∧ B) → (A ∨ B)',
+    ]
+  },
+  {
+    key: 'kmap',
+    name: 'Mapa Karnaugha',
+    description: 'Graficzna metoda upraszczania wyrażeń logicznych.',
+    tip: 'Idealna do minimalizacji wyrażeń do 4 zmiennych.',
+    icon: '🗺️',
+    learn: 'Mapa Karnaugha pozwala graficznie znaleźć uproszczenie wyrażenia logicznego przez grupowanie jedynek.',
+    examples: [
+      '(A ∧ B) ∨ (A ∧ ¬B)',
+      'A ∨ (B ∧ C)',
+      '(A ∧ B) ∨ (C ∧ D)',
+    ]
+  },
   {
     key: 'truth_table',
     name: 'Tabela prawdy',
@@ -9,6 +116,26 @@ const CONCEPTS = [
     example: '(A ∧ B) ∨ ¬C',
     tip: 'Tabela prawdy pozwala sprawdzić, czy wyrażenie jest tautologią lub sprzeczne.',
     icon: '📊',
+    examples: [
+      'A ∧ B',
+      'A ∨ B',
+      'A → B',
+      'A ↔ B',
+      '(A ∧ B) ∨ ¬C',
+      '¬(A ∨ B)'
+    ],
+    moreExamples: [
+      'A ∧ B',
+      'A ∨ B',
+      'A → B',
+      'A ↔ B',
+      'A ⊕ B',
+      'A ↑ B',
+      'A ↓ B',
+      'A ≡ B',
+      '(A ∧ B) ∨ ¬C',
+      '¬(A ∨ B)',
+    ]
   },
   {
     key: 'minterm',
@@ -27,16 +154,6 @@ const CONCEPTS = [
     icon: '🔑',
   },
   {
-    key: 'kmap',
-    name: 'Mapa Karnaugh',
-    description: 'Graficzna metoda upraszczania wyrażeń logicznych.',
-    example: '(A ∧ B) ∨ ¬C',
-    tip: 'Grupuj jedynki w mapie, by uprościć wyrażenie.',
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="4" fill="#e0e7ff"/><rect x="4" y="4" width="8" height="8" fill="#a5b4fc"/><rect x="12" y="4" width="8" height="8" fill="#fca5a5"/><rect x="4" y="12" width="8" height="8" fill="#bbf7d0"/><rect x="12" y="12" width="8" height="8" fill="#fef08a"/></svg>
-    ),
-  },
-  {
     key: 'ast',
     name: 'AST (Abstrakcyjne Drzewo Składniowe)',
     description: 'Struktura drzewiasta reprezentująca składnię wyrażenia logicznego.',
@@ -45,14 +162,6 @@ const CONCEPTS = [
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="4" r="2" fill="#fca5a5"/><circle cx="7" cy="12" r="2" fill="#a5b4fc"/><circle cx="17" cy="12" r="2" fill="#bbf7d0"/><circle cx="12" cy="20" r="2" fill="#fef08a"/><line x1="12" y1="6" x2="7" y2="10" stroke="#888" strokeWidth="2"/><line x1="12" y1="6" x2="17" y2="10" stroke="#888" strokeWidth="2"/><line x1="7" y1="14" x2="12" y2="18" stroke="#888" strokeWidth="2"/><line x1="17" y1="14" x2="12" y2="18" stroke="#888" strokeWidth="2"/></svg>
     ),
-  },
-  {
-    key: 'tautology',
-    name: 'Tautologia',
-    description: 'Wyrażenie logiczne, które jest zawsze prawdziwe, niezależnie od wartości zmiennych.',
-    example: 'A ∨ ¬A',
-    tip: 'Tautologie są podstawą dowodzenia w logice.',
-    icon: '♾️',
   },
   {
     key: 'onp',
@@ -92,11 +201,19 @@ function DefinitionsScreen({ onBack }) {
   const [modal, setModal] = useState(null);
   const [modalData, setModalData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [analyzing, setAnalyzing] = useState('');
+  const [modalConcept, setModalConcept] = useState(null);
 
-  const handleShowExample = async (concept) => {
+  const handleShowLearn = (concept) => {
+    setModalConcept(concept);
+    setModal('learn');
+  };
+
+  const handleAnalyzeExample = async (example) => {
     setLoading(true);
-    setModal(concept.key);
-    const data = await analyze(concept.example);
+    setModal('analyze');
+    setAnalyzing(example);
+    const data = await analyze(example);
     setModalData(data);
     setLoading(false);
   };
@@ -104,6 +221,8 @@ function DefinitionsScreen({ onBack }) {
   const closeModal = () => {
     setModal(null);
     setModalData(null);
+    setAnalyzing('');
+    setModalConcept(null);
   };
 
   return (
@@ -124,19 +243,42 @@ function DefinitionsScreen({ onBack }) {
               </div>
               <button
                 className="mt-auto bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-all font-semibold shadow-md text-base"
-                onClick={() => handleShowExample(concept)}
+                onClick={() => handleShowLearn(concept)}
               >
-                <span role="img" aria-label="example">💡</span> Pokaż przykład
+                <span role="img" aria-label="example">💡</span> Dowiedz się więcej
               </button>
             </div>
           ))}
         </div>
       </div>
-      {modal && (
+      {/* Modal edukacyjny z przykładami */}
+      {modal === 'learn' && modalConcept && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-lg w-full relative overflow-y-auto max-h-[90vh] border border-blue-100 animate-fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full relative overflow-y-auto max-h-[90vh] border border-blue-100 animate-fade-in">
             <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl" onClick={closeModal}>✕</button>
-            <h2 className="text-2xl font-bold mb-6 text-blue-700">Przykład: {CONCEPTS.find(c => c.key === modal)?.name}</h2>
+            <h2 className="text-2xl font-bold mb-6 text-blue-700">{modalConcept.name}</h2>
+            <div className="mb-4 text-base text-gray-700">{modalConcept.learn}</div>
+            <div className="mb-2 font-semibold text-blue-700">Przykłady:</div>
+            <div className="flex flex-wrap gap-2 mb-4">
+              {modalConcept.examples && modalConcept.examples.map((ex, i) => (
+                <button
+                  key={i}
+                  className="bg-blue-100 hover:bg-blue-200 text-blue-800 font-mono px-3 py-1 rounded-xl transition-all text-base shadow-sm border border-blue-100"
+                  onClick={() => handleAnalyzeExample(ex)}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Modal analizy przykładu */}
+      {modal === 'analyze' && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-3xl shadow-2xl p-8 max-w-2xl w-full relative overflow-y-auto max-h-[90vh] border border-blue-100 animate-fade-in">
+            <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl" onClick={closeModal}>✕</button>
+            <h2 className="text-2xl font-bold mb-6 text-blue-700">Analiza przykładu: <span className="font-mono text-base text-blue-900">{analyzing}</span></h2>
             {loading ? (
               <div className="text-center text-lg">Ładowanie...</div>
             ) : modalData ? (
@@ -166,10 +308,36 @@ function DefinitionsScreen({ onBack }) {
                     </div>
                   </div>
                 )}
+                {modalData.ast && (
+                  <div className="mb-6">
+                    <div className="font-semibold mb-2 text-blue-700">AST (Abstrakcyjne Drzewo Składniowe)</div>
+                    <div className="bg-white rounded-xl border border-blue-100 shadow p-2">
+                      <ASTDisplay ast={modalData.ast} />
+                    </div>
+                  </div>
+                )}
                 {modalData.qm && modalData.qm.result && (
                   <div className="mb-2">
                     <div className="font-semibold text-blue-700">Uproszczenie QM:</div>
                     <div className="font-mono bg-gray-100 px-3 py-2 rounded inline-block text-lg">{modalData.qm.result}</div>
+                  </div>
+                )}
+                {modalData.kmap && modalData.kmap.result && (
+                  <div className="mb-2">
+                    <div className="font-semibold text-blue-700">Uproszczenie K-map:</div>
+                    <div className="font-mono bg-gray-100 px-3 py-2 rounded inline-block text-lg">{modalData.kmap.result}</div>
+                  </div>
+                )}
+                {modalData.onp && (
+                  <div className="mb-2">
+                    <div className="font-semibold text-blue-700">ONP:</div>
+                    <div className="font-mono bg-gray-100 px-3 py-2 rounded inline-block text-lg">{modalData.onp}</div>
+                  </div>
+                )}
+                {modalData.is_tautology !== undefined && (
+                  <div className="mb-2">
+                    <div className="font-semibold text-blue-700">Tautologia?</div>
+                    <div className="font-mono text-lg">{modalData.is_tautology ? <span className="text-green-700 font-bold">TAK</span> : <span className="text-red-700 font-bold">NIE</span>}</div>
                   </div>
                 )}
               </>

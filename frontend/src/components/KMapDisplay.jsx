@@ -13,14 +13,12 @@ const groupColors = [
 
 function getGrayCodeLabels(n) {
   // Zwraca etykiety w kodzie Graya dla n zmiennych
-  if (n === 1) return ['0', '1'];
-  if (n === 2) return ['0', '1'];
+  if (n === 1 || n === 2) return ['0', '1'];
   if (n === 3 || n === 4) return ['00', '01', '11', '10'];
   return [];
 }
 
 function KMapDisplay({ kmap, groups, result }) {
-  console.log('KMapDisplay props:', { kmap, groups, result });
   if (!kmap || !Array.isArray(kmap) || kmap.length === 0 || !Array.isArray(kmap[0])) {
     return <div className="text-red-600 font-semibold">Brak poprawnych danych do wyświetlenia mapy Karnaugha.<br/>Sprawdź, czy wyrażenie nie ma zbyt wielu zmiennych (max 4) i czy backend zwraca dane.</div>;
   }

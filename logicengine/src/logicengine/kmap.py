@@ -173,7 +173,6 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
         }
     })
 
-    logger.info(f"Uproszczone wyrażenie: {simplified}")
     return {
         "kmap": kmap,
         "groups": groups,
