@@ -4,7 +4,7 @@ import DefinitionsScreen from './components/DefinitionsScreen';
 import TutorialMode from './components/TutorialMode';
 import ExpressionHistory from './components/ExpressionHistory';
 import StartScreen from './components/StartScreen';
-import { analyze } from './__mocks__/api';
+// Removed mock API import - using real backend API
 
 const EXAMPLES = [
   '(A ∧ B) ∨ ¬C',
@@ -45,6 +45,16 @@ function App() {
       const data = localStorage.getItem(HISTORY_KEY);
       if (data) history = JSON.parse(data);
     } catch {}
+    
+    // Sprawdź czy wyrażenie już istnieje w historii
+    const existingIndex = history.findIndex(item => item.expression === expression);
+    
+    if (existingIndex !== -1) {
+      // Jeśli wyrażenie już istnieje, usuń stary wpis i dodaj nowy na początku
+      history.splice(existingIndex, 1);
+    }
+    
+    // Dodaj nowy wpis na początku
     history.unshift({ id, expression, result });
     localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
   };
@@ -52,11 +62,7 @@ function App() {
   const handleAnalyze = async (input) => {
     setInput(input);
     setScreen('result');
-    // Zapisz do historii po analizie klasycznej
-    try {
-      const res = await analyze(input);
-      saveToHistory(input, res);
-    } catch {}
+    // Historia będzie zapisana po analizie w ResultScreen
   };
 
   const handleShowDefinitions = () => {
@@ -90,7 +96,7 @@ function App() {
           />
           {showExamples && (
             <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative animate-fade-in border border-blue-100">
+              <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative animate-fade-in border border-blue-100 overflow-y-auto max-h-[90vh]">
                 <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl" onClick={() => setShowExamples(false)}>✕</button>
                 <h2 className="text-2xl font-bold mb-6 text-blue-700 text-center">Przykładowe wyrażenia</h2>
                 <ul className="space-y-3">
@@ -110,7 +116,7 @@ function App() {
           )}
         </>
       )}
-      {screen === 'result' && <ResultScreen input={input} onBack={() => setScreen('start')} />}
+      {screen === 'result' && <ResultScreen input={input} onBack={() => setScreen('start')} saveToHistory={saveToHistory} />}
       {screen === 'definitions' && <DefinitionsScreen onBack={() => setScreen('start')} />}
       {screen === 'history' && <ExpressionHistory onLoad={handleLoadHistory} onBack={() => setScreen('start')} />}
       {loading && (
