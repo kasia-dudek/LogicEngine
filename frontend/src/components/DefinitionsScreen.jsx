@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { analyze } from '../__mocks__/api';
+// Removed mock API import - using real backend API
 import ASTDisplay from './ASTDisplay';
 
 const CONCEPTS = [
@@ -213,8 +213,60 @@ function DefinitionsScreen({ onBack }) {
     setLoading(true);
     setModal('analyze');
     setAnalyzing(example);
-    const data = await analyze(example);
-    setModalData(data);
+    
+    try {
+      const apiUrl = process.env.REACT_APP_API_URL || 'http://127.0.0.1:8000';
+      
+      // Fetch data from real API
+      const [astRes, onpRes, truthRes, kmapRes, qmRes, tautRes] = await Promise.all([
+        fetch(`${apiUrl}/ast`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+        fetch(`${apiUrl}/onp`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+        fetch(`${apiUrl}/truth_table`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+        fetch(`${apiUrl}/kmap`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+        fetch(`${apiUrl}/qm`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+        fetch(`${apiUrl}/tautology`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expr: example }),
+        }).then(r => r.json()),
+      ]);
+
+      const data = {
+        expression: example,
+        ast: astRes.ast,
+        onp: onpRes.onp,
+        truth_table: truthRes.truth_table,
+        kmap: kmapRes,
+        qm: qmRes,
+        is_tautology: tautRes.is_tautology,
+      };
+      
+      setModalData(data);
+    } catch (error) {
+      console.error('Error analyzing example:', error);
+      setModalData({ error: error.message });
+    }
+    
     setLoading(false);
   };
 

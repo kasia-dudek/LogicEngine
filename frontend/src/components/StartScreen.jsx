@@ -115,7 +115,7 @@ function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-white flex flex-col items-center justify-center relative">
       <div ref={wrapperRef} className="max-w-2xl w-full bg-white rounded-3xl shadow-2xl p-10 border border-blue-100 animate-fade-in flex flex-col items-center relative">
-        <h1 className="text-4xl font-extrabold mb-6 text-center text-blue-700 tracking-tight drop-shadow">LogicEngine</h1>
+        <h1 className="text-4xl font-extrabold mb-6 text-center text-blue-700 tracking-tight drop-shadow">Analiza wyrażeń logicznych</h1>
         <p className="mb-6 text-gray-600 text-center text-lg">Wprowadź wyrażenie logiczne i przeanalizuj je. Skorzystaj z przycisków operatorów, aby ułatwić wpisywanie.</p>
         <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4 w-full">
           <input
