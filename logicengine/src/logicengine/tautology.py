@@ -1,21 +1,24 @@
-import logging
+﻿"""Tautology checking functionality."""
+
 from .truth_table import generate_truth_table, TruthTableError
 from .parser import LogicExpressionError
 
-# Usuń lub zakomentuj logger.error (zostaw tylko krytyczne błędy produkcyjne)
 
 def is_tautology(expr: str) -> bool:
     """
-    Sprawdza, czy wyrażenie logiczne jest tautologią (zawsze prawdziwe).
+    Check if a logical expression is a tautology (always true).
+    
     Args:
-        expr (str): Wyrażenie logiczne.
+        expr: Logical expression string.
+        
     Returns:
-        bool: True jeśli tautologia, False w przeciwnym razie.
+        True if tautology, False otherwise.
+        
+    Raises:
+        Returns False if there's an error in expression processing.
     """
     try:
         table = generate_truth_table(expr)
-        # Tautologia: wszystkie wyniki muszą być True (1)
         return all(row['result'] for row in table)
-    except (LogicExpressionError, TruthTableError) as e:
-        # logger.error(f"Błąd sprawdzania tautologii: {e}")
-        return False 
+    except (LogicExpressionError, TruthTableError):
+        return False

@@ -1,129 +1,125 @@
+# parser.py
+"""Standardize and validate logical expressions."""
+
 import re
-from typing import List, Set
+from .validation import validate as base_validate, ValidationError
+
 
 class LogicExpressionError(Exception):
-    """Wyjątek dla błędów parsowania wyrażeń logicznych."""
     pass
 
+
+OPERATOR_MAP = {
+    '&': '∧',
+    '|': '∨',
+    '+': '∨',
+    '~': '¬',
+    '!': '¬',
+    '=>': '→',
+    '->': '→',
+    '<=>': '↔',
+    '<->': '↔',
+    '^': '⊕',
+    '↑': '↑',
+    '↓': '↓',
+    '≡': '↔',
+    # Keep standard operators as-is
+    '∧': '∧',
+    '∨': '∨',
+    '¬': '¬',
+    '→': '→',
+    '↔': '↔',
+    '⊕': '⊕',
+}
+
+BINARY_OPERATORS = {'∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'}
+UNARY_OPERATORS = {'¬'}
+ALL_OPERATORS = BINARY_OPERATORS | UNARY_OPERATORS
+
+
 class LogicParser:
-    # Obsługiwane operatory i ich zamienniki
-    OPERATORS = {
-        '¬': '¬',
-        '~': '¬',
-        '!': '¬',
-        '∧': '∧',
-        '&': '∧',
-        '^': '⊕',
-        '∨': '∨',
-        '|': '∨',
-        '+': '∨',
-        '→': '→',
-        '=>': '→',
-        '⇒': '→',
-        '↔': '↔',
-        '<=>': '↔',
-        '⇔': '↔',
-        '⊕': '⊕',
-        '↑': '↑',
-        '↓': '↓',
-        '≡': '≡',
-    }
-    # Ograniczone zmienne tylko dla walidacji składni
-    VALID_VARS = {'A', 'B', 'C', 'D', 'E'}  # Rozszerzono, aby przepuścić E
-    VALID_CHARS = VALID_VARS | {'(', ')'} | set(OPERATORS.keys()) | set(OPERATORS.values()) | {'0', '1'}
-
-    @classmethod
-    def standardize(cls, expr: str) -> str:
-        """Standaryzuje wyrażenie logiczne, usuwając spacje i zamieniając operatory."""
-        expr = expr.strip().replace(' ', '')
-        if not expr:
-            raise LogicExpressionError("Puste wyrażenie")
-        for alt, std in sorted(cls.OPERATORS.items(), key=lambda x: -len(x[0])):
-            expr = expr.replace(alt, std)
-        return expr
-
-    @classmethod
-    def validate(cls, expr: str) -> None:
-        """Sprawdza poprawność wyrażenia logicznego."""
-        if expr in {'0', '1'}:
-            return
-        # Sprawdza poprawność znaków
-        invalid_chars = set(expr) - cls.VALID_CHARS
-        if invalid_chars:
-            raise LogicExpressionError(f"Nieprawidłowe znaki: {invalid_chars}")
-        # Sprawdza poprawność nawiasów
-        if not cls._check_parentheses(expr):
-            raise LogicExpressionError("Niezamknięte lub nieprawidłowe nawiasy")
-        # Sprawdza poprawność składni
-        if not cls._check_syntax(expr):
-            raise LogicExpressionError("Nieprawidłowa składnia wyrażenia")
+    VALID_VARS = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ")
 
     @staticmethod
-    def _check_parentheses(expr: str) -> bool:
-        """Sprawdza poprawność nawiasów w wyrażeniu."""
-        count = 0
+    def standardize(expr: str) -> str:
+        if expr is None:
+            raise LogicExpressionError("Wyrażenie nie może być puste.")
+        s = str(expr)
+
+        # Replace multi-char operators first to avoid overlaps
+        for a, b in (('<=>', '↔'), ('<->', '↔'), ('=>', '→'), ('->', '→')):
+            s = s.replace(a, b)
+
+        # Replace remaining aliases
+        for alt, std in OPERATOR_MAP.items():
+            if alt in {'<=>', '<->', '=>', '->'}:
+                continue
+            s = s.replace(alt, std)
+
+        # Strip whitespace but preserve operators
+        return re.sub(r"\s+", "", s)
+
+    @staticmethod
+    def validate(expr: str) -> None:
+        # Delegate to base validator (chars, parentheses, basic shape)
+        try:
+            base_validate(expr)
+        except ValidationError as e:
+            raise LogicExpressionError(str(e))
+
+        # Lightweight token walk for common syntax errors
+        prev = None  # 'var' | 'op' | '(' | ')'
+        depth = 0
+
         for ch in expr:
+            if ch in LogicParser.VALID_VARS or ch in {'0', '1'}:
+                if prev == ')':
+                    raise LogicExpressionError("Brak operatora między ')' a zmienną")
+                prev = 'var'
+                continue
+
             if ch == '(':
-                count += 1
-            elif ch == ')':
-                count -= 1
-            if count < 0:
-                return False
-        return count == 0
+                if prev in {'var', ')'}:
+                    raise LogicExpressionError("Brak operatora przed '('")
+                depth += 1
+                prev = '('
+                continue
 
-    @classmethod
-    def _check_syntax(cls, expr: str) -> bool:
-        """Sprawdza poprawność składni wyrażenia logicznego."""
-        if not expr:
-            return False
-        prev = None
-        i = 0
-        while i < len(expr):
-            ch = expr[i]
-            if ch in cls.VALID_VARS:
-                if prev in cls.VALID_VARS or prev == ')':
-                    return False
-            elif ch == '¬':
-                if i + 1 >= len(expr) or expr[i + 1] not in cls.VALID_VARS and expr[i + 1] != '(':
-                    return False
-            elif ch in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
-                if prev is None or prev in {'(', '¬', '∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
-                    return False
-            elif ch == '(':
-                if prev in cls.VALID_VARS or prev == ')':
-                    return False
-            elif ch == ')':
-                if prev in {'(', '¬', '∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
-                    return False
-            prev = ch
-            i += 1
-        if prev in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
-            return False
-        return True
+            if ch == ')':
+                if prev in {'op', '('}:
+                    raise LogicExpressionError("Puste nawiasy lub operator przed ')'")
+                depth -= 1
+                if depth < 0:
+                    raise LogicExpressionError("Niezgodna liczba nawiasów.")
+                prev = ')'
+                continue
 
-    @classmethod
-    def parse(cls, expr: str) -> str:
-        """Parsuje wyrażenie logiczne i zwraca jego standaryzowaną formę."""
-        if not expr:
-            raise LogicExpressionError("Puste wyrażenie")
-        std = cls.standardize(expr)
-        cls.validate(std)
+            if ch in ALL_OPERATORS:
+                if ch in UNARY_OPERATORS:
+                    if prev in {'var', ')'}:
+                        raise LogicExpressionError("Nieprawidłowe użycie negacji")
+                    prev = 'op'
+                    continue
+                if prev not in {'var', ')'}:
+                    raise LogicExpressionError("Operator binarny w niepoprawnym miejscu")
+                prev = 'op'
+                continue
+
+            raise LogicExpressionError(f"Niedozwolony znak: {ch}")
+
+        if depth != 0:
+            raise LogicExpressionError("Niezgodna liczba nawiasów.")
+        if prev == 'op':
+            raise LogicExpressionError("Wyrażenie nie może kończyć się operatorem")
+
+    @staticmethod
+    def parse(expr: str) -> str:
+        std = LogicParser.standardize(expr)
+        LogicParser.validate(std)
         return std
 
-    def validate_and_standardize(self, expr: str) -> str:
-        if not expr or not expr.strip():
-            raise LogicExpressionError('Wyrażenie nie może być puste.')
-        # Dopuszczalne znaki: litery, cyfry, operatory logiczne, nawiasy, spacje
-        if re.search(r'[^A-Za-z0-9¬∧∨→↔()\s]', expr):
-            raise LogicExpressionError('Wyrażenie zawiera niedozwolone znaki.')
-        # Standaryzacja: usuwanie zbędnych spacji
-        return expr.replace(' ', '')
 
 def validate_and_standardize(expr: str) -> str:
-    if not expr or not expr.strip():
-        raise LogicExpressionError('Wyrażenie nie może być puste.')
-    # Dopuszczalne znaki: litery, cyfry, operatory logiczne, nawiasy, spacje
-    if re.search(r'[^A-Za-z0-9¬∧∨→↔()\s]', expr):
-        raise LogicExpressionError('Wyrażenie zawiera niedozwolone znaki.')
-    # Standaryzacja: usuwanie zbędnych spacji
-    return expr.replace(' ', '')
+    std = LogicParser.standardize(expr)
+    LogicParser.validate(std)
+    return std

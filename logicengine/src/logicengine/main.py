@@ -1,20 +1,17 @@
-from .parser import LogicParser, LogicExpressionError
-from .truth_table import generate_truth_table, TruthTableError
-from .ast import generate_ast, ASTError
-from .onp import to_onp, ONPError
-from .kmap import simplify_kmap, KMapError
-from .qm import simplify_qm, QMError
-import json
-from logicengine.engine import LogicEngine
+# main.py
+"""Run LogicEngine API with Uvicorn."""
 
-# Usuń wszystkie print statements z kodu produkcyjnego
+import os
+import uvicorn
+
+# Import app from api.py (works inside a package and as a script)
+try:
+    from .api import app  # when running as a package: `python -m yourpkg.main`
+except ImportError:
+    from api import app   # when running the file directly: `python main.py`
 
 if __name__ == "__main__":
-    # Przykładowe wyrażenie logiczne
-    expr = "(A ∧ B) ∨ ¬C"
-    # Analiza wyrażenia przez LogicEngine
-    result = LogicEngine.analyze(expr)
-    # Wypisz wynik w formacie JSON (ładnie sformatowany)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
-
-    main() 
+    host = os.getenv("HOST", "0.0.0.0")
+    port = int(os.getenv("PORT", "8000"))
+    reload_flag = os.getenv("RELOAD", "false").lower() in {"1", "true", "yes"}
+    uvicorn.run(app, host=host, port=port, reload=reload_flag)

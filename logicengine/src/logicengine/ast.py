@@ -1,73 +1,298 @@
+# ast.py
+"""AST generation and normalization for logical expressions."""
+
 import logging
+from typing import Any, Dict, List, Optional
+
+from .validation import validate, ValidationError
 from .parser import LogicParser, LogicExpressionError
 
 logger = logging.getLogger(__name__)
 
+
 class ASTError(Exception):
     pass
 
-def generate_ast(expr: str):
+
+# Pratt parser config
+PRECEDENCE: Dict[str, int] = {
+    '¬': 5, '∧': 4, '∨': 3, '⊕': 3, '↑': 3, '↓': 3, '→': 2, '↔': 1, '≡': 1,
+}
+RIGHT_ASSOC = {'¬', '→', '↔', '≡'}
+BINARY_OPS = {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}
+
+
+class TokenStream:
+    def __init__(self, s: str):
+        self.s = s
+        self.i = 0
+
+    def peek(self) -> str:
+        return self.s[self.i] if self.i < len(self.s) else ''
+
+    def next(self) -> str:
+        ch = self.peek()
+        if ch:
+            self.i += 1
+        return ch
+
+    def eof(self) -> bool:
+        return self.i >= len(self.s)
+
+
+def parse_expression(ts: TokenStream, min_prec: int = 0) -> Any:
+    """Pratt parser. Nodes:
+       - unary:  {'node':'¬','child':...}
+       - binary: {'node':OP,'left':...,'right':...}
+       - leaf:   'A' / '0' / '1'
+    """
+    ch = ts.peek()
+    if ch == '':
+        raise ASTError("Nieoczekiwany koniec wyrażenia")
+
+    if ch == '¬':  # unary NOT
+        ts.next()
+        node: Any = {"node": '¬', "child": parse_expression(ts, PRECEDENCE['¬'])}
+    elif ch == '(':
+        ts.next()
+        node = parse_expression(ts, 0)
+        if ts.next() != ')':
+            raise ASTError("Brak zamykającego nawiasu")
+    else:
+        if ch.isalpha() or ch in '01':
+            node = ch
+            ts.next()
+        else:
+            raise ASTError(f"Nieprawidłowy token: {ch}")
+
+    while True:  # binary chaining with precedence/associativity
+        op = ts.peek()
+        if op not in PRECEDENCE or op == '¬':
+            break
+        prec = PRECEDENCE[op]
+        if prec < min_prec:
+            break
+        ts.next()
+        next_min = prec + (0 if op in RIGHT_ASSOC else 1)
+        rhs = parse_expression(ts, next_min)
+        node = {"node": op, "left": node, "right": rhs}
+    return node
+
+
+# --- Canonicalization helpers (defensive) ---
+
+def _guess_unary_child(raw: Dict[str, Any]) -> Optional[Any]:
+    for key in ('child', 'right', 'left', 'operand', 'arg', 'argument', 'expr'):
+        if key in raw and raw[key] is not None:
+            return raw[key]
+    ch = raw.get('children')
+    if isinstance(ch, list) and ch:
+        return ch[0]
+    for v in raw.values():
+        if isinstance(v, dict) and (v.get('node') or v.get('left') or v.get('right') or v.get('child')):
+            return v
+        if isinstance(v, list):
+            for it in v:
+                if isinstance(it, dict) and (it.get('node') or it.get('left') or it.get('right') or it.get('child')):
+                    return it
+        if isinstance(v, str) and (v in ('0', '1') or v.isalpha()):
+            return v
+    return None
+
+
+def _canonicalize(node: Any) -> Any:
+    """Convert unknown shapes to the canonical shape used by parse_expression()."""
+    if node is None:
+        return None
+    if isinstance(node, str):
+        if node not in {'0', '1'} and not node.isalpha():
+            return node
+        return node
+    if not isinstance(node, dict):
+        return node
+
+    op = node.get('node')
+
+    if op == '¬':
+        return {"node": '¬', "child": _canonicalize(_guess_unary_child(node))}
+
+    if op in BINARY_OPS:
+        left = node.get('left')
+        right = node.get('right')
+        ch = node.get('children')
+        if (left is None or right is None) and isinstance(ch, list):
+            if left is None and len(ch) >= 1:
+                left = ch[0]
+            if right is None and len(ch) >= 2:
+                right = ch[1]
+        return {"node": op, "left": _canonicalize(left), "right": _canonicalize(right)}
+
+    if 'children' in node and isinstance(node['children'], list) and node['children']:
+        kids = [_canonicalize(k) for k in node['children']]
+        if len(kids) == 1:
+            return {"node": '¬', "child": kids[0]}
+        if len(kids) >= 2:
+            return {"node": '∧', "left": kids[0], "right": kids[1]}
+
+    return str(node)
+
+def generate_ast(expr: str) -> Dict[str, Any]:
+    """Return canonical AST for UI rendering."""
     try:
         std = LogicParser.parse(expr)
     except LogicExpressionError as e:
-        logger.error(f"Błąd parsera: {e}")
-        raise ASTError(f"Błąd parsera: {e}")
-    # Rekurencyjny parser do AST
-    def parse_expr(s):
-        # Pomocnicze funkcje
-        def find_main_operator(s):
-            min_prio = 100
-            idx = -1
-            depth = 0
-            for i, ch in enumerate(s):
-                if ch == '(': depth += 1
-                elif ch == ')': depth -= 1
-                elif depth == 0 and ch in OP_PRIOS:
-                    prio = OP_PRIOS[ch]
-                    if prio <= min_prio:
-                        min_prio = prio
-                        idx = i
-            return idx
-        s = s.strip()
-        if not s:
-            logger.error('Puste wyrażenie')
-            raise ASTError("Puste wyrażenie")
-        # Zdejmuj zewnętrzne nawiasy tylko jeśli całe wyrażenie jest w nawiasach
-        while s and s[0] == '(' and s[-1] == ')' and LogicParser._check_parentheses(s):
-            depth = 0
-            is_outer = True
-            for i, ch in enumerate(s):
-                if ch == '(': depth += 1
-                elif ch == ')': depth -= 1
-                if depth == 0 and i != len(s) - 1:
-                    is_outer = False
-                    break
-            if is_outer:
-                s = s[1:-1].strip()
-            else:
-                break
-        if s and s[0] == '¬':
-            node = {"node": "¬", "child": parse_expr(s[1:])}
-            return node
-        idx = find_main_operator(s)
-        if idx == -1:
-            if s in LogicParser.VALID_VARS:
-                return s
-            logger.error(f'Nieprawidłowy atom: {s}')
-            raise ASTError(f"Nieprawidłowy atom: {s}")
-        op = s[idx]
-        left = s[:idx]
-        right = s[idx+1:]
-        if op in {"∧", "∨", "→", "↔", "⊕", "↑", "↓", "≡"}:
-            node = {"node": op, "left": parse_expr(left), "right": parse_expr(right)}
-            return node
-        logger.error(f'Nieznany operator: {op}')
-        raise ASTError(f"Nieznany operator: {op}")
-    # Priorytety operatorów (niższa liczba = niższy priorytet)
-    OP_PRIOS = {"↔": 1, "≡": 1, "→": 2, "⊕": 3, "↑": 3, "↓": 3, "∨": 4, "∧": 5}
-    # ¬ jest unarny, obsługiwany osobno
+        logger.error(f"Parser error: {e}")
+        raise ASTError(str(e))
+
     try:
-        return parse_expr(std)
-    except ASTError as e:
-        logger.error(f"Błąd AST: {e}")
-        raise 
+        validate(std)
+    except ValidationError as e:
+        raise ASTError(str(e))
+
+    try:
+        ts = TokenStream(std)
+        raw_ast = parse_expression(ts, 0)
+        if not ts.eof():
+            raise ASTError("Nieoczekiwane znaki po wyrażeniu")
+        return _canonicalize(raw_ast)
+    except ASTError:
+        raise
+    except Exception as e:
+        logger.error(f"AST generation error: {e}")
+        raise ASTError(str(e))
+
+
+# --- Boolean-only normalized representation ---
+
+def _to_bool_norm(node: Any) -> Any:
+    """Map canonical/legacy shapes to boolean-only form."""
+    if node is None:
+        return None
+
+    if isinstance(node, str):
+        if node in {'0', '1'}:
+            return {'op': 'CONST', 'value': int(node)}
+        if node.isalpha():
+            return {'op': 'VAR', 'name': node}
+        return node
+
+    if not isinstance(node, dict):
+        return node
+
+    if 'node' in node:
+        op = node['node']
+        if op == '¬':
+            return {'op': 'NOT', 'child': _to_bool_norm(_guess_unary_child(node))}
+        if op in {'∧', '∨'}:
+            left = _to_bool_norm(node.get('left'))
+            right = _to_bool_norm(node.get('right'))
+            return {'op': 'AND', 'args': [left, right]} if op == '∧' else {'op': 'OR', 'args': [left, right]}
+        left = _to_bool_norm(node.get('left'))
+        right = _to_bool_norm(node.get('right'))
+        return {'op': op, 'left': left, 'right': right}
+
+    if 'op' in node:
+        op = node['op']
+        if op == 'NOT':
+            return {'op': 'NOT', 'child': _to_bool_norm(node.get('child'))}
+        if op in {'AND', 'OR'}:
+            return {'op': op, 'args': [_to_bool_norm(a) for a in node.get('args', [])]}
+        if op == 'VAR':
+            return {'op': 'VAR', 'name': node.get('name')}
+        if op == 'CONST':
+            return {'op': 'CONST', 'value': node.get('value')}
+
+    return node
+
+
+def _flatten_sort_dedupe(node: Any) -> Any:
+    """Flatten AND/OR, sort, and remove duplicates."""
+    if not isinstance(node, dict) or 'op' not in node:
+        return node
+
+    op = node['op']
+    if op in {'AND', 'OR'}:
+        args: List[Any] = node.get('args', [])
+        if not args:
+            return node
+
+        flat: List[Any] = []
+        for arg in args:
+            a = _flatten_sort_dedupe(arg)
+            if isinstance(a, dict) and a.get('op') == op:
+                flat.extend(a.get('args', []))
+            else:
+                flat.append(a)
+
+        unique: List[Any] = []
+        for a in flat:
+            if not any(equals(a, ex) for ex in unique):
+                unique.append(a)
+
+        unique.sort(key=canonical_str)
+        return {'op': op, 'args': unique}
+
+    if 'child' in node:
+        node['child'] = _flatten_sort_dedupe(node['child'])
+    if 'left' in node:
+        node['left'] = _flatten_sort_dedupe(node['left'])
+    if 'right' in node:
+        node['right'] = _flatten_sort_dedupe(node['right'])
+    if 'args' in node:
+        node['args'] = [_flatten_sort_dedupe(a) for a in node['args']]
+    return node
+
+
+def normalize_bool_ast(ast: Any) -> Any:
+    """Boolean-only form with flattened n-ary operators."""
+    return _flatten_sort_dedupe(_to_bool_norm(ast))
+
+
+def canonical_str(node: Any) -> str:
+    """Canonical string for structural compare/sort."""
+    if node is None:
+        return '?'
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return str(node)
+
+    if 'op' in node:
+        op = node['op']
+        if op == 'NOT':
+            return f"¬({canonical_str(node.get('child'))})"
+        if op in {'AND', 'OR'}:
+            args = node.get('args', [])
+            if not args:
+                return '?'
+            symbol = '∧' if op == 'AND' else '∨'
+            return f"({symbol.join(canonical_str(a) for a in args)})"
+        if op == 'VAR':
+            return node.get('name', '?')
+        if op == 'CONST':
+            return str(node.get('value', '?'))
+        left = canonical_str(node.get('left'))
+        right = canonical_str(node.get('right'))
+        return f"({left} {op} {right})"
+
+    if 'node' in node:
+        op = node['node']
+        if op == '¬':
+            return f"¬({canonical_str(_guess_unary_child(node))})"
+        if op in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
+            left = canonical_str(node.get('left'))
+            right = canonical_str(node.get('right'))
+            return f"({left} {op} {right})"
+
+    return str(node)
+
+
+def equals(a: Any, b: Any) -> bool:
+    """Structural equality via canonical_str."""
+    if a is None or b is None:
+        return a is b
+    if isinstance(a, str) or isinstance(b, str):
+        return a == b
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return a == b
+    return canonical_str(a) == canonical_str(b)

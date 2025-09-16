@@ -1,49 +1,77 @@
+# onp.py
+"""Convert a logical expression to RPN (ONP) using shunting-yard."""
+
 import logging
-from .parser import LogicParser, LogicExpressionError
+
+from .validation import validate, ValidationError
 
 logger = logging.getLogger(__name__)
+
 
 class ONPError(Exception):
     pass
 
+
 def to_onp(expr: str) -> str:
+    # single syntax check (no extra parsing)
     try:
-        std = LogicParser.parse(expr)
-    except LogicExpressionError as e:
-        logger.error(f"Błąd parsera: {e}")
-        raise ONPError(f"Błąd parsera: {e}")
+        validate(expr)
+    except ValidationError as e:
+        logger.error(f"Błąd walidacji: {e}")
+        raise ONPError(str(e))
+
     output = []
     stack = []
-    # Priorytety operatorów (wyższa liczba = wyższy priorytet)
-    priors = {"¬": 6, "∧": 5, "∨": 4, "⊕": 4, "↑": 4, "↓": 4, "→": 3, "↔": 2, "≡": 2}
-    right_assoc = {"¬"}
+
+    # operator precedence (higher = tighter)
+    prec = {"¬": 5, "∧": 4, "∨": 3, "⊕": 3, "↑": 3, "↓": 3, "→": 2, "↔": 1, "≡": 1}
+    right_assoc = {"¬", "→", "↔", "≡"}
+
     i = 0
-    while i < len(std):
-        ch = std[i]
-        if ch in LogicParser.VALID_VARS:
+    n = len(expr)
+    while i < n:
+        ch = expr[i]
+
+        if ch.isspace():
+            i += 1
+            continue
+
+        if ch.isalpha() or ch in "01":
             output.append(ch)
-        elif ch == '(': 
+
+        elif ch == "(":
             stack.append(ch)
-        elif ch == ')':
-            while stack and stack[-1] != '(': 
+
+        elif ch == ")":
+            while stack and stack[-1] != "(":
                 output.append(stack.pop())
             if not stack:
-                logger.error("Niezamknięty nawias w ONP")
+                logger.error("Niezamknięty nawias")
                 raise ONPError("Niezamknięty nawias")
-            stack.pop()
-        elif ch in priors:
-            while (stack and stack[-1] != '(' and
-                   (priors.get(stack[-1], 0) > priors[ch] or
-                    (priors.get(stack[-1], 0) == priors[ch] and ch not in right_assoc))):
+            stack.pop()  # drop '('
+
+        elif ch in prec:
+            while (
+                stack
+                and stack[-1] != "("
+                and (
+                    prec.get(stack[-1], 0) > prec[ch]
+                    or (prec.get(stack[-1], 0) == prec[ch] and ch not in right_assoc)
+                )
+            ):
                 output.append(stack.pop())
             stack.append(ch)
+
         else:
-            logger.error(f"Nieprawidłowy znak w ONP: {ch}")
+            logger.error(f"Nieprawidłowy znak: {ch}")
             raise ONPError(f"Nieprawidłowy znak: {ch}")
+
         i += 1
+
     while stack:
-        if stack[-1] == '(': 
-            logger.error("Niezamknięty nawias na końcu ONP")
+        if stack[-1] == "(":
+            logger.error("Niezamknięty nawias")
             raise ONPError("Niezamknięty nawias")
         output.append(stack.pop())
-    return ' '.join(output) 
+
+    return " ".join(output)
