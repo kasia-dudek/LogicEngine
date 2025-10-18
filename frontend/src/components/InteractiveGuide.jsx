@@ -152,7 +152,7 @@ const InteractiveGuide = () => {
         onClick={() => setIsOpen(!isOpen)}
         className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-full text-sm font-medium transition-colors border border-purple-300 flex items-center gap-2"
       >
-        🎓 Przewodnik krok po kroku
+        Przewodnik krok po kroku
       </button>
       
       {isOpen && (

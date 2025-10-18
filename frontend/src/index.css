@@ -15,3 +15,129 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Print Styles */
+@media print {
+  /* Page setup */
+  @page {
+    size: A4;
+    margin: 1cm;
+  }
+
+  /* Hide interactive elements */
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  /* Show print-only elements */
+  .print\\:block {
+    display: block !important;
+  }
+
+  /* Adjust backgrounds for print */
+  .print\\:bg-blue-100 {
+    background-color: #dbeafe !important;
+  }
+
+  .print\\:bg-green-100 {
+    background-color: #dcfce7 !important;
+  }
+
+  .print\\:bg-yellow-100 {
+    background-color: #fef3c7 !important;
+  }
+
+  .print\\:bg-purple-100 {
+    background-color: #e9d5ff !important;
+  }
+
+  .print\\:bg-gray-200 {
+    background-color: #e5e7eb !important;
+  }
+
+  /* Remove shadows and effects */
+  .print\\:shadow-none {
+    box-shadow: none !important;
+  }
+
+  /* Page breaks */
+  .print\\:page-break-inside-avoid {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  .print\\:page-break-after-always {
+    page-break-after: always !important;
+  }
+
+  /* Table headers repeat */
+  thead {
+    display: table-header-group !important;
+  }
+
+  /* Scale down large tables */
+  .print\\:scale-90 {
+    transform: scale(0.9) !important;
+    transform-origin: top left !important;
+  }
+
+  /* Print container */
+  .print-container {
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Hide navigation and controls */
+  nav, .navigation, button:not(.print\\:block), 
+  .tabs, .tab-controls, .slide-controls,
+  .toast, .modal, .dropdown {
+    display: none !important;
+  }
+
+  /* Ensure text is black for readability */
+  * {
+    color: #000 !important;
+    background: transparent !important;
+  }
+
+  /* Keep important backgrounds */
+  .print\\:bg-white, .print\\:bg-blue-100, .print\\:bg-green-100,
+  .print\\:bg-yellow-100, .print\\:bg-purple-100, .print\\:bg-gray-200 {
+    background: var(--bg-color) !important;
+  }
+
+  /* Borders for structure */
+  .border, .border-gray-200, .border-gray-300 {
+    border: 1px solid #ccc !important;
+  }
+
+  /* Typography adjustments */
+  h1, h2, h3, h4, h5, h6 {
+    color: #000 !important;
+    page-break-after: avoid !important;
+  }
+
+  /* Prevent orphans and widows */
+  p, li {
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Table adjustments */
+  table {
+    border-collapse: collapse !important;
+    width: 100% !important;
+  }
+
+  th, td {
+    border: 1px solid #ccc !important;
+    padding: 4px !important;
+  }
+
+  /* SVG adjustments */
+  svg {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+}

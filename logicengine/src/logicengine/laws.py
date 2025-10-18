@@ -37,6 +37,8 @@ def count_nodes(n: Any) -> int:
         return 1 + count_nodes(n["child"])
     if op in {"AND", "OR"}:
         return 1 + sum(count_nodes(a) for a in n["args"])
+    if op in {"IMP", "IFF"}:
+        return 1 + count_nodes(n.get("left", {})) + count_nodes(n.get("right", {}))
     return 1
 
 def count_literals(n: Any) -> int:
@@ -54,6 +56,8 @@ def count_literals(n: Any) -> int:
         return count_literals(ch)
     if op in {"AND", "OR"}:
         return sum(count_literals(a) for a in n["args"])
+    if op in {"IMP", "IFF"}:
+        return count_literals(n.get("left", {})) + count_literals(n.get("right", {}))
     return 0
 
 def measure(n: Any) -> Tuple[int, int, int]:
@@ -254,6 +258,81 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     "after": CONST(0),
                     "note": "X∧0=0",
                 })
+            
+            # Contradiction: A ∧ ¬A = 0
+            args = sub.get("args", [])
+            for i, a in enumerate(args):
+                if isinstance(a, dict) and a.get("op") == "NOT":
+                    child = a.get("child")
+                    if isinstance(child, dict) and child.get("op") == "VAR":
+                        var_name = child.get("name")
+                        # Look for the same variable without negation
+                        for j, b in enumerate(args):
+                            if i != j and isinstance(b, dict) and b.get("op") == "VAR" and b.get("name") == var_name:
+                                out.append({
+                                    "law": "Kontradykcja (A ∧ ¬A)",
+                                    "path": path,
+                                    "before": sub,
+                                    "after": CONST(0),
+                                    "note": "A∧¬A=0",
+                                })
+                                break
+            
+            # Distributivity: (A∨B)∧C = (A∧C)∨(B∧C)
+            args = sub.get("args", [])
+            for i, a in enumerate(args):
+                if isinstance(a, dict) and a.get("op") == "OR":
+                    or_args = a.get("args", [])
+                    if len(or_args) >= 2:
+                        # Find other AND arguments to distribute over
+                        other_args = [b for j, b in enumerate(args) if i != j]
+                        if other_args:
+                            # Create distributed form: (A∧C)∨(B∧C)∨...
+                            distributed = []
+                            for or_arg in or_args:
+                                new_and_args = [or_arg] + other_args
+                                if len(new_and_args) == 1:
+                                    distributed.append(new_and_args[0])
+                                else:
+                                    distributed.append({"op": "AND", "args": new_and_args})
+                            
+                            after = {"op": "OR", "args": distributed}
+                            out.append({
+                                "law": "Dystrybutywność (A∨B)∧C",
+                                "path": path,
+                                "before": sub,
+                                "after": after,
+                                "note": "(A∨B)∧C = (A∧C)∨(B∧C)",
+                            })
+                            break
+            
+            # Distributivity: A∧(B∨C) = (A∧B)∨(A∧C)
+            args = sub.get("args", [])
+            for i, a in enumerate(args):
+                if isinstance(a, dict) and a.get("op") == "OR":
+                    or_args = a.get("args", [])
+                    if len(or_args) >= 2:
+                        # Find other AND arguments to distribute over
+                        other_args = [b for j, b in enumerate(args) if i != j]
+                        if other_args:
+                            # Create distributed form: (A∧B)∨(A∧C)∨...
+                            distributed = []
+                            for or_arg in or_args:
+                                new_and_args = [or_arg] + other_args
+                                if len(new_and_args) == 1:
+                                    distributed.append(new_and_args[0])
+                                else:
+                                    distributed.append({"op": "AND", "args": new_and_args})
+                            
+                            after = {"op": "OR", "args": distributed}
+                            out.append({
+                                "law": "Dystrybutywność A∧(B∨C)",
+                                "path": path,
+                                "before": sub,
+                                "after": after,
+                                "note": "A∧(B∨C) = (A∧B)∨(A∧C)",
+                            })
+                            break
 
         if op == "OR":
             if any(isinstance(a, dict) and a.get("op") == "CONST" and a["value"] == 0 for a in sub["args"]):
@@ -361,19 +440,27 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
             lits_of_x = [to_lit(a) for a in sub["args"] if is_lit(a)]
             for a in sub["args"]:
                 if isinstance(a, dict) and a.get("op") == "OR":
-                    lits = [t for t in (to_lit(x) for x in a.get("args", [])) if t]
-                    for lx in lits_of_x:
-                        if (lx[0], not lx[1]) in lits:
-                            rest = [lit_to_node(l) for l in lits if l != (lx[0], not lx[1])]
-                            after = AND([lit_to_node(lx)] + (rest if rest else [CONST(1)]))
-                            out.append({
-                                "law": "Absorpcja z negacją (dual)",
-                                "path": path,
-                                "before": sub,
-                                "after": after,
-                                "note": "X∧(¬X∨Y)=X∧Y",
-                            })
-                            break
+                    # Check if all OR arguments are literals (to avoid complex expressions)
+                    or_args = a.get("args", [])
+                    all_literals = all(to_lit(x) is not None for x in or_args)
+                    
+                    if all_literals:
+                        lits = [t for t in (to_lit(x) for x in or_args) if t]
+                        for lx in lits_of_x:
+                            if (lx[0], not lx[1]) in lits:
+                                rest = [lit_to_node(l) for l in lits if l != (lx[0], not lx[1])]
+                                if rest:
+                                    after = AND([lit_to_node(lx), OR(rest)])
+                                else:
+                                    after = lit_to_node(lx)
+                                out.append({
+                                    "law": "Absorpcja z negacją (dual)",
+                                    "path": path,
+                                    "before": sub,
+                                    "after": after,
+                                    "note": "X∧(¬X∨Y)=X∧Y",
+                                })
+                                break
 
         # SOP rules: covering / consensus / factorization
         if op == "OR":
@@ -392,24 +479,28 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     ok_shape = False
                     break
             if ok_shape:
-                # covering
-                remove_idx = set()
-                for i, j in combinations(range(len(terms)), 2):
-                    S = set(terms[i]); T = set(terms[j])
-                    if S <= T:
-                        remove_idx.add(j)
-                    elif T <= S:
-                        remove_idx.add(i)
-                if remove_idx:
-                    new = [a for k, a in enumerate(sub["args"]) if k not in remove_idx]
-                    after = new[0] if len(new) == 1 else {"op": "OR", "args": new}
-                    out.append({
-                        "law": "Pokrywanie (SOP)",
-                        "path": path,
-                        "before": sub,
-                        "after": after,
-                        "note": "krótszy składnik pokrywa dłuższy",
-                    })
+                # covering - DISABLED: This logic is fundamentally flawed
+                # In logic, more restrictive expressions (with more variables) 
+                # cannot be removed by less restrictive ones
+                # remove_idx = set()
+                # for i, j in combinations(range(len(terms)), 2):
+                #     S = set(terms[i]); T = set(terms[j])
+                #     if S <= T:
+                #         # S is more restrictive (subset), remove T (superset)
+                #         remove_idx.add(j)
+                #     elif T <= S:
+                #         # T is more restrictive (subset), remove S (superset)
+                #         remove_idx.add(i)
+                # if remove_idx:
+                #     new = [a for k, a in enumerate(sub["args"]) if k not in remove_idx]
+                #     after = new[0] if len(new) == 1 else {"op": "OR", "args": new}
+                #     out.append({
+                #         "law": "Pokrywanie (SOP)",
+                #         "path": path,
+                #         "before": sub,
+                #         "after": after,
+                #         "note": "krótszy składnik pokrywa dłuższy",
+                #     })
                 # consensus
                 for var in {v for lits in terms for (v, _) in lits}:
                     pos = [set(ls) - {(var, True)} for ls in terms if (var, True) in ls]
@@ -564,22 +655,67 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
 # --- driver -------------------------------------------------------------------
 
 def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    if not matches:
+        return None
+    
     best: Optional[Dict[str, Any]] = None
+    best_measure = None
+    
     for m in matches:
         after = m["after"]
-        if (best is None) or (measure(after) < measure(best["after"])):
+        after_measure = measure(after)
+        
+        if best is None:
             best = m
-    if best is None and matches:
-        best = matches[0]
+            best_measure = after_measure
+            continue
+            
+        # Primary: prefer smaller measure
+        if after_measure < best_measure:
+            best = m
+            best_measure = after_measure
+        elif after_measure == best_measure:
+            # Tie-break 1: prefer algebraic over axiom
+            if m.get("source") == "algebraic" and best.get("source") == "axiom":
+                best = m
+                best_measure = after_measure
+            elif m.get("source") == best.get("source"):
+                # Tie-break 2: prefer shorter string representation
+                if len(pretty(after)) < len(pretty(best["after"])):
+                    best = m
+                    best_measure = after_measure
+    
     return best
 
-def simplify_with_laws(expr: str, max_steps: int = 80) -> Dict[str, Any]:
+def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> Dict[str, Any]:
     legacy_ast = generate_ast(expr)
-    node = normalize_bool_ast(legacy_ast)
+    node = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
 
     steps: List[Dict[str, Any]] = []
+    seen_expressions = set()  # Track seen expressions to detect oscillation
+    
     for _ in range(max_steps):
-        matches = laws_matches(node)
+        # Collect matches based on mode
+        matches = []
+        if mode in ("algebraic", "mixed"):
+            algebraic_matches = laws_matches(node)
+            for match in algebraic_matches:
+                match["source"] = "algebraic"
+                match["axiom_id"] = None
+                match["axiom_subst"] = None
+                # Add derived_from_axioms mapping if available
+                from .axioms import DERIVED_FROM_AXIOMS
+                match["derived_from_axioms"] = DERIVED_FROM_AXIOMS.get(match.get("law", ""), [])
+            matches.extend(algebraic_matches)
+        
+        if mode in ("axioms", "mixed"):
+            from .axioms import axioms_matches
+            axiom_matches = axioms_matches(node)
+            for match in axiom_matches:
+                # axiom matches already have source="axiom", axiom_id, etc.
+                match["derived_from_axioms"] = []
+            matches.extend(axiom_matches)
+        
         if not matches:
             break
         choice = pick_best(node, matches)
@@ -595,6 +731,27 @@ def simplify_with_laws(expr: str, max_steps: int = 80) -> Dict[str, Any]:
         node = normalize_bool_ast(node)
         after_str = pretty(node)
 
+        # Check for oscillation - if we've seen this AFTER expression before, stop
+        if after_str in seen_expressions:
+            steps.append({
+                "law": "Zatrzymano (oscylacja)",
+                "note": "Wykryto oscylację - system zatrzymany",
+                "path": path,
+                "before_tree": before_str,
+                "after_tree": after_str,
+                "before_subexpr": pretty(sub_before),
+                "after_subexpr": pretty(sub_after),
+                "applicable_here": [],
+                "source": "system",
+                "axiom_id": None,
+                "axiom_subst": None,
+                "derived_from_axioms": [],
+            })
+            break
+
+        # Add current AFTER expression to seen set AFTER checking for oscillation
+        seen_expressions.add(after_str)
+
         applicable_here = [m["law"] for m in matches if m["path"] == path and m["law"] != choice["law"]]
 
         steps.append({
@@ -606,6 +763,10 @@ def simplify_with_laws(expr: str, max_steps: int = 80) -> Dict[str, Any]:
             "before_subexpr": pretty(sub_before),
             "after_subexpr": pretty(sub_after),
             "applicable_here": applicable_here,
+            "source": choice.get("source", "algebraic"),
+            "axiom_id": choice.get("axiom_id"),
+            "axiom_subst": choice.get("axiom_subst"),
+            "derived_from_axioms": choice.get("derived_from_axioms", []),
         })
 
         if before_str == after_str:

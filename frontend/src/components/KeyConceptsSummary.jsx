@@ -62,7 +62,7 @@ const KeyConceptsSummary = () => {
         className="w-full flex items-center justify-between text-left"
       >
         <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-          📚 Kluczowe pojęcia metody Quine-McCluskey
+          Kluczowe pojęcia metody Quine-McCluskey
           <span className="text-sm text-gray-500">({concepts.length} pojęć)</span>
         </h3>
         <span className="text-gray-400 text-xl">
@@ -98,7 +98,7 @@ const KeyConceptsSummary = () => {
           
           <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
             <div className="text-sm text-yellow-800">
-              <strong>💡 Wskazówka:</strong> Te pojęcia są kluczowe dla zrozumienia metody Quine-McCluskey. 
+              <strong>Wskazówka:</strong> Te pojęcia są kluczowe dla zrozumienia metody Quine-McCluskey. 
               Wróć do tego podsumowania, gdy będziesz potrzebować przypomnienia definicji.
             </div>
           </div>

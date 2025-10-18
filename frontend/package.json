@@ -5,8 +5,6 @@
   "dependencies": {
     "cra-template-pwa-typescript": "2.0.0",
     "d3": "^7.9.0",
-    "jspdf": "^3.0.2",
-    "jspdf-autotable": "^5.0.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "react-scripts": "^5.0.1",

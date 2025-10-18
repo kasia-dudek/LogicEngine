@@ -10,6 +10,8 @@ from .onp import to_onp, ONPError
 from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 from .tautology import is_tautology
+from .contradiction import is_contradiction
+from .laws import simplify_with_laws
 
 
 class LogicEngine:
@@ -63,4 +65,24 @@ class LogicEngine:
         except Exception as e:
             result["tautology_error"] = str(e)
 
+        # Contradiction
+        try:
+            result["is_contradiction"] = is_contradiction(std)
+        except Exception as e:
+            result["contradiction_error"] = str(e)
+
         return result
+
+
+def simplify(expr: str, mode: str = "mixed") -> Dict[str, Any]:
+    """
+    Simplify logical expression using laws and/or axioms.
+    
+    Args:
+        expr: Expression to simplify
+        mode: Simplification mode - "algebraic", "axioms", or "mixed"
+        
+    Returns:
+        Dictionary with simplification results and steps
+    """
+    return simplify_with_laws(expr, mode=mode)

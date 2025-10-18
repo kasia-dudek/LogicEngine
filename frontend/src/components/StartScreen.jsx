@@ -80,18 +80,21 @@ function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
     }
   };
 
-  // Funkcja do ustawiania tooltipa w panelu bocznym po prawej stronie wrappera
+  // Funkcja do ustawiania tooltipa - stałe miejsce tuż po prawej stronie ramki kalkulatora
   const handleOpMouseEnter = (e, b) => {
     const wrapperRect = wrapperRef.current?.getBoundingClientRect();
-    const tooltipWidth = 240;
+    if (!wrapperRect) return;
+    
     const tooltipHeight = 120;
-    let left = wrapperRect ? wrapperRect.width + 24 : 520;
-    let top = wrapperRect ? (wrapperRect.height / 2 - tooltipHeight / 2) : 120;
+    
+    // Tuż po prawej stronie ramki kalkulatora, ale wewnątrz widocznego obszaru
+    const left = wrapperRect.right - 350; // 240px szerokość tooltipa + 24px odstęp od prawej krawędzi panelu (więcej w lewo)
+    const top = wrapperRect.top + (wrapperRect.height / 2) - (tooltipHeight / 2) - 100; // 20px wyżej
+    
     setOpTooltip({
       visible: true,
       x: left,
       y: top,
-      triangle: 'left',
       content: (
         <div>
           <div className="font-bold text-base mb-1">{OP_DEFS[b].name}</div>
@@ -151,7 +154,7 @@ function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
             className="w-full bg-blue-100 text-blue-700 py-3 rounded-xl hover:bg-blue-200 transition-all font-semibold text-lg shadow-sm border border-blue-100"
             onClick={onExamples}
           >
-            <span role="img" aria-label="examples">💡</span> Przykłady
+            Przykłady
           </button>
           <button
             type="button"
@@ -171,8 +174,13 @@ function StartScreen({ onSubmit, onDefinitions, onExamples, onHistory }) {
         {/* Tooltip panel boczny */}
         {opTooltip.visible && (
           <div
-            className="fixed z-50 px-4 py-4 rounded-2xl bg-blue-700 text-white text-xs font-semibold shadow-2xl animate-fade-in"
-            style={{ left: wrapperRef.current ? wrapperRef.current.getBoundingClientRect().right + 24 : 520, top: wrapperRef.current ? wrapperRef.current.getBoundingClientRect().top + (wrapperRef.current.getBoundingClientRect().height / 2) - 60 : 120, minWidth: 240, maxWidth: 300 }}
+            className="fixed z-[9999] px-4 py-4 rounded-2xl bg-blue-700 text-white text-xs font-semibold shadow-2xl animate-fade-in"
+            style={{ 
+              left: opTooltip.x, 
+              top: opTooltip.y, 
+              minWidth: 240, 
+              maxWidth: 300 
+            }}
           >
             {opTooltip.content}
           </div>

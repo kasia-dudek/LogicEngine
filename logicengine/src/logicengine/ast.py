@@ -187,6 +187,14 @@ def _to_bool_norm(node: Any) -> Any:
             left = _to_bool_norm(node.get('left'))
             right = _to_bool_norm(node.get('right'))
             return {'op': 'AND', 'args': [left, right]} if op == '∧' else {'op': 'OR', 'args': [left, right]}
+        if op == '→':
+            left = _to_bool_norm(node.get('left'))
+            right = _to_bool_norm(node.get('right'))
+            return {'op': 'IMP', 'left': left, 'right': right}
+        if op in {'↔', '≡'}:
+            left = _to_bool_norm(node.get('left'))
+            right = _to_bool_norm(node.get('right'))
+            return {'op': 'IFF', 'left': left, 'right': right}
         left = _to_bool_norm(node.get('left'))
         right = _to_bool_norm(node.get('right'))
         return {'op': op, 'left': left, 'right': right}
@@ -243,9 +251,56 @@ def _flatten_sort_dedupe(node: Any) -> Any:
     return node
 
 
-def normalize_bool_ast(ast: Any) -> Any:
+def _expand_imp_iff(ast: Any) -> Any:
+    """Expand IMP and IFF operators to basic NOT/AND/OR."""
+    if not isinstance(ast, dict) or 'op' not in ast:
+        return ast
+    
+    op = ast['op']
+    
+    if op == 'IMP':
+        # p -> q becomes ~p | q
+        left = _expand_imp_iff(ast['left'])
+        right = _expand_imp_iff(ast['right'])
+        return {'op': 'OR', 'args': [{'op': 'NOT', 'child': left}, right]}
+    
+    elif op == 'IFF':
+        # p <-> q becomes (p & q) | (~p & ~q)
+        left = _expand_imp_iff(ast['left'])
+        right = _expand_imp_iff(ast['right'])
+        return {
+            'op': 'OR',
+            'args': [
+                {'op': 'AND', 'args': [left, right]},
+                {'op': 'AND', 'args': [
+                    {'op': 'NOT', 'child': left},
+                    {'op': 'NOT', 'child': right}
+                ]}
+            ]
+        }
+    
+    # Recursively process other operators
+    result = ast.copy()
+    if 'left' in ast:
+        result['left'] = _expand_imp_iff(ast['left'])
+    if 'right' in ast:
+        result['right'] = _expand_imp_iff(ast['right'])
+    if 'child' in ast:
+        result['child'] = _expand_imp_iff(ast['child'])
+    if 'args' in ast:
+        result['args'] = [_expand_imp_iff(arg) for arg in ast['args']]
+    
+    return result
+
+
+def normalize_bool_ast(ast: Any, expand_imp_iff: bool = True) -> Any:
     """Boolean-only form with flattened n-ary operators."""
-    return _flatten_sort_dedupe(_to_bool_norm(ast))
+    if expand_imp_iff:
+        ast = _expand_imp_iff(ast)
+    ast = _to_bool_norm(ast)
+    if expand_imp_iff:
+        ast = _expand_imp_iff(ast)  # Expand again after _to_bool_norm creates IFF/IMP
+    return _flatten_sort_dedupe(ast)
 
 
 def canonical_str(node: Any) -> str:

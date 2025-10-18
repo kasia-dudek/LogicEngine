@@ -1,146 +1,147 @@
-import React, { useState, useEffect } from "react";
+// MinimalForms.jsx
+import React from 'react';
 
 /**
- * MinimalForms - wyświetla formy minimalne wyrażenia logicznego
- * Props: expr (string) - wyrażenie do analizy
+ * Component presenting minimal forms (DNF, CNF) from backend /minimal_forms.
+ * Focuses only on DNF and CNF with clear legends and explanations.
+ *
+ * Props:
+ *  - data: object (data from API /minimal_forms)
  */
-export default function MinimalForms({ expr }) {
-  const [data, setData] = useState(null);
-  const [error, setError] = useState("");
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    console.log('MinimalForms useEffect - expr:', expr);
-    
-    if (!expr?.trim()) {
-      console.log('MinimalForms - empty expr, returning');
-      setData(null);
-      setError("");
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError("");
-    setData(null);
-
-    const fetchData = async () => {
-      try {
-        console.log('MinimalForms - starting fetch for:', expr);
-        
-        // First standardize the expression like other components do
-        let standardizedExpr = expr;
-        try {
-          const standardizeResponse = await fetch("http://127.0.0.1:8000/standardize", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expr }),
-          });
-          
-          if (standardizeResponse.ok) {
-            const standardizeResult = await standardizeResponse.json();
-            standardizedExpr = standardizeResult.standardized;
-            console.log('MinimalForms - standardized expr:', standardizedExpr);
-          }
-        } catch (e) {
-          console.log('MinimalForms - standardization failed, using original:', e);
-        }
-        
-        const response = await Promise.race([
-          fetch("http://127.0.0.1:8000/minimal_forms", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ expr: standardizedExpr }),
-          }),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error('Timeout: Przetwarzanie trwa zbyt długo')), 15000)
-          )
-        ]);
-
-        console.log('MinimalForms - response received:', response.status);
-
-        if (cancelled) return;
-
-        if (!response.ok) {
-          throw new Error(`HTTP ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('MinimalForms - result:', result);
-        if (cancelled) return;
-
-        setData(result);
-      } catch (err) {
-        console.log('MinimalForms - error:', err);
-        if (cancelled) return;
-        setError(err.message);
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    };
-
-    fetchData();
-    return () => { cancelled = true; };
-  }, [expr]);
-
-  if (loading) {
-    return (
-      <div className="mt-8 p-4 bg-gray-50 border border-gray-200 rounded-xl text-gray-700">
-        Ładowanie form minimalnych…
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="mt-8 p-4 bg-red-50 border border-red-200 rounded-xl text-red-700">
-        Błąd: {error}
-      </div>
-    );
-  }
-
+export default function MinimalForms({ data }) {
   if (!data) {
-    return null;
+    return (
+      <div className="text-center text-gray-500 p-4">
+        No data available for minimal forms
+      </div>
+    );
   }
 
-  const forms = [
-    { label: "DNF", value: data.dnf?.expr || "—" },
-    { label: "CNF", value: data.cnf?.expr || "—" },
-    { label: "ANF", value: data.anf?.expr || "—" },
-    { label: "NOR", value: data.nor?.expr || "—" },
-    { label: "NAND", value: data.nand?.expr || "—" },
-    { label: "AND", value: data.andonly?.expr || "—" },
-    { label: "OR", value: data.oronly?.expr || "—" },
-  ];
+  const vars = data?.vars || [];
+  const dnf = data?.dnf || {};
+  const cnf = data?.cnf || {};
+  const notes = data?.notes || [];
 
   return (
-    <div className="mt-8">
-      <h3 className="text-lg font-semibold text-gray-800 mb-2">Minimal forms</h3>
-      
-      <div className="overflow-x-auto">
-        <table className="min-w-[320px] border border-gray-300 rounded-xl text-sm">
-          <tbody>
-            {forms.map(({ label, value }) => (
-              <tr key={label}>
-                <td className="px-3 py-2 border-b bg-gray-100 font-semibold w-24">
-                  {label}
-                </td>
-                <td className="px-3 py-2 border-b font-mono">{value}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="w-full max-w-7xl mx-auto px-4 md:px-6">
+      {/* Header with explanation */}
+      <div className="mb-6">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-2xl md:text-3xl font-extrabold text-blue-700 tracking-tight">
+            Minimal Forms (DNF / CNF)
+          </h2>
+          {vars.length > 0 && (
+            <div className="text-sm text-gray-600 bg-blue-50 px-3 py-1 rounded-full">
+              Variables: {vars.join(', ')}
+            </div>
+          )}
+        </div>
+        
+        {/* Legend */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+          <h3 className="text-sm font-semibold text-blue-800 mb-2">Legend:</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs text-blue-700">
+            <div>
+              <strong>DNF (Disjunctive Normal Form):</strong> Sum of products - expression written as OR of AND terms
+            </div>
+            <div>
+              <strong>CNF (Conjunctive Normal Form):</strong> Product of sums - expression written as AND of OR terms
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-blue-600">
+            <strong>Terms:</strong> Number of AND/OR clauses | <strong>Literals:</strong> Number of variable occurrences
+          </div>
+        </div>
       </div>
 
-      {data.notes?.length > 0 && (
-        <ul className="mt-2 text-xs text-gray-600 list-disc ml-5">
-          {data.notes.map((note, i) => (
-            <li key={i}>{note}</li>
-          ))}
-        </ul>
+      {/* Main content - 2 column layout */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* DNF */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+            <span className="w-4 h-4 bg-blue-500 rounded-full mr-3"></span>
+            DNF (Disjunctive Normal Form)
+            <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+              Sum of Products
+            </span>
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600 mb-2 block">Minimal Expression:</label>
+              <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg font-mono text-sm text-blue-900">
+                {dnf?.expr || 'No data'}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Terms (Products)</div>
+                <div className="text-lg font-bold text-blue-600">{dnf?.terms || 0}</div>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Total Literals</div>
+                <div className="text-lg font-bold text-blue-600">{dnf?.literals || 0}</div>
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-600 bg-blue-50 p-2 rounded">
+              <strong>Example:</strong> (A ∧ ¬B) ∨ (¬A ∧ B) ∨ (A ∧ B)
+            </div>
+          </div>
+        </div>
+
+        {/* CNF */}
+        <div className="bg-white border border-gray-200 rounded-xl p-6 shadow-sm">
+          <h3 className="text-lg font-bold text-gray-800 mb-4 flex items-center">
+            <span className="w-4 h-4 bg-green-500 rounded-full mr-3"></span>
+            CNF (Conjunctive Normal Form)
+            <span className="ml-2 text-xs bg-green-100 text-green-700 px-2 py-1 rounded">
+              Product of Sums
+            </span>
+          </h3>
+          
+          <div className="space-y-4">
+            <div>
+              <label className="text-sm font-medium text-gray-600 mb-2 block">Minimal Expression:</label>
+              <div className="p-3 bg-green-50 border border-green-200 rounded-lg font-mono text-sm text-green-900">
+                {cnf?.expr || 'No data'}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Terms (Sums)</div>
+                <div className="text-lg font-bold text-green-600">{cnf?.terms || 0}</div>
+              </div>
+              <div className="bg-gray-50 p-3 rounded-lg">
+                <div className="text-xs text-gray-500 mb-1">Total Literals</div>
+                <div className="text-lg font-bold text-green-600">{cnf?.literals || 0}</div>
+              </div>
+            </div>
+            
+            <div className="text-xs text-gray-600 bg-green-50 p-2 rounded">
+              <strong>Example:</strong> (A ∨ B) ∧ (¬A ∨ ¬B) ∧ (A ∨ ¬B)
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Notes section */}
+      {notes.length > 0 && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+          <h3 className="text-sm font-semibold text-yellow-800 mb-3 flex items-center">
+            <span className="w-3 h-3 bg-yellow-500 rounded-full mr-2"></span>
+            Analysis Notes
+          </h3>
+          <ul className="space-y-2">
+            {notes.map((note, index) => (
+              <li key={index} className="text-sm text-yellow-700 bg-yellow-100 p-2 rounded">
+                {note}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );

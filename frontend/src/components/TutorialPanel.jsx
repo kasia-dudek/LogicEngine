@@ -47,7 +47,6 @@ function TutorialPanel({
     const envUrl = (process.env.REACT_APP_API_URL || '').replace(/\/+$/, '');
     const fallbackUrl = 'http://127.0.0.1:8000';
     const finalUrl = envUrl || fallbackUrl;
-    console.log('TutorialPanel apiUrl:', { envUrl, fallbackUrl, finalUrl });
     return finalUrl;
   }, []);
   const [rules, setRules] = useState([]);
@@ -89,14 +88,12 @@ function TutorialPanel({
     setMatches([]);
     
     const requestBody = { expr: currentExpr, ruleId: rule.id };
-    console.log('TutorialPanel loadMatches request:', { apiUrl, requestBody });
     
     try {
       const { ok, data, status } = await fetchJSON(`${apiUrl}/rules/matches`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestBody)
       });
-      console.log('TutorialPanel loadMatches response:', { ok, data, status });
       if (!ok) throw new Error(data?.error || `Błąd pobierania dopasowań (HTTP ${status}).`);
       const items = Array.isArray(data.matches) ? data.matches : [];
       setMatches(items);

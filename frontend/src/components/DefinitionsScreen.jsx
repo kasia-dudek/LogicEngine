@@ -88,7 +88,7 @@ const CONCEPTS = [
     name: 'Tautologia',
     description: 'Wyrażenie logiczne, które jest zawsze prawdziwe.',
     tip: 'Tautologie są podstawą dowodzenia w logice.',
-    icon: '♾️',
+    icon: '∞',
     learn: 'Tautologia to wyrażenie, które przyjmuje wartość 1 dla każdej możliwej kombinacji zmiennych.',
     examples: [
       'A ∨ ¬A',
@@ -101,7 +101,7 @@ const CONCEPTS = [
     name: 'Mapa Karnaugha',
     description: 'Graficzna metoda upraszczania wyrażeń logicznych.',
     tip: 'Idealna do minimalizacji wyrażeń do 4 zmiennych.',
-    icon: '🗺️',
+    icon: '🗺',
     learn: 'Mapa Karnaugha pozwala graficznie znaleźć uproszczenie wyrażenia logicznego przez grupowanie jedynek.',
     examples: [
       '(A ∧ B) ∨ (A ∧ ¬B)',
@@ -115,7 +115,7 @@ const CONCEPTS = [
     description: 'Pokazuje wszystkie możliwe kombinacje wartości zmiennych i wynik wyrażenia logicznego.',
     example: '(A ∧ B) ∨ ¬C',
     tip: 'Tabela prawdy pozwala sprawdzić, czy wyrażenie jest tautologią lub sprzeczne.',
-    icon: '📊',
+    icon: 'T',
     examples: [
       'A ∧ B',
       'A ∨ B',
@@ -143,7 +143,7 @@ const CONCEPTS = [
     description: 'Minterm to wiersz tabeli prawdy, dla którego wyrażenie przyjmuje wartość 1.',
     example: '(A ∧ B) ∨ ¬C',
     tip: 'Każde wyrażenie logiczne można zapisać jako sumę mintermów.',
-    icon: '1️⃣',
+    icon: '1',
   },
   {
     key: 'prime_implicant',
@@ -177,7 +177,7 @@ const CONCEPTS = [
     description: 'Algorytmiczna metoda minimalizacji wyrażeń logicznych.',
     example: '(A ∧ B) ∨ ¬C',
     tip: 'QM jest szczególnie przydatna dla większej liczby zmiennych.',
-    icon: '🧮',
+    icon: 'Q',
   },
   {
     key: 'logic_operator',
@@ -297,7 +297,7 @@ function DefinitionsScreen({ onBack }) {
                 className="mt-auto bg-blue-600 text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-all font-semibold shadow-md text-base"
                 onClick={() => handleShowLearn(concept)}
               >
-                <span role="img" aria-label="example">💡</span> Dowiedz się więcej
+                Dowiedz się więcej
               </button>
             </div>
           ))}

@@ -56,7 +56,7 @@ const Glossary = () => {
         onClick={() => setIsOpen(!isOpen)}
         className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full text-sm font-medium transition-colors border border-blue-300"
       >
-        📚 Słownik pojęć
+        Słownik pojęć
       </button>
       
       {isOpen && (

@@ -3,10 +3,11 @@ import React, { useState, useEffect } from 'react';
 import QMSteps from './QMSteps';
 import KMapDisplay from './KMapDisplay';
 import ASTDisplay from './ASTDisplay';
+import LogicGatesDisplay from './LogicGatesDisplay';
 import Toast from './Toast';
 import ExportResults from './ExportResults';
 import LawsPanel from './LawsPanel';
-import MinimalForms from './MinimalForms'; // eslint-disable-line no-unused-vars
+import MinimalForms from './MinimalForms';
 // Removed mock API import - using real backend API
 
 const TABS = [
@@ -81,7 +82,7 @@ function getStepArgs(step) {
 }
 
 /* -------------------------------- Component -------------------------------- */
-export default function ResultScreen({ input, onBack, saveToHistory }) {
+export default function ResultScreen({ input, onBack, saveToHistory, onExportToPrint, onShowDefinitions }) {
   const [tab, setTab] = useState('truth');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -138,7 +139,7 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
             ]);
 
           // Split into two batches to reduce server load
-          const [astRes, onpRes, truthRes, tautRes] = await Promise.allSettled([
+          const [astRes, onpRes, truthRes, tautRes, contrRes] = await Promise.allSettled([
             fetchWithTimeout(`${apiUrl}/ast`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -159,10 +160,15 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
             }).then(r => r.json()),
+            fetchWithTimeout(`${apiUrl}/contradiction`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ expr: input }),
+            }).then(r => r.json()),
           ]);
 
           // Second batch - more complex operations
-          const [kmapRes, qmRes, lawsRes] = await Promise.allSettled([
+          const [kmapRes, qmRes, lawsRes, minimalFormsRes] = await Promise.allSettled([
             fetchWithTimeout(`${apiUrl}/kmap`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -174,6 +180,11 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
               body: JSON.stringify({ expr: input }),
             }).then(r => r.json()),
             fetchWithTimeout(`${apiUrl}/laws`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ expr: input, mode: 'mixed' }),
+            }).then(r => r.json()),
+            fetchWithTimeout(`${apiUrl}/minimal_forms`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
@@ -193,7 +204,9 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
             kmap_simplification: getResult(kmapRes) || null,
             qm: getResult(qmRes) || null,
             is_tautology: getResult(tautRes)?.is_tautology || false,
+            is_contradiction: getResult(contrRes)?.is_contradiction || false,
             laws: getResult(lawsRes) || null,
+            minimal_forms: getResult(minimalFormsRes) || null,
           };
 
           setData(res);
@@ -239,49 +252,67 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
         onClose={() => setToast({ message: '', type: 'success' })}
       />
 
-      <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-4 border border-blue-100 animate-fade-in">
-        <button className="mb-6 text-blue-600 hover:underline text-lg font-semibold" onClick={onBack}>
-          &larr; Wróć
-        </button>
+      <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-4 border border-blue-100 animate-fade-in mx-auto">
+          <button className="mb-6 text-blue-600 hover:underline text-lg font-semibold" onClick={onBack}>
+            &larr; Wróć
+          </button>
 
-        <h1 className="text-3xl font-extrabold mb-6 text-center text-blue-700 tracking-tight drop-shadow">
-          Wynik analizy
-        </h1>
+          <h1 className="text-3xl font-extrabold mb-6 text-center text-blue-700 tracking-tight drop-shadow">
+            Wynik analizy
+          </h1>
 
-        {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
-            <div className="text-xs text-blue-700 font-semibold uppercase">Wpisane wyrażenie</div>
-            <div className="font-mono text-lg break-all">{data.expression}</div>
-          </div>
+          {/* Summary cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
+              <div className="text-xs text-blue-700 font-semibold uppercase">Wpisane wyrażenie</div>
+              <div className="font-mono text-lg break-all">{data.expression}</div>
+            </div>
 
-          <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-            <div className="text-xs text-green-700 font-semibold uppercase">Uproszczone (QM)</div>
-            <div className="font-mono text-lg break-all">
-              {data.qm?.result || <span className="text-gray-400">Brak</span>}
+            <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+              <div className="text-xs text-green-700 font-semibold uppercase">Uproszczone (QM)</div>
+              <div className="font-mono text-lg break-all">
+                {data.qm?.result || <span className="text-gray-400">Brak</span>}
+              </div>
+            </div>
+
+            <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
+              <div className="text-xs text-yellow-700 font-semibold uppercase">ONP</div>
+              <div className="font-mono text-lg break-all">
+                {data.onp || <span className="text-gray-400">Brak</span>}
+              </div>
+            </div>
+
+            {/* Dwie osobne komórki obok siebie */}
+            <div className="flex gap-4">
+              {/* Lewa komórka - Tautologia */}
+              <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex-1">
+                <div className="text-xs text-purple-700 font-semibold uppercase">Tautologia?</div>
+                <div className="font-mono text-lg">
+                  {data.is_tautology === true ? (
+                    <span className="text-green-700 font-bold">TAK</span>
+                  ) : data.is_tautology === false ? (
+                    <span className="text-red-700 font-bold">NIE</span>
+                  ) : (
+                    <span className="text-gray-400">Brak</span>
+                  )}
+                </div>
+              </div>
+              
+              {/* Prawa komórka - Sprzeczność */}
+              <div className="bg-purple-50 rounded-xl p-4 border border-purple-100 flex-1">
+                <div className="text-xs text-purple-700 font-semibold uppercase">Sprzeczność?</div>
+                <div className="font-mono text-lg">
+                  {data.is_contradiction === true ? (
+                    <span className="text-red-700 font-bold">TAK</span>
+                  ) : data.is_contradiction === false ? (
+                    <span className="text-green-700 font-bold">NIE</span>
+                  ) : (
+                    <span className="text-gray-400">Brak</span>
+                  )}
+                </div>
+              </div>
             </div>
           </div>
-
-          <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
-            <div className="text-xs text-yellow-700 font-semibold uppercase">ONP</div>
-            <div className="font-mono text-lg break-all">
-              {data.onp || <span className="text-gray-400">Brak</span>}
-            </div>
-          </div>
-
-          <div className="bg-purple-50 rounded-xl p-4 border border-purple-100">
-            <div className="text-xs text-purple-700 font-semibold uppercase">Tautologia?</div>
-            <div className="font-mono text-lg">
-              {data.is_tautology === true ? (
-                <span className="text-green-700 font-bold">TAK</span>
-              ) : data.is_tautology === false ? (
-                <span className="text-red-700 font-bold">NIE</span>
-              ) : (
-                <span className="text-gray-400">Brak</span>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Tabs */}
         <div className="mb-8">
@@ -450,7 +481,68 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
               </div>
             )}
 
-            {tab === 'qm' && <QMSteps steps={data.qm?.steps} />}
+            {tab === 'qm' && (
+              <div>
+                {/* Pasek z pomocą - nad krokami QM */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
+                      Skrót pojęć
+                    </h3>
+                    <button 
+                      className="w-full bg-white rounded-md p-2 border border-gray-200 hover:bg-gray-50 transition-colors text-left"
+                      onClick={() => {
+                        if (onShowDefinitions) {
+                          onShowDefinitions();
+                        } else {
+                          setToast({ message: 'Funkcja definicji nie jest dostępna', type: 'error' });
+                        }
+                      }}
+                    >
+                      <div className="text-xs text-gray-700">
+                        Kluczowe pojęcia metody Quine-McCluskey
+                      </div>
+                      <div className="text-xs text-gray-500 mt-1">(6 pojęć) +</div>
+                    </button>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
+                      Przewodnik
+                    </h3>
+                    <button 
+                      className="w-full bg-purple-100 hover:bg-purple-200 text-purple-800 font-medium py-1.5 px-3 rounded-md border border-purple-200 transition-colors text-xs"
+                      onClick={() => {
+                        // TODO: Implement step by step guide
+                        setToast({ message: 'Przewodnik krok po kroku będzie dostępny wkrótce', type: 'info' });
+                      }}
+                    >
+                      Krok po kroku
+                    </button>
+                  </div>
+                  
+                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
+                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
+                      Słownik
+                    </h3>
+                    <button 
+                      className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium py-1.5 px-3 rounded-md border border-blue-200 transition-colors text-xs"
+                      onClick={() => {
+                        if (onShowDefinitions) {
+                          onShowDefinitions();
+                        } else {
+                          setToast({ message: 'Funkcja definicji nie jest dostępna', type: 'error' });
+                        }
+                      }}
+                    >
+                      Pojęcia
+                    </button>
+                  </div>
+                </div>
+
+                <QMSteps steps={data.qm?.steps} />
+              </div>
+            )}
 
             {tab === 'kmap' && (
               <KMapDisplay
@@ -490,15 +582,24 @@ export default function ResultScreen({ input, onBack, saveToHistory }) {
             </div>
           )}
 
-          {/* Minimal forms (DNF/CNF/ANF/NAND/NOR/AND/OR) - temporarily disabled */}
-          <div className="mt-8">
-            <div className="text-center text-gray-500 p-4 bg-gray-50 rounded">
-              Formy minimalne tymczasowo wyłączone
+          {/* Logic Gates always visible below AST */}
+          {data?.ast && (
+            <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Bramki logiczne</h3>
+              <LogicGatesDisplay ast={data.ast} highlightExpr={highlightExpr} />
             </div>
-          </div>
+          )}
+
+          {/* Minimal forms (DNF/CNF/ANF/NAND/NOR/AND/OR) */}
+          {data?.minimal_forms && (
+            <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Formy minimalne</h3>
+              <MinimalForms data={data.minimal_forms} />
+            </div>
+          )}
         </div>
 
-        <ExportResults data={data} />
+        <ExportResults data={data} input={input} onExportToPrint={onExportToPrint} />
       </div>
     </div>
   );
