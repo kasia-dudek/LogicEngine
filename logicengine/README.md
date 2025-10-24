@@ -18,8 +18,8 @@
 - Optymalizacja algorytmów dla 4 zmiennych
 
 ### Wymagania
-- Python 3.10+
-- sympy, pytest, pytest-cov
+- Python 3.9+
+- fastapi, uvicorn, sympy, pytest
 
 ### Przykładowe dane wejściowe
 - (A ∨ ¬A), (A ∧ B) ∨ ¬C, A → (B ↔ C), (A & B) (niepoprawne)
@@ -48,17 +48,31 @@ LogicEngine to modularny silnik do nauki logiki zdań, obsługujący parser, tab
 
 ## Instalacja
 ```bash
-poetry install
+# Utwórz środowisko wirtualne
+python3 -m venv venv
+source venv/bin/activate  # Linux/Mac
+# lub venv\Scripts\activate  # Windows
+
+# Zainstaluj zależności
+pip install fastapi uvicorn sympy pytest
 ```
 
 ## Uruchomienie
 ```bash
-poetry run python main.py
+# Aktywuj środowisko wirtualne
+source venv/bin/activate
+
+# Uruchom backend
+python3 start_backend.py
 ```
 
 ## Testy
 ```bash
-poetry run pytest
+# Aktywuj środowisko wirtualne
+source venv/bin/activate
+
+# Uruchom testy
+pytest
 ```
 
 ## Przykłady wyrażeń

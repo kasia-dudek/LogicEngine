@@ -1,7 +1,7 @@
 # truth_table.py
 """Generate a truth table for a logical expression."""
 
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from itertools import product
 
 from .validation import validate, ValidationError
@@ -62,7 +62,7 @@ def _eval_rpn(tokens: List[str], env: Dict[str, int]) -> int:
     return s[0]
 
 
-def generate_truth_table(expr: str, force_vars: List[str] | None = None) -> List[Dict[str, Any]]:
+def generate_truth_table(expr: str, force_vars: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Return a truth table as a list of rows: {A:0,...,'result':0}."""
     try:
         validate(expr)

@@ -4,7 +4,7 @@ DNF minimal via Quine–McCluskey + Petrick; CNF minimal by duality from ¬f.
 """
 
 from __future__ import annotations
-from typing import Dict, Any, List, Tuple, Set, Iterable
+from typing import Dict, Any, List, Tuple, Set, Iterable, Optional
 
 from .parser import LogicParser
 from .truth_table import generate_truth_table
@@ -160,7 +160,7 @@ def _qm_minimize(minterms: List[int], nvars: int) -> List[str]:
     return [primes[i][0] for i in chosen_idx]
 
 
-def _combine(a: str, b: str) -> str | None:
+def _combine(a: str, b: str) -> Optional[str]:
     """Combine two patterns differing in exactly one fixed bit."""
     if len(a) != len(b):
         return None
