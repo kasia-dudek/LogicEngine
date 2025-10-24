@@ -49,13 +49,6 @@ function toBin(n, width) {
   return n.toString(2).padStart(width, "0");
 }
 
-function countLits(expr) {
-  if (!expr || expr === "1" || expr === "0") return 0;
-  return expr
-    .split("∨")
-    .map((t) => t.split("∧").filter(Boolean).length)
-    .reduce((a, b) => a + b, 0);
-}
 
 /** Zbuduj indeks mintermu z wartości bitów przypisanych do zmiennych. */
 function assignmentToMinterm(vars, assign) {
@@ -148,7 +141,6 @@ function findPI(kmap, cellToMint) {
   const groups = [...all.values()];
   // wywal ściśle zawarte w większych
   const primes = groups.filter((gi, i) => {
-    const Si = new Set(gi.minterms);
     return !groups.some((gj, j) => i !== j && gi.minterms.every((m) => gj.minterms.includes(m)));
   });
 

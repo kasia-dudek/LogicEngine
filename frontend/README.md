@@ -47,7 +47,7 @@
 - Components:
   - `QMSteps`: displays QM simplification steps
   - `KMapDisplay`: visualizes Karnaugh map with group highlighting
-- Mock API in `src/__mocks__/api.js` (easy to swap for real backend)
+- Real backend API integration
 - Unit tests for all main components (Jest + React Testing Library)
 
 ## Usage
@@ -79,17 +79,17 @@ npm test
   - Tabbed interface for switching between Truth Table, QM, and K-Map
   - Integrates QMSteps and KMapDisplay
 
-## Mock API
-- Located in `src/__mocks__/api.js`
-- Returns example data for expression `(A ∧ B) ∨ (¬A ∧ B)`
-- Easy to replace with real backend (see `analyze` function)
+## Backend Integration
+- Connects to FastAPI backend running on `http://127.0.0.1:8000`
+- All API calls are made to real backend endpoints
+- Backend must be running before starting frontend
 
 ## Example
 - Enter `(A ∧ B) ∨ (¬A ∧ B)` and analyze to see all features in action.
 
 ## Future
-- Ready for backend integration (replace mock API)
-- Placeholders for AST visualization and further logic features
+- Enhanced AST visualization with D3.js
+- Additional logic features and visualizations
 
 ---
 

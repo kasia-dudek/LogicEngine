@@ -13,9 +13,6 @@ function getHistory() {
   }
 }
 
-function saveHistory(history) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history.slice(0, MAX_HISTORY)));
-}
 
 export default function ExpressionHistory({ onLoad, onBack }) {
   const [history, setHistory] = useState([]);

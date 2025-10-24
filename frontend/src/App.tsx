@@ -1,11 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import ResultScreen from './components/ResultScreen';
 import DefinitionsScreen from './components/DefinitionsScreen';
-import TutorialMode from './components/TutorialMode';
 import ExpressionHistory from './components/ExpressionHistory';
 import StartScreen from './components/StartScreen';
 import PrintableResults from './components/PrintableResults';
-// Removed mock API import - using real backend API
 
 const EXAMPLES = [
   '(A ∧ B) ∨ ¬C',
@@ -32,9 +30,6 @@ const EXAMPLES = [
 function App() {
   const [screen, setScreen] = useState('start');
   const [input, setInput] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [historyItem, setHistoryItem] = useState(null);
   const [showExamples, setShowExamples] = useState(false);
   const [printData, setPrintData] = useState(null);
 

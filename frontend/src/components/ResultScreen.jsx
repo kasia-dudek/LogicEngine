@@ -8,7 +8,7 @@ import Toast from './Toast';
 import ExportResults from './ExportResults';
 import LawsPanel from './LawsPanel';
 import MinimalForms from './MinimalForms';
-// Removed mock API import - using real backend API
+import { getAstStepsNoVars, computeStepValues, getStepArgs } from '../utils/astHelpers';
 
 const TABS = [
   { key: 'truth', label: 'Tabela prawdy' },
@@ -17,69 +17,6 @@ const TABS = [
   { key: 'laws', label: 'Prawa logiczne' },
 ];
 
-/* ---------- AST helpers (for slide-by-slide truth-table derivation) ---------- */
-function getAstExpr(node) {
-  if (!node) return '?';
-  if (typeof node === 'string') return node;
-  if (node.node === '¬') return `¬(${getAstExpr(node.child)})`;
-  if (['∧', '∨', '→', '↔'].includes(node.node)) {
-    return `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
-  }
-  return '?';
-}
-
-function getAstStepsNoVars(ast) {
-  const steps = [];
-  const seen = new Set();
-
-  function traverse(node) {
-    if (!node || typeof node === 'string') return;
-
-    if (node.node === '¬') {
-      traverse(node.child);
-      const expr = `¬(${getAstExpr(node.child)})`;
-      if (!seen.has(expr)) {
-        steps.push({ expr, node });
-        seen.add(expr);
-      }
-    } else if (['∧', '∨', '→', '↔'].includes(node.node)) {
-      traverse(node.left);
-      traverse(node.right);
-      const expr = `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
-      if (!seen.has(expr)) {
-        steps.push({ expr, node });
-        seen.add(expr);
-      }
-    }
-  }
-
-  traverse(ast);
-  return steps;
-}
-
-function evalAst(node, row) {
-  if (!node) return null;
-  if (typeof node === 'string') return row[node];
-  if (node.node === '¬') return Number(!evalAst(node.child, row));
-  if (node.node === '∧') return evalAst(node.left, row) & evalAst(node.right, row);
-  if (node.node === '∨') return evalAst(node.left, row) | evalAst(node.right, row);
-  if (node.node === '→') return Number(!evalAst(node.left, row) | evalAst(node.right, row));
-  if (node.node === '↔') return Number(evalAst(node.left, row) === evalAst(node.right, row));
-  return null;
-}
-
-function computeStepValues(step, truthTable) {
-  return truthTable.map(row => evalAst(step.node, row));
-}
-
-function getStepArgs(step) {
-  if (!step || !step.node) return [];
-  if (step.node.node === '¬') return [getAstExpr(step.node.child)];
-  if (['∧', '∨', '→', '↔'].includes(step.node.node)) {
-    return [getAstExpr(step.node.left), getAstExpr(step.node.right)];
-  }
-  return [];
-}
 
 /* -------------------------------- Component -------------------------------- */
 export default function ResultScreen({ input, onBack, saveToHistory, onExportToPrint, onShowDefinitions }) {
@@ -89,7 +26,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const [data, setData] = useState(null);
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [slideStep, setSlideStep] = useState(0);
-  const [currentExpr, setCurrentExpr] = useState(input);
   const [highlightExpr, setHighlightExpr] = useState(null);
   const [pickedLawStep, setPickedLawStep] = useState(null);
 
@@ -99,7 +35,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   };
 
   useEffect(() => {
-    setCurrentExpr(input);
     resetHighlighting();
   }, [input]);
 
@@ -232,7 +167,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
     };
 
     fetchData();
-  }, [input]);
+  }, [input, saveToHistory]);
 
   if (loading) return <div className="text-center p-8">Ładowanie...</div>;
   if (error) return <div className="text-red-600 text-center p-8">{error}</div>;
@@ -242,7 +177,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const truthVars = data.truth_table && data.truth_table.length
     ? Object.keys(data.truth_table[0]).filter(k => k !== 'result')
     : [];
-  const nVars = truthVars.length;
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gradient-to-br from-blue-50 to-white p-4">
@@ -381,7 +315,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                       {data.ast && data.truth_table && data.truth_table.length > 0 ? (
                         (() => {
                           const steps = getAstStepsNoVars(data.ast);
-                          const allColNames = [...truthVars, ...steps.map(s => s.expr)];
                           const allColNodes = [
                             ...truthVars.map(v => ({ expr: v, node: v })),
                             ...steps,

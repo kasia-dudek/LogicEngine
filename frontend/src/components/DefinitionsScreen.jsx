@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-// Removed mock API import - using real backend API
 import ASTDisplay from './ASTDisplay';
 
 const CONCEPTS = [

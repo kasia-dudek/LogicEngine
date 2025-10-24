@@ -37,12 +37,6 @@ const OP_MAP = new Map([
   ['XNOR', '≡'],
 ]);
 
-function opSymbol(node) {
-  if (!node || typeof node !== 'object') return undefined;
-  if (node.node) return node.node;
-  if (node.op) return OP_MAP.get(node.op) || node.op;
-  return undefined;
-}
 
 /* ----- Tekst poddrzewa (do tooltipu i highlightu) ----- */
 function subtreeText(n) {
