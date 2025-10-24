@@ -25,17 +25,6 @@ export const OP_DEFS = {
 };
 
 /* ====== Obsługa dwóch formatów AST: legacy (node/left/right/child) i normalized (op/args/child) ====== */
-const OP_MAP = new Map([
-  ['NOT', '¬'],
-  ['AND', '∧'],
-  ['OR', '∨'],
-  ['IMPLIES', '→'],
-  ['IFF', '↔'],
-  ['XOR', '⊕'],
-  ['NAND', '↑'],
-  ['NOR', '↓'],
-  ['XNOR', '≡'],
-]);
 
 
 /* ----- Tekst poddrzewa (do tooltipu i highlightu) ----- */

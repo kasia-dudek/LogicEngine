@@ -1,7 +1,6 @@
 import React, { useEffect, useState } from 'react';
 
 const HISTORY_KEY = 'logicengine_history';
-const MAX_HISTORY = 50;
 
 function getHistory() {
   try {

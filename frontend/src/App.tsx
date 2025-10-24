@@ -30,6 +30,8 @@ const EXAMPLES = [
 function App() {
   const [screen, setScreen] = useState('start');
   const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [showExamples, setShowExamples] = useState(false);
   const [printData, setPrintData] = useState(null);
 
