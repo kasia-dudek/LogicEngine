@@ -4,6 +4,7 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Optional, Iterable
 from itertools import combinations
+import copy
 
 from .ast import generate_ast, normalize_bool_ast, canonical_str, canonical_str_minimal
 
@@ -108,8 +109,11 @@ def get_by_path(node: Any, path: Path) -> Any:
     return cur
 
 def set_by_path(node: Any, path: Path, new_sub: Any) -> Any:
+    """Set a subtree at path, returning a new tree (does not mutate original)."""
     if not path:
         return new_sub
+    # Create a deep copy to avoid mutating the original
+    node = copy.deepcopy(node)
     key, idx = path[-1]
     parent = get_by_path(node, path[:-1])
     if key == "args":
@@ -787,6 +791,9 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         sub_after = choice["after"]
         path = choice["path"]
 
+        # Save node before modification so we can restore it if we skip this step
+        node_backup = copy.deepcopy(node)
+        
         before_str = pretty(node)
         node = set_by_path(node, path, sub_after)
         node = normalize_bool_ast(node)
@@ -814,7 +821,9 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         before_measure = measure(sub_before)
         after_measure = measure(sub_after)
 
+        # If this transformation doesn't improve the expression, restore node and skip
         if after_measure >= before_measure and choice.get("source") != "axiom":
+            node = node_backup
             continue
 
         seen_expressions.add(after_canonical)
