@@ -25,7 +25,7 @@ def OR(args: Iterable[Any]) -> Dict[str, Any]:
 
 
 def pretty(n: Any) -> str:
-    return canonical_str_minimal(n)
+    return canonical_str(n)
 
 def count_nodes(n: Any) -> int:
     if not isinstance(n, dict):
