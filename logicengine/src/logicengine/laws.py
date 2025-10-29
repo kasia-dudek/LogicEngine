@@ -784,8 +784,22 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             matches.extend(axiom_matches)
         
         # Filter out transformations we already tried and skipped
+        # Use canonical representations of before/after subexpressions to identify duplicates
         if skipped_transformations:
-            matches = [m for m in matches if (tuple(m.get("path", [])), m.get("law")) not in skipped_transformations]
+            filtered_matches = []
+            for m in matches:
+                before_sub = m.get("before")
+                after_sub = m.get("after")
+                law = m.get("law")
+                if before_sub and after_sub:
+                    before_canon = canonical_str(before_sub)
+                    after_canon = canonical_str(after_sub)
+                    if (before_canon, after_canon, law) not in skipped_transformations:
+                        filtered_matches.append(m)
+                else:
+                    # Keep matches without before/after (shouldn't happen, but safety)
+                    filtered_matches.append(m)
+            matches = filtered_matches
         
         if not matches:
             break
@@ -824,15 +838,38 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             })
             break
 
-        before_measure = measure(sub_before)
-        after_measure = measure(sub_after)
+        # Compare the ENTIRE expression before and after transformation
+        # (not just the subexpression) to correctly assess improvement
+        before_full_measure = measure(node_backup)
+        after_full_measure = measure(node)
+        
+        # Also check subexpression measure as secondary check
+        before_sub_measure = measure(sub_before)
+        after_sub_measure = measure(sub_after)
 
-        # If this transformation doesn't improve the expression, restore node and skip
-        if after_measure >= before_measure and choice.get("source") != "axiom":
-            # Mark this transformation as skipped so we don't try it again
-            skipped_transformations.add((tuple(path), choice.get("law")))
+        # Skip ONLY if transformation clearly makes the expression WORSE
+        # Allow neutral transformations (same measure) as they may enable further simplifications
+        # (unless it's an axiom/desugaring which we always allow)
+        if after_full_measure > before_full_measure and choice.get("source") != "axiom":
+            # Mark this transformation as skipped using canonical representations of subexpressions
+            # This is more reliable than path+law since paths can change after normalization
+            sub_before_canon = canonical_str(sub_before)
+            sub_after_canon = canonical_str(sub_after)
+            skipped_transformations.add((sub_before_canon, sub_after_canon, choice.get("law")))
             node = node_backup
             continue
+        
+        # If measure is the same (neutral transformation), allow it but limit how many times
+        # we can apply the same transformation to avoid infinite loops
+        if after_full_measure == before_full_measure and choice.get("source") != "axiom":
+            # Check if we've seen this exact transformation result before
+            # (to avoid repeating the same neutral transformation)
+            if after_canonical in seen_expressions:
+                sub_before_canon = canonical_str(sub_before)
+                sub_after_canon = canonical_str(sub_after)
+                skipped_transformations.add((sub_before_canon, sub_after_canon, choice.get("law")))
+                node = node_backup
+                continue
 
         seen_expressions.add(after_canonical)
 
