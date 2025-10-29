@@ -4,34 +4,29 @@ import ColoredExpression from './ColoredExpression';
 function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, className = "", strategy = "auto" }) {
   if (!fullExpression) return null;
 
-  const tryHighlight = (expr, target, colorClass) => {
-    if (!target || !expr.includes(target)) return null;
-    const parts = expr.split(target);
-    if (parts.length < 2) return null;
-    return (
-      <>
-        <ColoredExpression expression={parts[0]} className={className} />
-        <span className={`${colorClass} px-1 rounded border`}>
-          <ColoredExpression expression={target} className={className} />
-        </span>
-        <ColoredExpression expression={parts.slice(1).join(target)} className={className} />
-      </>
-    );
-  };
-
-  let node = null;
-  if (strategy === "before") {
-    node = tryHighlight(fullExpression, beforeSubexpr, "bg-yellow-100 text-yellow-900 border-yellow-300");
-  } else if (strategy === "after") {
-    node = tryHighlight(fullExpression, afterSubexpr, "bg-green-100 text-green-800 border-green-300");
-  } else {
-    node =
-      tryHighlight(fullExpression, afterSubexpr, "bg-green-100 text-green-800 border-green-300") ||
-      tryHighlight(fullExpression, beforeSubexpr, "bg-red-100 text-red-800 border-red-300");
+  const target = strategy === "before" ? beforeSubexpr : strategy === "after" ? afterSubexpr : (afterSubexpr || beforeSubexpr);
+  
+  if (!target || !fullExpression.includes(target)) {
+    return <ColoredExpression expression={fullExpression} className={className} />;
   }
 
-  if (!node) return <ColoredExpression expression={fullExpression} className={className} />;
-  return <span className={`font-mono ${className}`}>{node}</span>;
+  const highlightClass = strategy === "before" 
+    ? "bg-yellow-100 text-yellow-900 border-yellow-300"
+    : strategy === "after"
+    ? "bg-green-100 text-green-800 border-green-300"
+    : "bg-green-100 text-green-800 border-green-300";
+
+  // Użyj highlightText, aby ColoredExpression sam znalazł pozycję po czyszczeniu
+  return (
+    <span className={`${highlightClass} px-1 rounded border`}>
+      <ColoredExpression 
+        expression={fullExpression} 
+        className={className}
+        highlightText={target}
+        highlightClass={highlightClass}
+      />
+    </span>
+  );
 }
 
 export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw }) {

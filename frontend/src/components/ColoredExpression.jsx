@@ -4,7 +4,7 @@ import React, { useMemo } from 'react';
  * Komponent do wyświetlania wyrażeń logicznych z kolorowanymi nawiasami
  * Nawiasy są kolorowane według poziomów zagnieżdżenia
  */
-export default function ColoredExpression({ expression, className = "" }) {
+export default function ColoredExpression({ expression, className = "", highlightRange = null, highlightText = null, highlightClass = "" }) {
   // 1) Delikatne czyszczenie nawiasów bez kosztownych obliczeń
   //    - (A) -> A
   //    - (¬A) -> ¬A
@@ -62,6 +62,22 @@ export default function ColoredExpression({ expression, className = "" }) {
     }
   }, [expression]);
 
+  // Oblicz highlightRange z highlightText po czyszczeniu wyrażenia
+  const computedHighlightRange = useMemo(() => {
+    if (highlightRange) return highlightRange;
+    if (highlightText && cleanedExpression) {
+      const index = cleanedExpression.indexOf(highlightText);
+      if (index !== -1) {
+        return {
+          start: index,
+          end: index + highlightText.length,
+          class: highlightClass || "bg-yellow-100"
+        };
+      }
+    }
+    return null;
+  }, [cleanedExpression, highlightRange, highlightText, highlightClass]);
+
   if (!expression) return null;
 
   // Kolory dla różnych poziomów zagnieżdżenia
@@ -83,11 +99,12 @@ export default function ColoredExpression({ expression, className = "" }) {
 
     while (i < expr.length) {
       const char = expr[i];
+      const isHighlighted = computedHighlightRange && i >= computedHighlightRange.start && i < computedHighlightRange.end;
       
       if (char === '(') {
         const colorClass = colors[level % colors.length];
         result.push(
-          <span key={i} className={`font-bold ${colorClass}`}>
+          <span key={i} className={`font-bold ${colorClass} ${isHighlighted ? computedHighlightRange.class : ''}`}>
             (
           </span>
         );
@@ -96,13 +113,13 @@ export default function ColoredExpression({ expression, className = "" }) {
         level--;
         const colorClass = colors[level % colors.length];
         result.push(
-          <span key={i} className={`font-bold ${colorClass}`}>
+          <span key={i} className={`font-bold ${colorClass} ${isHighlighted ? computedHighlightRange.class : ''}`}>
             )
           </span>
         );
       } else {
         result.push(
-          <span key={i}>
+          <span key={i} className={isHighlighted ? computedHighlightRange.class : ''}>
             {char}
           </span>
         );
