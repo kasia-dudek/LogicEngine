@@ -231,7 +231,60 @@ def _flatten_sort_dedupe(node: Any) -> Any:
             if not any(equals(a, ex) for ex in unique):
                 unique.append(a)
 
-        unique.sort(key=canonical_str)
+        # Sort with stable, deterministic ordering
+        # Primary: canonical_str for logical equivalence
+        # Secondary: depth and structure for consistent ordering of equivalent expressions
+        def sort_key(x: Any) -> tuple:
+            """Sort key: (canonical_str, depth, type_key, structure_key)"""
+            canon = canonical_str(x)
+            
+            # Calculate depth for secondary ordering
+            def calc_depth(n: Any) -> int:
+                if not isinstance(n, dict) or 'op' not in n:
+                    return 0
+                if n['op'] in {'AND', 'OR'}:
+                    args = n.get('args', [])
+                    return 1 + max((calc_depth(a) for a in args), default=0)
+                if n['op'] == 'NOT':
+                    return 1 + calc_depth(n.get('child'))
+                return 1
+            depth = calc_depth(x)
+            
+            # Type key: constants < variables < negations < AND < OR
+            type_key = 0
+            if isinstance(x, dict) and 'op' in x:
+                op = x['op']
+                if op == 'CONST':
+                    type_key = 0
+                elif op == 'VAR':
+                    type_key = 1
+                elif op == 'NOT':
+                    type_key = 2
+                elif op == 'AND':
+                    type_key = 3
+                elif op == 'OR':
+                    type_key = 4
+            
+            # Structure key: use sorted string representation of structure
+            if isinstance(x, dict) and 'op' in x:
+                if x['op'] in {'AND', 'OR'}:
+                    # For AND/OR, use sorted canonical strings of args for stability
+                    args_canon = sorted(canonical_str(a) for a in x.get('args', []))
+                    struct_key = ','.join(args_canon)
+                elif x['op'] == 'NOT':
+                    struct_key = canonical_str(x.get('child', '?'))
+                elif x['op'] == 'VAR':
+                    struct_key = x.get('name', '?')
+                elif x['op'] == 'CONST':
+                    struct_key = str(x.get('value', '?'))
+                else:
+                    struct_key = str(x)
+            else:
+                struct_key = str(x)
+            
+            return (canon, depth, type_key, struct_key)
+        
+        unique.sort(key=sort_key)
         return {'op': op, 'args': unique}
 
     if 'child' in node:
