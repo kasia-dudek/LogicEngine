@@ -66,13 +66,30 @@ export default function ColoredExpression({ expression, className = "", highligh
   const computedHighlightRange = useMemo(() => {
     if (highlightRange) return highlightRange;
     if (highlightText && cleanedExpression) {
-      const index = cleanedExpression.indexOf(highlightText);
+      // Normalizuj highlightText tak samo jak wyrażenie (usuń spacje)
+      const normalizedHighlight = String(highlightText).replace(/\s+/g, '').trim();
+      const normalizedExpression = cleanedExpression.replace(/\s+/g, '').trim();
+      
+      let index = normalizedExpression.indexOf(normalizedHighlight);
       if (index !== -1) {
         return {
           start: index,
-          end: index + highlightText.length,
+          end: index + normalizedHighlight.length,
           class: highlightClass || "bg-yellow-100"
         };
+      }
+      
+      // Jeśli nie znaleziono, spróbuj bez zewnętrznych nawiasów w highlightText
+      if (normalizedHighlight.startsWith('(') && normalizedHighlight.endsWith(')')) {
+        const highlightWithoutParens = normalizedHighlight.slice(1, -1);
+        index = normalizedExpression.indexOf(highlightWithoutParens);
+        if (index !== -1) {
+          return {
+            start: index,
+            end: index + highlightWithoutParens.length,
+            class: highlightClass || "bg-yellow-100"
+          };
+        }
       }
     }
     return null;

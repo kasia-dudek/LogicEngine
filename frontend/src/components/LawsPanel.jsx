@@ -36,59 +36,78 @@ function parseOrParts(expr) {
 // Sprawdź czy fragment występuje w wyrażeniu (również w innej kolejności dla OR/AND)
 // Zwraca obiekt {start, end} lub null
 function findFragmentInExpression(fragment, expression) {
+  if (!fragment || !expression) return null;
+  
   const normFragment = normalizeExpr(fragment);
   const normExpr = normalizeExpr(expression);
   
-  // Najpierw spróbuj dokładnego dopasowania
+  // 1. Najpierw spróbuj dokładnego dopasowania
   let index = normExpr.indexOf(normFragment);
   if (index !== -1) {
     return { start: index, end: index + normFragment.length };
   }
   
-  // Jeśli fragment jest wyrażeniem OR, sprawdź czy wszystkie części występują w wyrażeniu
-  if (normFragment.includes('∨')) {
-    const fragmentParts = parseOrParts(normFragment);
-    const exprParts = parseOrParts(normExpr);
-    
-    // Sprawdź czy wszystkie części fragmentu występują w wyrażeniu
-    const matchingParts = [];
-    for (const part of fragmentParts) {
-      for (const exprPart of exprParts) {
-        if (exprPart === part || exprPart.includes(part) || part.includes(exprPart)) {
-          const idx = normExpr.indexOf(exprPart);
-          if (idx !== -1) {
-            matchingParts.push({ part: exprPart, index: idx });
-          }
-        }
-      }
-    }
-    
-    if (matchingParts.length === fragmentParts.length && matchingParts.length > 0) {
-      // Znajdź zakres obejmujący wszystkie części
-      const indices = matchingParts.map(m => m.index);
-      const start = Math.min(...indices);
-      const end = Math.max(...indices.map((idx, i) => idx + matchingParts[i].part.length));
-      return { start, end };
-    }
-    
-    // Sprawdź też zamienioną kolejność
-    if (fragmentParts.length === 2) {
-      const reversed = fragmentParts[1] + '∨' + fragmentParts[0];
-      index = normExpr.indexOf(reversed);
-      if (index !== -1) {
-        return { start: index, end: index + reversed.length };
-      }
+  // 2. Spróbuj znaleźć fragment bez zewnętrznych nawiasów (jeśli są)
+  let fragmentWithoutParens = normFragment;
+  if (normFragment.startsWith('(') && normFragment.endsWith(')')) {
+    fragmentWithoutParens = normFragment.slice(1, -1);
+    index = normExpr.indexOf(fragmentWithoutParens);
+    if (index !== -1) {
+      return { start: index, end: index + fragmentWithoutParens.length };
     }
   }
   
-  // Podobnie dla AND
+  // 3. Jeśli fragment zawiera ∨, spróbuj zamienionej kolejności
+  if (normFragment.includes('∨')) {
+    try {
+      const fragmentParts = parseOrParts(normFragment);
+      if (fragmentParts.length === 2) {
+        // Spróbuj zamienionej kolejności
+        const reversed = fragmentParts[1] + '∨' + fragmentParts[0];
+        index = normExpr.indexOf(reversed);
+        if (index !== -1) {
+          return { start: index, end: index + reversed.length };
+        }
+        
+        // Spróbuj znaleźć każdą część osobno i zwróć zakres
+        const idx1 = normExpr.indexOf(fragmentParts[0]);
+        const idx2 = normExpr.indexOf(fragmentParts[1]);
+        
+        if (idx1 !== -1 && idx2 !== -1) {
+          const start = Math.min(idx1, idx2);
+          const end = Math.max(idx1 + fragmentParts[0].length, idx2 + fragmentParts[1].length);
+          return { start, end };
+        }
+      }
+    } catch (e) {
+      // Jeśli parsowanie się nie powiodło, kontynuuj
+    }
+  }
+  
+  // 4. Podobnie dla AND
   if (normFragment.includes('∧')) {
-    const andParts = normFragment.split('∧');
-    if (andParts.length === 2) {
-      const reversed = normalizeExpr(andParts[1] + '∧' + andParts[0]);
-      index = normExpr.indexOf(reversed);
-      if (index !== -1) {
-        return { start: index, end: index + reversed.length };
+    try {
+      const andParts = normFragment.split('∧');
+      if (andParts.length === 2) {
+        const reversed = normalizeExpr(andParts[1].trim() + '∧' + andParts[0].trim());
+        index = normExpr.indexOf(reversed);
+        if (index !== -1) {
+          return { start: index, end: index + reversed.length };
+        }
+      }
+    } catch (e) {
+      // Kontynuuj
+    }
+  }
+  
+  // 5. Fallback: spróbuj znaleźć chociaż część fragmentu
+  // Znajdź najdłuższy substring fragmentu który występuje w wyrażeniu
+  for (let len = normFragment.length; len > 3; len--) {
+    for (let i = 0; i <= normFragment.length - len; i++) {
+      const substring = normFragment.substring(i, i + len);
+      const idx = normExpr.indexOf(substring);
+      if (idx !== -1) {
+        return { start: idx, end: idx + substring.length };
       }
     }
   }
@@ -105,30 +124,47 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     return <ColoredExpression expression={fullExpression} className={className} />;
   }
 
-  // Użyj inteligentnego wyszukiwania, które obsługuje różne kolejności
-  const foundRange = findFragmentInExpression(target, fullExpression);
-  
-  if (!foundRange) {
-    // Jeśli nie znaleziono fragmentu, pokaż wyrażenie bez podświetlenia
-    return <ColoredExpression expression={fullExpression} className={className} />;
-  }
-
   const highlightClass = strategy === "before" 
     ? "bg-yellow-100 text-yellow-900 border-yellow-300"
     : strategy === "after"
     ? "bg-green-100 text-green-800 border-green-300"
     : "bg-green-100 text-green-800 border-green-300";
 
+  // Najpierw spróbuj prostego dopasowania - użyj highlightText, który ColoredExpression sam znormalizuje
+  const normTarget = normalizeExpr(target);
+  const normFull = normalizeExpr(fullExpression);
+  
+  if (normFull.includes(normTarget)) {
+    return (
+      <ColoredExpression 
+        expression={fullExpression} 
+        className={className}
+        highlightText={target}
+        highlightClass={highlightClass}
+      />
+    );
+  }
+
+  // Jeśli proste dopasowanie nie działa, użyj zaawansowanego wyszukiwania
+  const foundRange = findFragmentInExpression(target, fullExpression);
+  
+  if (!foundRange) {
+    // Jeśli nadal nie znaleziono, pokaż wyrażenie bez podświetlenia (ale to nie powinno się często zdarzać)
+    return <ColoredExpression expression={fullExpression} className={className} />;
+  }
+
   // Użyj znalezionego zakresu
+  // Ale musimy przejść przez cleanedExpression w ColoredExpression
+  // Więc przekażemy jako highlightText fragment który znaleźliśmy
+  const normExpr = normalizeExpr(fullExpression);
+  const foundSubstring = normExpr.substring(foundRange.start, foundRange.end);
+  
   return (
     <ColoredExpression 
       expression={fullExpression} 
       className={className}
-      highlightRange={{
-        start: foundRange.start,
-        end: foundRange.end,
-        class: highlightClass
-      }}
+      highlightText={foundSubstring}
+      highlightClass={highlightClass}
     />
   );
 }
