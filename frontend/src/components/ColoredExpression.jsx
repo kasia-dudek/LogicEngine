@@ -66,14 +66,14 @@ export default function ColoredExpression({ expression, className = "" }) {
 
   // Kolory dla różnych poziomów zagnieżdżenia
   const colors = [
-    'text-red-600',    // poziom 0
-    'text-blue-600',   // poziom 1  
-    'text-green-600',  // poziom 2
-    'text-purple-600', // poziom 3
-    'text-orange-600', // poziom 4
-    'text-pink-600',   // poziom 5
-    'text-indigo-600', // poziom 6
-    'text-teal-600',   // poziom 7
+    'text-blue-600',    // poziom 0 - niebieski zamiast czerwonego
+    'text-green-600',   // poziom 1  
+    'text-purple-600',  // poziom 2
+    'text-orange-600',  // poziom 3
+    'text-pink-600',    // poziom 4
+    'text-indigo-600',  // poziom 5
+    'text-teal-600',    // poziom 6
+    'text-red-600',     // poziom 7
   ];
 
   const renderExpression = (expr) => {

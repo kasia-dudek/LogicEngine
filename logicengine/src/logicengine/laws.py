@@ -25,7 +25,24 @@ def OR(args: Iterable[Any]) -> Dict[str, Any]:
 
 
 def pretty(n: Any) -> str:
-    return canonical_str(n)
+    result = canonical_str(n)
+    # Usuń zewnętrzne nawiasy jeśli całe wyrażenie jest w jednym nawiasie
+    if result.startswith('(') and result.endswith(')'):
+        inner = result[1:-1]
+        # Sprawdź czy nawiasy są zbalansowane w środku
+        balance = 0
+        can_remove = True
+        for char in inner:
+            if char == '(':
+                balance += 1
+            elif char == ')':
+                balance -= 1
+            if balance < 0:
+                can_remove = False
+                break
+        if can_remove and balance == 0:
+            return inner
+    return result
 
 def count_nodes(n: Any) -> int:
     if not isinstance(n, dict):
