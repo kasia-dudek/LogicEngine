@@ -95,7 +95,73 @@ export default function ColoredExpression({ expression, className = "", highligh
       }
     }
     
-    // 3. Fallback: znajdź najdłuższy wspólny substring
+    // 3. Fallback dla AND/OR: spróbuj znaleźć wszystkie części fragmentu
+    // (nawet jeśli kolejność jest inna)
+    // Używamy prostego parsowania z uwzględnieniem nawiasów
+    function parseParts(expr, separator) {
+      let level = 0;
+      const parts = [];
+      let current = '';
+      for (let i = 0; i < expr.length; i++) {
+        const char = expr[i];
+        if (char === '(') level++;
+        else if (char === ')') level--;
+        else if (char === separator && level === 0) {
+          if (current.trim()) parts.push(current.trim());
+          current = '';
+          continue;
+        }
+        current += char;
+      }
+      if (current.trim()) parts.push(current.trim());
+      return parts.length > 0 ? parts : [expr];
+    }
+    
+    if (normalizedHighlight.includes('∧')) {
+      const highlightParts = parseParts(normalizedHighlight, '∧');
+      if (highlightParts.length >= 2) {
+        const foundParts = [];
+        for (const part of highlightParts) {
+          const idx = normalizedExpression.indexOf(part);
+          if (idx !== -1) {
+            foundParts.push({ part, index: idx, length: part.length });
+          }
+        }
+        if (foundParts.length >= 2 && foundParts.length === highlightParts.length) {
+          const start = Math.min(...foundParts.map(p => p.index));
+          const end = Math.max(...foundParts.map(p => p.index + p.length));
+          return {
+            start,
+            end,
+            class: highlightClass || "bg-yellow-100"
+          };
+        }
+      }
+    }
+    
+    if (normalizedHighlight.includes('∨')) {
+      const highlightParts = parseParts(normalizedHighlight, '∨');
+      if (highlightParts.length >= 2) {
+        const foundParts = [];
+        for (const part of highlightParts) {
+          const idx = normalizedExpression.indexOf(part);
+          if (idx !== -1) {
+            foundParts.push({ part, index: idx, length: part.length });
+          }
+        }
+        if (foundParts.length >= 2 && foundParts.length === highlightParts.length) {
+          const start = Math.min(...foundParts.map(p => p.index));
+          const end = Math.max(...foundParts.map(p => p.index + p.length));
+          return {
+            start,
+            end,
+            class: highlightClass || "bg-yellow-100"
+          };
+        }
+      }
+    }
+    
+    // 4. Fallback: znajdź najdłuższy wspólny substring
     let longestMatch = '';
     let longestIndex = -1;
     for (let i = 0; i < normalizedExpression.length; i++) {
@@ -116,7 +182,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       };
     }
     
-    // 4. Ostatnia deska ratunku: podświetl początek jeśli pierwszy znak się zgadza
+    // 5. Ostatnia deska ratunku: podświetl początek jeśli pierwszy znak się zgadza
     if (normalizedHighlight.length > 0) {
       const firstChar = normalizedHighlight[0];
       index = normalizedExpression.indexOf(firstChar);
@@ -129,7 +195,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       }
     }
     
-    // 5. Jeśli wszystko zawiodło, nie podświetlaj (lepsze niż podświetlenie całego wyrażenia)
+    // 6. Jeśli wszystko zawiodło, nie podświetlaj (lepsze niż podświetlenie całego wyrażenia)
     return null;
   }, [cleanedExpression, highlightRange, highlightText, highlightClass]);
 

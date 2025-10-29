@@ -233,45 +233,15 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     ? "bg-green-100 text-green-800 border-green-300"
     : "bg-green-100 text-green-800 border-green-300";
 
-  // Zawsze użyj zaawansowanego wyszukiwania (zawsze zwraca wynik)
-  const foundRange = findFragmentInExpression(target, fullExpression);
-  
-  // Sprawdź czy znaleziony zakres jest sensowny
-  const normExpr = normalizeExpr(fullExpression);
-  const rangeLength = foundRange.end - foundRange.start;
-  
-  // Jeśli zakres jest bardzo duży (prawie całe wyrażenie), użyj prostego podejścia
-  if (rangeLength > normExpr.length * 0.9 || foundRange.start < 0) {
-    return (
-      <ColoredExpression 
-        expression={fullExpression} 
-        className={className}
-        highlightText={target}
-        highlightClass={highlightClass}
-      />
-    );
-  }
-  
-  // Użyj znalezionego zakresu do wyciągnięcia podstringa, ale lepiej użyć oryginalnego target
-  // ponieważ ColoredExpression sam normalizuje, więc pozycje mogą się nie zgadzać
-  // Ale jeśli mamy dokładne dopasowanie, możemy użyć foundSubstring
-  const foundSubstring = normExpr.substring(foundRange.start, foundRange.end);
-  const normTarget = normalizeExpr(target);
-  
-  // Jeśli foundSubstring jest bardzo podobny do target, użyj go (może mieć lepszą pozycję)
-  // W przeciwnym razie użyj target - ColoredExpression sam znajdzie pozycję
-  if (foundSubstring === normTarget || foundSubstring.length > normTarget.length * 0.7) {
-    return (
-      <ColoredExpression 
-        expression={fullExpression} 
-        className={className}
-        highlightText={foundSubstring}
-        highlightClass={highlightClass}
-      />
-    );
-  }
-  
-  // Fallback: użyj oryginalnego target
+  // Zawsze używaj oryginalnego target jako highlightText
+  // ColoredExpression ma własną inteligentną logikę znajdowania, która obsługuje:
+  // - różne kolejności argumentów (komutatywność)
+  // - różne formatowanie nawiasów
+  // - najdłuższy wspólny substring jako fallback
+  // 
+  // Jeśli użyjemy foundSubstring z findFragmentInExpression, może być ucięty
+  // (np. znalazł tylko część fragmentu). Lepiej przekazać pełny target i pozwolić
+  // ColoredExpression samemu znaleźć najlepsze dopasowanie.
   return (
     <ColoredExpression 
       expression={fullExpression} 
