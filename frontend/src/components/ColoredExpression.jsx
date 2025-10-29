@@ -63,35 +63,73 @@ export default function ColoredExpression({ expression, className = "", highligh
   }, [expression]);
 
   // Oblicz highlightRange z highlightText po czyszczeniu wyrażenia
+  // ZAWSZE zwraca wynik jeśli highlightText jest podany
   const computedHighlightRange = useMemo(() => {
     if (highlightRange) return highlightRange;
-    if (highlightText && cleanedExpression) {
-      // Normalizuj highlightText tak samo jak wyrażenie (usuń spacje)
-      const normalizedHighlight = String(highlightText).replace(/\s+/g, '').trim();
-      const normalizedExpression = cleanedExpression.replace(/\s+/g, '').trim();
-      
-      let index = normalizedExpression.indexOf(normalizedHighlight);
+    if (!highlightText || !cleanedExpression) return null;
+    
+    // Normalizuj highlightText tak samo jak wyrażenie (usuń spacje)
+    const normalizedHighlight = String(highlightText).replace(/\s+/g, '').trim();
+    const normalizedExpression = cleanedExpression.replace(/\s+/g, '').trim();
+    
+    // 1. Spróbuj dokładnego dopasowania
+    let index = normalizedExpression.indexOf(normalizedHighlight);
+    if (index !== -1) {
+      return {
+        start: index,
+        end: index + normalizedHighlight.length,
+        class: highlightClass || "bg-yellow-100"
+      };
+    }
+    
+    // 2. Spróbuj bez zewnętrznych nawiasów w highlightText
+    if (normalizedHighlight.startsWith('(') && normalizedHighlight.endsWith(')')) {
+      const highlightWithoutParens = normalizedHighlight.slice(1, -1);
+      index = normalizedExpression.indexOf(highlightWithoutParens);
       if (index !== -1) {
         return {
           start: index,
-          end: index + normalizedHighlight.length,
+          end: index + highlightWithoutParens.length,
           class: highlightClass || "bg-yellow-100"
         };
       }
-      
-      // Jeśli nie znaleziono, spróbuj bez zewnętrznych nawiasów w highlightText
-      if (normalizedHighlight.startsWith('(') && normalizedHighlight.endsWith(')')) {
-        const highlightWithoutParens = normalizedHighlight.slice(1, -1);
-        index = normalizedExpression.indexOf(highlightWithoutParens);
-        if (index !== -1) {
-          return {
-            start: index,
-            end: index + highlightWithoutParens.length,
-            class: highlightClass || "bg-yellow-100"
-          };
+    }
+    
+    // 3. Fallback: znajdź najdłuższy wspólny substring
+    let longestMatch = '';
+    let longestIndex = -1;
+    for (let i = 0; i < normalizedExpression.length; i++) {
+      for (let len = Math.min(normalizedHighlight.length, normalizedExpression.length - i); len > longestMatch.length; len--) {
+        const substr = normalizedExpression.substring(i, i + len);
+        if (normalizedHighlight.includes(substr) && len > longestMatch.length) {
+          longestMatch = substr;
+          longestIndex = i;
         }
       }
     }
+    
+    if (longestMatch.length > 2 && longestIndex !== -1) {
+      return {
+        start: longestIndex,
+        end: longestIndex + longestMatch.length,
+        class: highlightClass || "bg-yellow-100"
+      };
+    }
+    
+    // 4. Ostatnia deska ratunku: podświetl początek jeśli pierwszy znak się zgadza
+    if (normalizedHighlight.length > 0) {
+      const firstChar = normalizedHighlight[0];
+      index = normalizedExpression.indexOf(firstChar);
+      if (index !== -1) {
+        return {
+          start: index,
+          end: Math.min(index + normalizedHighlight.length, normalizedExpression.length),
+          class: highlightClass || "bg-yellow-100"
+        };
+      }
+    }
+    
+    // 5. Jeśli wszystko zawiodło, nie podświetlaj (lepsze niż podświetlenie całego wyrażenia)
     return null;
   }, [cleanedExpression, highlightRange, highlightText, highlightClass]);
 

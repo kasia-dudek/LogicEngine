@@ -233,20 +233,50 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     ? "bg-green-100 text-green-800 border-green-300"
     : "bg-green-100 text-green-800 border-green-300";
 
-  // Zawsze używaj zaawansowanego wyszukiwania (zawsze zwraca wynik)
+  // Zawsze użyj zaawansowanego wyszukiwania (zawsze zwraca wynik)
   const foundRange = findFragmentInExpression(target, fullExpression);
   
-  // Użyj znalezionego zakresu - zawsze otrzymamy wynik (nigdy null)
+  // Sprawdź czy znaleziony zakres jest sensowny
   const normExpr = normalizeExpr(fullExpression);
-  const foundSubstring = normExpr.substring(foundRange.start, foundRange.end);
+  const rangeLength = foundRange.end - foundRange.start;
   
-  // Zawsze użyj ColoredExpression z highlightText dla spójności
-  // ColoredExpression sam doda ramkę i tło
+  // Jeśli zakres jest bardzo duży (prawie całe wyrażenie), użyj prostego podejścia
+  if (rangeLength > normExpr.length * 0.9 || foundRange.start < 0) {
+    return (
+      <ColoredExpression 
+        expression={fullExpression} 
+        className={className}
+        highlightText={target}
+        highlightClass={highlightClass}
+      />
+    );
+  }
+  
+  // Użyj znalezionego zakresu do wyciągnięcia podstringa, ale lepiej użyć oryginalnego target
+  // ponieważ ColoredExpression sam normalizuje, więc pozycje mogą się nie zgadzać
+  // Ale jeśli mamy dokładne dopasowanie, możemy użyć foundSubstring
+  const foundSubstring = normExpr.substring(foundRange.start, foundRange.end);
+  const normTarget = normalizeExpr(target);
+  
+  // Jeśli foundSubstring jest bardzo podobny do target, użyj go (może mieć lepszą pozycję)
+  // W przeciwnym razie użyj target - ColoredExpression sam znajdzie pozycję
+  if (foundSubstring === normTarget || foundSubstring.length > normTarget.length * 0.7) {
+    return (
+      <ColoredExpression 
+        expression={fullExpression} 
+        className={className}
+        highlightText={foundSubstring}
+        highlightClass={highlightClass}
+      />
+    );
+  }
+  
+  // Fallback: użyj oryginalnego target
   return (
     <ColoredExpression 
       expression={fullExpression} 
       className={className}
-      highlightText={foundSubstring.length > 0 ? foundSubstring : target}
+      highlightText={target}
       highlightClass={highlightClass}
     />
   );
