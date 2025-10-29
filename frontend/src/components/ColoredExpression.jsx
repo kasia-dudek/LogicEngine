@@ -127,12 +127,22 @@ export default function ColoredExpression({ expression, className = "", highligh
             foundParts.push({ part, index: idx, length: part.length });
           }
         }
-        if (foundParts.length >= 2 && foundParts.length === highlightParts.length) {
+        // Jeśli znaleziono większość części (co najmniej 50%), użyj je
+        if (foundParts.length >= 2 && foundParts.length >= Math.ceil(highlightParts.length / 2)) {
           const start = Math.min(...foundParts.map(p => p.index));
           const end = Math.max(...foundParts.map(p => p.index + p.length));
           return {
             start,
             end,
+            class: highlightClass || "bg-yellow-100"
+          };
+        }
+        // Jeśli znaleziono chociaż jedną część, użyj najdłuższą
+        if (foundParts.length > 0) {
+          const best = foundParts.reduce((a, b) => b.length > a.length ? b : a);
+          return {
+            start: best.index,
+            end: best.index + best.length,
             class: highlightClass || "bg-yellow-100"
           };
         }
@@ -149,7 +159,8 @@ export default function ColoredExpression({ expression, className = "", highligh
             foundParts.push({ part, index: idx, length: part.length });
           }
         }
-        if (foundParts.length >= 2 && foundParts.length === highlightParts.length) {
+        // Jeśli znaleziono większość części (co najmniej 50%), użyj je
+        if (foundParts.length >= 2 && foundParts.length >= Math.ceil(highlightParts.length / 2)) {
           const start = Math.min(...foundParts.map(p => p.index));
           const end = Math.max(...foundParts.map(p => p.index + p.length));
           return {
@@ -158,10 +169,20 @@ export default function ColoredExpression({ expression, className = "", highligh
             class: highlightClass || "bg-yellow-100"
           };
         }
+        // Jeśli znaleziono chociaż jedną część, użyj najdłuższą
+        if (foundParts.length > 0) {
+          const best = foundParts.reduce((a, b) => b.length > a.length ? b : a);
+          return {
+            start: best.index,
+            end: best.index + best.length,
+            class: highlightClass || "bg-yellow-100"
+          };
+        }
       }
     }
     
-    // 4. Fallback: znajdź najdłuższy wspólny substring
+    // 4. Fallback: znajdź najdłuższy wspólny substring (po obu stronach)
+    // Szukaj substringa fragmentu w wyrażeniu
     let longestMatch = '';
     let longestIndex = -1;
     for (let i = 0; i < normalizedExpression.length; i++) {
@@ -170,6 +191,18 @@ export default function ColoredExpression({ expression, className = "", highligh
         if (normalizedHighlight.includes(substr) && len > longestMatch.length) {
           longestMatch = substr;
           longestIndex = i;
+        }
+      }
+    }
+    
+    // Również szukaj w drugą stronę - substringa wyrażenia w fragmencie
+    for (let i = 0; i < normalizedHighlight.length; i++) {
+      for (let len = Math.min(normalizedExpression.length, normalizedHighlight.length - i); len > longestMatch.length; len--) {
+        const substr = normalizedHighlight.substring(i, i + len);
+        const idx = normalizedExpression.indexOf(substr);
+        if (idx !== -1 && len > longestMatch.length) {
+          longestMatch = substr;
+          longestIndex = idx;
         }
       }
     }
@@ -193,10 +226,38 @@ export default function ColoredExpression({ expression, className = "", highligh
           class: highlightClass || "bg-yellow-100"
         };
       }
+      
+      // Spróbuj również znaleźć ostatni znak
+      const lastChar = normalizedHighlight[normalizedHighlight.length - 1];
+      const lastIdx = normalizedExpression.lastIndexOf(lastChar);
+      if (lastIdx !== -1 && lastIdx > index) {
+        return {
+          start: Math.max(0, lastIdx - normalizedHighlight.length + 1),
+          end: lastIdx + 1,
+          class: highlightClass || "bg-yellow-100"
+        };
+      }
     }
     
-    // 6. Jeśli wszystko zawiodło, nie podświetlaj (lepsze niż podświetlenie całego wyrażenia)
-    return null;
+    // 6. Jeśli wszystko zawiodło, podświetl całe wyrażenie jeśli fragment jest bardzo podobny
+    // (lepsze niż brak podświetlenia)
+    if (normalizedExpression.length > 0 && normalizedHighlight.length > 0) {
+      // Jeśli fragment jest krótki i jest podobny do wyrażenia, podświetl wszystko
+      if (normalizedHighlight.length <= normalizedExpression.length && normalizedExpression.includes(normalizedHighlight.substring(0, Math.min(3, normalizedHighlight.length)))) {
+        return {
+          start: 0,
+          end: normalizedExpression.length,
+          class: highlightClass || "bg-yellow-100"
+        };
+      }
+    }
+    
+    // 7. Ostateczny fallback: podświetl początek wyrażenia
+    return {
+      start: 0,
+      end: Math.min(normalizedHighlight.length, normalizedExpression.length),
+      class: highlightClass || "bg-yellow-100"
+    };
   }, [cleanedExpression, highlightRange, highlightText, highlightClass]);
 
   if (!expression) return null;
