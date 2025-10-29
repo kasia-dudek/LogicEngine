@@ -113,6 +113,7 @@ def set_by_path(node: Any, path: Path, new_sub: Any) -> Any:
     if not path:
         return new_sub
     # Create a deep copy to avoid mutating the original
+    # Note: This copy is necessary to prevent mutations, but caller should also backup if needed
     node = copy.deepcopy(node)
     key, idx = path[-1]
     parent = get_by_path(node, path[:-1])
@@ -758,6 +759,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
 
     steps: List[Dict[str, Any]] = []
     seen_expressions = set()  # Track seen expressions to detect oscillation
+    skipped_transformations = set()  # Track transformations we tried but skipped (not optimal)
     
     for _ in range(max_steps):
         # Collect matches based on mode
@@ -780,6 +782,10 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
                 # axiom matches already have source="axiom", axiom_id, etc.
                 match["derived_from_axioms"] = []
             matches.extend(axiom_matches)
+        
+        # Filter out transformations we already tried and skipped
+        if skipped_transformations:
+            matches = [m for m in matches if (tuple(m.get("path", [])), m.get("law")) not in skipped_transformations]
         
         if not matches:
             break
@@ -823,6 +829,8 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
 
         # If this transformation doesn't improve the expression, restore node and skip
         if after_measure >= before_measure and choice.get("source") != "axiom":
+            # Mark this transformation as skipped so we don't try it again
+            skipped_transformations.add((tuple(path), choice.get("law")))
             node = node_backup
             continue
 
