@@ -15,9 +15,9 @@ class ASTError(Exception):
 
 # Pratt parser config
 PRECEDENCE: Dict[str, int] = {
-    '¬': 5, '∧': 4, '∨': 3, '⊕': 3, '↑': 3, '↓': 3, '→': 2, '↔': 1, '≡': 1,
+    '¬': 5, '∧': 4, '↑': 4, '∨': 3, '⊕': 3, '↓': 3, '→': 2, '↔': 1, '≡': 1,
 }
-RIGHT_ASSOC = {'¬', '→', '↔', '≡'}
+RIGHT_ASSOC = {'→'}  # Removed ¬, ↔, ≡ as per requirements
 BINARY_OPS = {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}
 
 
@@ -26,16 +26,24 @@ class TokenStream:
         self.s = s
         self.i = 0
 
+    def _skip_whitespace(self) -> None:
+        """Skip whitespace characters."""
+        while self.i < len(self.s) and self.s[self.i].isspace():
+            self.i += 1
+
     def peek(self) -> str:
+        self._skip_whitespace()
         return self.s[self.i] if self.i < len(self.s) else ''
 
     def next(self) -> str:
+        self._skip_whitespace()
         ch = self.peek()
         if ch:
             self.i += 1
         return ch
 
     def eof(self) -> bool:
+        self._skip_whitespace()
         return self.i >= len(self.s)
 
 
@@ -58,11 +66,12 @@ def parse_expression(ts: TokenStream, min_prec: int = 0) -> Any:
         if ts.next() != ')':
             raise ASTError("Brak zamykającego nawiasu")
     else:
-        if ch.isalpha() or ch in '01':
+        # Only allow A-Z and 0/1 (strict validation)
+        if (ch >= 'A' and ch <= 'Z') or ch in '01':
             node = ch
             ts.next()
         else:
-            raise ASTError(f"Nieprawidłowy token: {ch}")
+            raise ASTError(f"Nieprawidłowy token: {ch} (dozwolone tylko A-Z i 0/1)")
 
     while True:  # binary chaining with precedence/associativity
         op = ts.peek()
@@ -129,9 +138,11 @@ def _canonicalize(node: Any) -> Any:
     if 'children' in node and isinstance(node['children'], list) and node['children']:
         kids = [_canonicalize(k) for k in node['children']]
         if len(kids) == 1:
-            return {"node": '¬', "child": kids[0]}
-        if len(kids) >= 2:
-            return {"node": '∧', "left": kids[0], "right": kids[1]}
+            # Return the single child without guessing operator
+            return kids[0]
+        if len(kids) > 1:
+            # Don't guess operator - raise error for ambiguous structure
+            raise ASTError(f"Nie można określić operatora dla {len(kids)} dzieci: {kids}")
 
     return str(node)
 
@@ -231,6 +242,27 @@ def _flatten_sort_dedupe(node: Any) -> Any:
             if not any(equals(a, ex) for ex in unique):
                 unique.append(a)
 
+        # Constant folding rules:
+        # For AND: if CONST(0) exists, result is CONST(0); remove CONST(1)
+        # For OR: if CONST(1) exists, result is CONST(1); remove CONST(0)
+        if op == 'AND':
+            has_zero = any(isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 0 for a in unique)
+            if has_zero:
+                return {'op': 'CONST', 'value': 0}
+            # Remove CONST(1) from arguments
+            unique = [a for a in unique if not (isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 1)]
+            if not unique:
+                return {'op': 'CONST', 'value': 1}  # All were CONST(1)
+        
+        if op == 'OR':
+            has_one = any(isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 1 for a in unique)
+            if has_one:
+                return {'op': 'CONST', 'value': 1}
+            # Remove CONST(0) from arguments
+            unique = [a for a in unique if not (isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 0)]
+            if not unique:
+                return {'op': 'CONST', 'value': 0}  # All were CONST(0)
+
         # Sort with stable, deterministic ordering that preserves relative positions
         # when possible, while ensuring consistency across transformations
         def sort_key(x: Any) -> tuple:
@@ -286,6 +318,11 @@ def _flatten_sort_dedupe(node: Any) -> Any:
             return (type_priority, secondary_key, canon)
         
         unique.sort(key=sort_key)
+        
+        # If only one element remains, return it directly (not wrapped in AND/OR)
+        if len(unique) == 1:
+            return unique[0]
+        
         return {'op': op, 'args': unique}
 
     if 'child' in node:
@@ -300,22 +337,60 @@ def _flatten_sort_dedupe(node: Any) -> Any:
 
 
 def _expand_imp_iff(ast: Any) -> Any:
-    """Expand IMP and IFF operators to basic NOT/AND/OR."""
-    if not isinstance(ast, dict) or 'op' not in ast:
+    """Expand IMP and IFF operators to basic NOT/AND/OR.
+    Also handles legacy format with 'node': '→'/'↔'.
+    """
+    if not isinstance(ast, dict):
+        return ast
+    
+    # Handle legacy format: {'node': '→', 'left': ..., 'right': ...}
+    if 'node' in ast:
+        node_op = ast.get('node')
+        if node_op == '→':
+            left = _expand_imp_iff(ast.get('left'))
+            right = _expand_imp_iff(ast.get('right'))
+            return {'op': 'OR', 'args': [{'op': 'NOT', 'child': left}, right]}
+        elif node_op in {'↔', '≡'}:
+            left = _expand_imp_iff(ast.get('left'))
+            right = _expand_imp_iff(ast.get('right'))
+            return {
+                'op': 'OR',
+                'args': [
+                    {'op': 'AND', 'args': [left, right]},
+                    {'op': 'AND', 'args': [
+                        {'op': 'NOT', 'child': left},
+                        {'op': 'NOT', 'child': right}
+                    ]}
+                ]
+            }
+        # For other node types, continue recursive processing
+        result = ast.copy()
+        if 'left' in ast:
+            result['left'] = _expand_imp_iff(ast['left'])
+        if 'right' in ast:
+            result['right'] = _expand_imp_iff(ast['right'])
+        if 'child' in ast:
+            result['child'] = _expand_imp_iff(ast['child'])
+        if 'args' in ast:
+            result['args'] = [_expand_imp_iff(arg) for arg in ast['args']]
+        return result
+    
+    # Handle normalized format: {'op': 'IMP'/'IFF', ...}
+    if 'op' not in ast:
         return ast
     
     op = ast['op']
     
     if op == 'IMP':
         # p -> q becomes ~p | q
-        left = _expand_imp_iff(ast['left'])
-        right = _expand_imp_iff(ast['right'])
+        left = _expand_imp_iff(ast.get('left'))
+        right = _expand_imp_iff(ast.get('right'))
         return {'op': 'OR', 'args': [{'op': 'NOT', 'child': left}, right]}
     
     elif op == 'IFF':
         # p <-> q becomes (p & q) | (~p & ~q)
-        left = _expand_imp_iff(ast['left'])
-        right = _expand_imp_iff(ast['right'])
+        left = _expand_imp_iff(ast.get('left'))
+        right = _expand_imp_iff(ast.get('right'))
         return {
             'op': 'OR',
             'args': [
@@ -341,13 +416,106 @@ def _expand_imp_iff(ast: Any) -> Any:
     return result
 
 
+def _expand_derived_ops(ast: Any) -> Any:
+    """Expand derived operators (⊕, ↑, ↓) to basic NOT/AND/OR.
+    Also handles legacy format with 'node': '⊕'/'↑'/'↓'.
+    """
+    if not isinstance(ast, dict):
+        return ast
+    
+    # Handle legacy format: {'node': '⊕'/'↑'/'↓', ...}
+    if 'node' in ast:
+        node_op = ast.get('node')
+        if node_op == '⊕':
+            # XOR: A ⊕ B = (A ∧ ¬B) ∨ (¬A ∧ B)
+            left = _expand_derived_ops(ast.get('left'))
+            right = _expand_derived_ops(ast.get('right'))
+            return {
+                'op': 'OR',
+                'args': [
+                    {'op': 'AND', 'args': [left, {'op': 'NOT', 'child': right}]},
+                    {'op': 'AND', 'args': [{'op': 'NOT', 'child': left}, right]}
+                ]
+            }
+        elif node_op == '↑':
+            # NAND: A ↑ B = ¬(A ∧ B)
+            left = _expand_derived_ops(ast.get('left'))
+            right = _expand_derived_ops(ast.get('right'))
+            return {'op': 'NOT', 'child': {'op': 'AND', 'args': [left, right]}}
+        elif node_op == '↓':
+            # NOR: A ↓ B = ¬(A ∨ B)
+            left = _expand_derived_ops(ast.get('left'))
+            right = _expand_derived_ops(ast.get('right'))
+            return {'op': 'NOT', 'child': {'op': 'OR', 'args': [left, right]}}
+        # For other node types, continue recursive processing
+        result = ast.copy()
+        if 'left' in ast:
+            result['left'] = _expand_derived_ops(ast['left'])
+        if 'right' in ast:
+            result['right'] = _expand_derived_ops(ast['right'])
+        if 'child' in ast:
+            result['child'] = _expand_derived_ops(ast['child'])
+        if 'args' in ast:
+            result['args'] = [_expand_derived_ops(arg) for arg in ast['args']]
+        return result
+    
+    # Handle normalized format (shouldn't normally happen as _to_bool_norm doesn't create these)
+    # But handle just in case
+    if 'op' not in ast:
+        return ast
+    
+    op = ast.get('op')
+    if op in {'XOR', 'NAND', 'NOR'}:
+        left = _expand_derived_ops(ast.get('left'))
+        right = _expand_derived_ops(ast.get('right'))
+        if op == 'XOR':
+            return {
+                'op': 'OR',
+                'args': [
+                    {'op': 'AND', 'args': [left, {'op': 'NOT', 'child': right}]},
+                    {'op': 'AND', 'args': [{'op': 'NOT', 'child': left}, right]}
+                ]
+            }
+        elif op == 'NAND':
+            return {'op': 'NOT', 'child': {'op': 'AND', 'args': [left, right]}}
+        elif op == 'NOR':
+            return {'op': 'NOT', 'child': {'op': 'OR', 'args': [left, right]}}
+    
+    # Recursively process other operators
+    result = ast.copy()
+    if 'left' in ast:
+        result['left'] = _expand_derived_ops(ast['left'])
+    if 'right' in ast:
+        result['right'] = _expand_derived_ops(ast['right'])
+    if 'child' in ast:
+        result['child'] = _expand_derived_ops(ast['child'])
+    if 'args' in ast:
+        result['args'] = [_expand_derived_ops(arg) for arg in ast['args']]
+    
+    return result
+
+
 def normalize_bool_ast(ast: Any, expand_imp_iff: bool = True) -> Any:
-    """Boolean-only form with flattened n-ary operators."""
+    """Boolean-only form with flattened n-ary operators.
+    
+    Steps:
+    1. Expand derived operators (⊕, ↑, ↓) first
+    2. Convert to boolean-normalized format (_to_bool_norm)
+    3. Expand IMP/IFF (created by _to_bool_norm or already present)
+    4. Flatten, sort, dedupe
+    """
+    # First expand derived operators (⊕, ↑, ↓) to NOT/AND/OR
+    ast = _expand_derived_ops(ast)
+    
+    # Convert to boolean-normalized format
+    # This handles legacy 'node' format and creates IMP/IFF from →/↔
+    ast = _to_bool_norm(ast)
+    
+    # Expand IMP/IFF to NOT/AND/OR (now in normalized format)
     if expand_imp_iff:
         ast = _expand_imp_iff(ast)
-    ast = _to_bool_norm(ast)
-    if expand_imp_iff:
-        ast = _expand_imp_iff(ast)  # Expand again after _to_bool_norm creates IFF/IMP
+    
+    # Flatten, sort, dedupe
     return _flatten_sort_dedupe(ast)
 
 
@@ -374,6 +542,14 @@ def canonical_str(node: Any) -> str:
             return node.get('name', '?')
         if op == 'CONST':
             return str(node.get('value', '?'))
+        if op == 'IMP':
+            left = canonical_str(node.get('left'))
+            right = canonical_str(node.get('right'))
+            return f"({left} → {right})"
+        if op == 'IFF':
+            left = canonical_str(node.get('left'))
+            right = canonical_str(node.get('right'))
+            return f"({left} ↔ {right})"
         left = canonical_str(node.get('left'))
         right = canonical_str(node.get('right'))
         return f"({left} {op} {right})"
@@ -393,7 +569,7 @@ def canonical_str(node: Any) -> str:
 def canonical_str_minimal(node: Any, parent_precedence: int = 0) -> str:
     """Minimal string representation with fewer parentheses based on operator precedence.
     
-    Precedence: NOT (100) > AND (2) > OR (3) > other (10)
+    Precedence: NOT (1) > AND (2) > OR (3) > other (10)
     Lower precedence value = higher priority.
     """
     if node is None:
@@ -418,7 +594,7 @@ def _canonical_str_minimal_internal(node: Any, parent_precedence: int = 0) -> st
         return str(node)
 
     op_map = {
-        'NOT': ('¬', 100),
+        'NOT': ('¬', 1),  # Lower value = higher priority
         'AND': ('∧', 2),
         'OR': ('∨', 3),
     }
