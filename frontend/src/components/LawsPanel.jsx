@@ -1,12 +1,115 @@
 import React, { useState } from 'react';
 import ColoredExpression from './ColoredExpression';
 
+// Normalizuj wyrażenie: usuń spacje, znormalizuj białe znaki
+function normalizeExpr(expr) {
+  if (!expr) return '';
+  return String(expr).replace(/\s+/g, '').trim();
+}
+
+// Parsuj wyrażenie OR na części (uproszczone - dla prostych przypadków)
+function parseOrParts(expr) {
+  let level = 0;
+  const parts = [];
+  let current = '';
+  
+  for (let i = 0; i < expr.length; i++) {
+    const char = expr[i];
+    if (char === '(') {
+      level++;
+      current += char;
+    } else if (char === ')') {
+      level--;
+      current += char;
+    } else if (char === '∨' && level === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  
+  return parts.length > 0 ? parts : [expr];
+}
+
+// Sprawdź czy fragment występuje w wyrażeniu (również w innej kolejności dla OR/AND)
+// Zwraca obiekt {start, end} lub null
+function findFragmentInExpression(fragment, expression) {
+  const normFragment = normalizeExpr(fragment);
+  const normExpr = normalizeExpr(expression);
+  
+  // Najpierw spróbuj dokładnego dopasowania
+  let index = normExpr.indexOf(normFragment);
+  if (index !== -1) {
+    return { start: index, end: index + normFragment.length };
+  }
+  
+  // Jeśli fragment jest wyrażeniem OR, sprawdź czy wszystkie części występują w wyrażeniu
+  if (normFragment.includes('∨')) {
+    const fragmentParts = parseOrParts(normFragment);
+    const exprParts = parseOrParts(normExpr);
+    
+    // Sprawdź czy wszystkie części fragmentu występują w wyrażeniu
+    const matchingParts = [];
+    for (const part of fragmentParts) {
+      for (const exprPart of exprParts) {
+        if (exprPart === part || exprPart.includes(part) || part.includes(exprPart)) {
+          const idx = normExpr.indexOf(exprPart);
+          if (idx !== -1) {
+            matchingParts.push({ part: exprPart, index: idx });
+          }
+        }
+      }
+    }
+    
+    if (matchingParts.length === fragmentParts.length && matchingParts.length > 0) {
+      // Znajdź zakres obejmujący wszystkie części
+      const indices = matchingParts.map(m => m.index);
+      const start = Math.min(...indices);
+      const end = Math.max(...indices.map((idx, i) => idx + matchingParts[i].part.length));
+      return { start, end };
+    }
+    
+    // Sprawdź też zamienioną kolejność
+    if (fragmentParts.length === 2) {
+      const reversed = fragmentParts[1] + '∨' + fragmentParts[0];
+      index = normExpr.indexOf(reversed);
+      if (index !== -1) {
+        return { start: index, end: index + reversed.length };
+      }
+    }
+  }
+  
+  // Podobnie dla AND
+  if (normFragment.includes('∧')) {
+    const andParts = normFragment.split('∧');
+    if (andParts.length === 2) {
+      const reversed = normalizeExpr(andParts[1] + '∧' + andParts[0]);
+      index = normExpr.indexOf(reversed);
+      if (index !== -1) {
+        return { start: index, end: index + reversed.length };
+      }
+    }
+  }
+  
+  return null;
+}
+
 function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, className = "", strategy = "auto" }) {
   if (!fullExpression) return null;
 
   const target = strategy === "before" ? beforeSubexpr : strategy === "after" ? afterSubexpr : (afterSubexpr || beforeSubexpr);
   
-  if (!target || !fullExpression.includes(target)) {
+  if (!target) {
+    return <ColoredExpression expression={fullExpression} className={className} />;
+  }
+
+  // Użyj inteligentnego wyszukiwania, które obsługuje różne kolejności
+  const foundRange = findFragmentInExpression(target, fullExpression);
+  
+  if (!foundRange) {
+    // Jeśli nie znaleziono fragmentu, pokaż wyrażenie bez podświetlenia
     return <ColoredExpression expression={fullExpression} className={className} />;
   }
 
@@ -16,16 +119,17 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     ? "bg-green-100 text-green-800 border-green-300"
     : "bg-green-100 text-green-800 border-green-300";
 
-  // Użyj highlightText, aby ColoredExpression sam znalazł pozycję po czyszczeniu
+  // Użyj znalezionego zakresu
   return (
-    <span className={`${highlightClass} px-1 rounded border`}>
-      <ColoredExpression 
-        expression={fullExpression} 
-        className={className}
-        highlightText={target}
-        highlightClass={highlightClass}
-      />
-    </span>
+    <ColoredExpression 
+      expression={fullExpression} 
+      className={className}
+      highlightRange={{
+        start: foundRange.start,
+        end: foundRange.end,
+        class: highlightClass
+      }}
+    />
   );
 }
 
