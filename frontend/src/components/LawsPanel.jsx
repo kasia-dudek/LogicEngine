@@ -10,9 +10,11 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     if (parts.length < 2) return null;
     return (
       <>
-        {parts[0]}
-        <span className={`${colorClass} px-1 rounded border`}>{target}</span>
-        {parts.slice(1).join(target)}
+        <ColoredExpression expression={parts[0]} className={className} />
+        <span className={`${colorClass} px-1 rounded border`}>
+          <ColoredExpression expression={target} className={className} />
+        </span>
+        <ColoredExpression expression={parts.slice(1).join(target)} className={className} />
       </>
     );
   };
