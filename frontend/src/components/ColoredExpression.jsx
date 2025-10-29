@@ -113,35 +113,74 @@ export default function ColoredExpression({ expression, className = "", highligh
     const result = [];
     let level = 0;
     let i = 0;
+    let highlightBuffer = [];
+    let highlightStart = -1;
+    let inHighlight = false;
 
     while (i < expr.length) {
       const char = expr[i];
-      const isHighlighted = computedHighlightRange && i >= computedHighlightRange.start && i < computedHighlightRange.end;
+      const wasInHighlight = inHighlight;
+      inHighlight = computedHighlightRange && i >= computedHighlightRange.start && i < computedHighlightRange.end;
       
-      if (char === '(') {
-        const colorClass = colors[level % colors.length];
+      // Zakończ poprzedni highlight span jeśli wychodzimy z zakresu
+      if (wasInHighlight && !inHighlight && highlightBuffer.length > 0) {
         result.push(
-          <span key={i} className={`font-bold ${colorClass} ${isHighlighted ? computedHighlightRange.class : ''}`}>
-            (
+          <span key={`highlight-${highlightStart}`} className={`${computedHighlightRange.class} px-1 rounded border`}>
+            {highlightBuffer.join('')}
           </span>
         );
-        level++;
-      } else if (char === ')') {
-        level--;
-        const colorClass = colors[level % colors.length];
-        result.push(
-          <span key={i} className={`font-bold ${colorClass} ${isHighlighted ? computedHighlightRange.class : ''}`}>
-            )
-          </span>
-        );
-      } else {
-        result.push(
-          <span key={i} className={isHighlighted ? computedHighlightRange.class : ''}>
-            {char}
-          </span>
-        );
+        highlightBuffer = [];
+        highlightStart = -1;
       }
+      
+      // Rozpocznij nowy highlight span jeśli wchodzimy do zakresu
+      if (!wasInHighlight && inHighlight) {
+        highlightStart = i;
+      }
+      
+      if (inHighlight) {
+        // Gromadź znaki w buforze
+        highlightBuffer.push(char);
+        // Aktualizuj level dla nawiasów (ale nie renderuj jeszcze)
+        if (char === '(') level++;
+        else if (char === ')') level--;
+      } else {
+        // Renderuj normalnie poza highlightem
+        if (char === '(') {
+          const colorClass = colors[level % colors.length];
+          result.push(
+            <span key={i} className={`font-bold ${colorClass}`}>
+              (
+            </span>
+          );
+          level++;
+        } else if (char === ')') {
+          level--;
+          const colorClass = colors[level % colors.length];
+          result.push(
+            <span key={i} className={`font-bold ${colorClass}`}>
+              )
+            </span>
+          );
+        } else {
+          result.push(
+            <span key={i}>
+              {char}
+            </span>
+          );
+        }
+      }
+      
       i++;
+    }
+    
+    // Jeśli na końcu nadal jesteśmy w highlightcie, zamknij span
+    if (inHighlight && highlightBuffer.length > 0) {
+      result.push(
+        <span key={`highlight-${highlightStart}`} className={`${computedHighlightRange.class} px-1 rounded border`}>
+          {highlightBuffer.join('')}
+        </span>
+      );
     }
 
     return result;

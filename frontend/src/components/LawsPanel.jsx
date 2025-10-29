@@ -233,34 +233,6 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     ? "bg-green-100 text-green-800 border-green-300"
     : "bg-green-100 text-green-800 border-green-300";
 
-  // Najpierw spróbuj prostego dopasowania - użyj highlightText, który ColoredExpression sam znormalizuje
-  const normTarget = normalizeExpr(target);
-  const normFull = normalizeExpr(fullExpression);
-  
-  // Jeśli fragment jest równy całemu wyrażeniu, podświetl całość
-  if (normFull === normTarget) {
-    return (
-      <span className={`${highlightClass} px-1 rounded border inline-block`}>
-        <ColoredExpression 
-          expression={fullExpression} 
-          className={className}
-        />
-      </span>
-    );
-  }
-  
-  // Jeśli fragment jest zawarty w wyrażeniu
-  if (normFull.includes(normTarget)) {
-    return (
-      <ColoredExpression 
-        expression={fullExpression} 
-        className={className}
-        highlightText={target}
-        highlightClass={highlightClass}
-      />
-    );
-  }
-
   // Zawsze używaj zaawansowanego wyszukiwania (zawsze zwraca wynik)
   const foundRange = findFragmentInExpression(target, fullExpression);
   
@@ -268,26 +240,13 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
   const normExpr = normalizeExpr(fullExpression);
   const foundSubstring = normExpr.substring(foundRange.start, foundRange.end);
   
-  // Jeśli zakres jest zbyt duży (np. całe wyrażenie), lepiej użyć highlightText z target
-  if (foundRange.end - foundRange.start > normExpr.length * 0.8) {
-    // Jeśli zakres obejmuje prawie całe wyrażenie, użyj prostszego podejścia
-    return (
-      <span className={`${highlightClass} px-1 rounded border inline-block`}>
-        <ColoredExpression 
-          expression={fullExpression} 
-          className={className}
-          highlightText={target}
-          highlightClass={highlightClass}
-        />
-      </span>
-    );
-  }
-  
+  // Zawsze użyj ColoredExpression z highlightText dla spójności
+  // ColoredExpression sam doda ramkę i tło
   return (
     <ColoredExpression 
       expression={fullExpression} 
       className={className}
-      highlightText={foundSubstring}
+      highlightText={foundSubstring.length > 0 ? foundSubstring : target}
       highlightClass={highlightClass}
     />
   );
