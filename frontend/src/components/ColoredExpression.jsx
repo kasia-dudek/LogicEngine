@@ -66,9 +66,9 @@ export default function ColoredExpression({ expression, className = "" }) {
 
   // Kolory dla różnych poziomów zagnieżdżenia
   const colors = [
-    'text-gray-700',    // poziom 0 - szary zamiast czerwonego
+    'text-red-600',    // poziom 0
     'text-blue-600',   // poziom 1  
-    'text-green-600',   // poziom 2
+    'text-green-600',  // poziom 2
     'text-purple-600', // poziom 3
     'text-orange-600', // poziom 4
     'text-pink-600',   // poziom 5
@@ -77,7 +77,6 @@ export default function ColoredExpression({ expression, className = "" }) {
   ];
 
   const renderExpression = (expr) => {
-    console.log('ColoredExpression rendering:', expr);
     const result = [];
     let level = 0;
     let i = 0;
@@ -87,7 +86,6 @@ export default function ColoredExpression({ expression, className = "" }) {
       
       if (char === '(') {
         const colorClass = colors[level % colors.length];
-        console.log('Opening parenthesis at level', level, 'color:', colorClass);
         result.push(
           <span key={i} className={`font-bold ${colorClass}`}>
             (
@@ -97,7 +95,6 @@ export default function ColoredExpression({ expression, className = "" }) {
       } else if (char === ')') {
         level--;
         const colorClass = colors[level % colors.length];
-        console.log('Closing parenthesis at level', level, 'color:', colorClass);
         result.push(
           <span key={i} className={`font-bold ${colorClass}`}>
             )
