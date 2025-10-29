@@ -231,58 +231,59 @@ def _flatten_sort_dedupe(node: Any) -> Any:
             if not any(equals(a, ex) for ex in unique):
                 unique.append(a)
 
-        # Sort with stable, deterministic ordering
-        # Primary: canonical_str for logical equivalence
-        # Secondary: depth and structure for consistent ordering of equivalent expressions
+        # Sort with stable, deterministic ordering that preserves relative positions
+        # when possible, while ensuring consistency across transformations
         def sort_key(x: Any) -> tuple:
-            """Sort key: (canonical_str, depth, type_key, structure_key)"""
+            """Sort key for consistent ordering"""
             canon = canonical_str(x)
             
-            # Calculate depth for secondary ordering
-            def calc_depth(n: Any) -> int:
-                if not isinstance(n, dict) or 'op' not in n:
-                    return 0
-                if n['op'] in {'AND', 'OR'}:
-                    args = n.get('args', [])
-                    return 1 + max((calc_depth(a) for a in args), default=0)
-                if n['op'] == 'NOT':
-                    return 1 + calc_depth(n.get('child'))
-                return 1
-            depth = calc_depth(x)
+            # Type-based ordering for consistency:
+            # For AND: CONST(1) at end, then other elements
+            # For OR: CONST(0) at start, then other elements  
+            # Within same type: sort alphabetically/structurally
+            type_priority = 0
+            secondary_key = ''
             
-            # Type key: constants < variables < negations < AND < OR
-            type_key = 0
             if isinstance(x, dict) and 'op' in x:
-                op = x['op']
-                if op == 'CONST':
-                    type_key = 0
-                elif op == 'VAR':
-                    type_key = 1
-                elif op == 'NOT':
-                    type_key = 2
-                elif op == 'AND':
-                    type_key = 3
-                elif op == 'OR':
-                    type_key = 4
-            
-            # Structure key: use sorted string representation of structure
-            if isinstance(x, dict) and 'op' in x:
-                if x['op'] in {'AND', 'OR'}:
-                    # For AND/OR, use sorted canonical strings of args for stability
-                    args_canon = sorted(canonical_str(a) for a in x.get('args', []))
-                    struct_key = ','.join(args_canon)
-                elif x['op'] == 'NOT':
-                    struct_key = canonical_str(x.get('child', '?'))
-                elif x['op'] == 'VAR':
-                    struct_key = x.get('name', '?')
-                elif x['op'] == 'CONST':
-                    struct_key = str(x.get('value', '?'))
+                x_op = x['op']
+                if x_op == 'CONST':
+                    val = x.get('value', 0)
+                    # For AND: 1 comes last. For OR: 0 comes first
+                    if op == 'AND':
+                        type_priority = 100 if val == 1 else 50
+                    else:  # OR (op == 'OR')
+                        type_priority = 0 if val == 0 else 50
+                    secondary_key = str(val)
+                elif x_op == 'VAR':
+                    type_priority = 10
+                    secondary_key = x.get('name', '?')
+                elif x_op == 'NOT':
+                    type_priority = 20
+                    child = x.get('child', {})
+                    if isinstance(child, dict) and child.get('op') == 'VAR':
+                        secondary_key = child.get('name', '?')
+                    else:
+                        secondary_key = canonical_str(child)
+                elif x_op == 'AND':
+                    type_priority = 30
+                    # For AND, sort args and use as key
+                    args = x.get('args', [])
+                    args_keys = sorted(canonical_str(a) for a in args)
+                    secondary_key = ','.join(args_keys)
+                elif x_op == 'OR':
+                    type_priority = 40
+                    # For OR, sort args and use as key
+                    args = x.get('args', [])
+                    args_keys = sorted(canonical_str(a) for a in args)
+                    secondary_key = ','.join(args_keys)
                 else:
-                    struct_key = str(x)
+                    type_priority = 99
+                    secondary_key = str(x)
             else:
-                struct_key = str(x)
+                type_priority = 99
+                secondary_key = str(x)
             
-            return (canon, depth, type_key, struct_key)
+            return (type_priority, secondary_key, canon)
         
         unique.sort(key=sort_key)
         return {'op': op, 'args': unique}
