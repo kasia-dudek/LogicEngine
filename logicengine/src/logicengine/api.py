@@ -148,9 +148,8 @@ def laws_apply(req: ApplyLawRequest):
     """Apply a specific law at a given path for preview or alternative simplification."""
     try:
         std_expr = validate_and_standardize(req.expr)
-        # Convert path from JSON format to Python tuples
         path = req.get_path()
-    result = apply_law_once(std_expr, path, req.law)
+        result = apply_law_once(std_expr, path, req.law)
         return result
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
