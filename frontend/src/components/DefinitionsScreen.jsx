@@ -145,14 +145,6 @@ const CONCEPTS = [
     icon: '1',
   },
   {
-    key: 'prime_implicant',
-    name: 'Implikant pierwszorzędowy',
-    description: 'Najprostsza forma wyrażenia logicznego, która pokrywa minterm(y).',
-    example: '(A ∧ B) ∨ ¬C',
-    tip: 'Prime implicants są kluczowe w minimalizacji wyrażeń.',
-    icon: '🔑',
-  },
-  {
     key: 'ast',
     name: 'AST (Abstrakcyjne Drzewo Składniowe)',
     description: 'Struktura drzewiasta reprezentująca składnię wyrażenia logicznego.',
@@ -171,14 +163,6 @@ const CONCEPTS = [
     icon: '🔄',
   },
   {
-    key: 'qm',
-    name: 'Metoda Quine-McCluskey',
-    description: 'Algorytmiczna metoda minimalizacji wyrażeń logicznych.',
-    example: '(A ∧ B) ∨ ¬C',
-    tip: 'QM jest szczególnie przydatna dla większej liczby zmiennych.',
-    icon: 'Q',
-  },
-  {
     key: 'logic_operator',
     name: 'Operator logiczny',
     description: 'Symbol oznaczający operację logiczną (¬, ∧, ∨, →, ↔).',
@@ -193,6 +177,121 @@ const CONCEPTS = [
     example: 'A, B, C',
     tip: 'Zmiennych możesz używać dowolnie, ale każda powinna mieć unikalną nazwę.',
     icon: '🔤',
+  },
+  {
+    key: 'dnf',
+    name: 'DNF (Disjunctive Normal Form)',
+    description: 'Forma alternatywna normalna - suma iloczynów mintermów (np. (A∧¬B) ∨ (B∧C)).',
+    example: '(A ∧ B) ∨ (¬A ∧ C)',
+    tip: 'DNF to suma produktów (OR z ANDs) - minimalna forma alternatywna.',
+    icon: 'Σ',
+    learn: 'DNF (Disjunctive Normal Form) to postać wyrażenia jako suma iloczynów literałów. Każdy iloczyn to minterm. Przykład: (A∧B) ∨ (¬A∧C). Obliczana algorytmem Quine-McCluskey z metodą Petricka dla minimalizacji.',
+    examples: [
+      '(A ∧ B) ∨ (A ∧ ¬B)',
+      'A ∨ (B ∧ C)',
+      '(A ∧ ¬B) ∨ (¬A ∧ C)',
+    ]
+  },
+  {
+    key: 'cnf',
+    name: 'CNF (Conjunctive Normal Form)',
+    description: 'Forma koniunkcyjna normalna - iloczyn sum (maxtermów) (np. (A∨¬B) ∧ (B∨C)).',
+    example: '(A ∨ B) ∧ (¬A ∨ C)',
+    tip: 'CNF to iloczyn sum (AND z ORs) - dualna do DNF.',
+    icon: 'Π',
+    learn: 'CNF (Conjunctive Normal Form) to postać wyrażenia jako iloczyn sum literałów. Każda suma to maxterm. Przykład: (A∨B) ∧ (¬A∨C). Obliczana przez dualność Quine-McCluskey + Petrick.',
+    examples: [
+      '(A ∨ B) ∧ (A ∨ ¬B)',
+      'A ∧ (B ∨ C)',
+      '(A ∨ ¬B) ∧ (¬A ∨ C)',
+    ]
+  },
+  {
+    key: 'quine_mccluskey',
+    name: 'Quine-McCluskey Algorithm',
+    description: 'Algorytm minimalizacji wyrażeń logicznych, szczególnie efektywny dla 4+ zmiennych.',
+    example: 'Metoda krokowa: grupowanie → implicanty → pokrycie',
+    tip: 'QM automatycznie znajduje minimalną postać DNF.',
+    icon: 'Q',
+    learn: 'Quine-McCluskey to algorytm minimalizacji wyrażeń logicznych: (1) Grupowanie mintermów według liczby jedynek, (2) Łączenie grup tworzących prime implicanty, (3) Budowanie tabeli pokrycia, (4) Metoda Petricka dla minimalnego pokrycia. Szczególnie skuteczna dla 4+ zmiennych.',
+    examples: []
+  },
+  {
+    key: 'petrick',
+    name: 'Metoda Petricka',
+    description: 'Algorytm wyboru minimalnego pokrycia z prime implicantów w Quine-McCluskey.',
+    example: 'Pomaga znaleźć najmniejszy zbiór implicantów pokrywający wszystkie mintermy.',
+    tip: 'Petrick wybiera optymalne pokrycie (min. liczba literalów)',
+    icon: 'P',
+    learn: 'Metoda Petricka służy do wyboru minimalnego pokrycia w ostatnim etapie Quine-McCluskey. Tworzy alternatywę koniunkcji prime implicantów pokrywających mintermy, potem upraszcza do minimalnego zbioru. Używana w automatycznej minimalizacji DNF i CNF (dualność).',
+    examples: []
+  },
+  {
+    key: 'prime_implicant',
+    name: 'Prime Implicant (Implikant Pierwszorzędowy)',
+    description: 'Najprostszy implicant, którego nie można dalej uprościć ani usunąć bez utraty pokrycia.',
+    example: 'W QM: łączone pary mintermów tworzą implicanty, z których wybiera się najlepsze.',
+    tip: 'Prime implicant to maksymalna grupa jedynek na mapie Karnaugha.',
+    icon: '🔑',
+    learn: 'Prime implicant to implicant (grupa mintermów), którego nie można poszerzyć ani usunąć bez utraty pokrycia. W Quine-McCluskey są to wszystkie możliwe kombinacje mintermów. Metoda Petricka wybiera minimalny podzbiór pokrywający wszystkie mintermy.',
+    examples: []
+  },
+  {
+    key: 'algebraic_simplification',
+    name: 'Upraszczanie Algebraiczne',
+    description: 'Minimalizacja wyrażeń logicznych przez zastosowanie praw algebry boolowskiej.',
+    example: 'De Morgan: ¬(A∧B) = ¬A∨¬B',
+    tip: '30+ praw: absorbcja, dystrybutywność, idempotencja...',
+    icon: '∞',
+    learn: 'Upraszczanie algebraiczne używa praw algebry boolowskiej: De Morgan, dystrybutywność, absorbcja, element neutralny, idempotencja, dopełnienie, faktoryzacja. System testuje dopasowania, wybiera najlepsze (measure: liczba literalów+węzłów), aplikuje transformację, normalizuje AST, wykrywa oscylację. Preferuje reguły algebraiczne nad aksjomatami.',
+    examples: [
+      'A ∨ (A ∧ B) → A (absorpcja)',
+      'A ∨ ¬A → 1 (dopełnienie)',
+      '¬(A ∧ B) → ¬A ∨ ¬B (De Morgan)',
+    ]
+  },
+  {
+    key: 'axioms',
+    name: 'Aksjomaty Logiczne',
+    description: 'Podstawowe prawa logiki używane w upraszczaniu z meta-zmiennymi.',
+    example: 'A1: (p→q) ⟷ (¬p ∨ q)',
+    tip: 'Aksjomaty używają unifikacji meta-zmiennych (p, q)',
+    icon: 'A',
+    learn: 'Aksjomaty to podstawowe prawa logiczne z meta-zmiennymi: A1: (p→q) ⟷ (¬p∨q) - konwersja implikacji; A2: (p↔q) ⟷ (p∧q)∨(¬p∧¬q) - równoważność na DNF; A12: [p→(q∧¬q)] ⟷ ¬p - sprzeczność implikuje negację. Unifikacja: unify() dopasowuje meta-zmienne (p,q) do rzeczywistych wyrażeń, tworząc mapowanie i instancję.',
+    examples: [
+      'A1: A→B → ¬A∨B',
+      'A2: A↔B → (A∧B)∨(¬A∧¬B)',
+    ]
+  },
+  {
+    key: 'meta_variables',
+    name: 'Meta-zmienne (w Aksjomatach)',
+    description: 'Placeholdery w aksjomatach (p, q) zastępowane przez rzeczywiste wyrażenia.',
+    example: 'Aksjomat A1: (p→q) dopasowuje się do A→B (p→A, q→B)',
+    tip: 'Unifikacja wiąże meta-zmienne z wyrażeniami.',
+    icon: '🔤',
+    learn: 'Meta-zmienne (p, q, r...) to zmienne zastępcze w szablonach aksjomatów. Unify() dopasowuje wzorzec aksjomatu (np. p→q) do rzeczywistego wyrażenia (np. A→B), tworząc mapowanie p→A, q→B. Instantiate() podstawia wartości i tworzy nowe wyrażenie (np. ¬A∨B z A1).',
+    examples: []
+  },
+  {
+    key: 'oscillation',
+    name: 'Oscylacja (Ochrona przed Pętlą)',
+    description: 'Mechanizm wykrywania nieskończonych pętli podczas upraszczania.',
+    example: 'Jeśli wyrażenie już było → przerwanie oscylacji',
+    tip: 'seen_expressions śledzi wszystkie wyrażenia, aby uniknąć pętli.',
+    icon: '⏰',
+    learn: 'Oscylacja to nieskończona pętla (np. ¬(¬A)→A→¬(¬A)...). Mechanizm śledzi wszystkie widziane wyrażenia w seen_expressions. Jeśli nowe wyrażenie już było, system wykrywa oscylację i przerywa proces, zwracając ostatni dobry wynik. Chroni przed nieskończoną pętlą w upraszczaniu.',
+    examples: []
+  },
+  {
+    key: 'unification',
+    name: 'Unifikacja (w Aksjomatach)',
+    description: 'Proces dopasowania wzorców aksjomatów do wyrażeń przez podstawianie meta-zmiennych.',
+    example: 'unify(p→q, A→B) tworzy mapowanie {p→A, q→B}',
+    tip: 'Unifikacja wiąże meta-zmienne z rzeczywistymi wyrażeniami.',
+    icon: '🔗',
+    learn: 'Unifikacja to dopasowanie wzorca aksjomatu do podwyrażenia. Funkcja unify() testuje, czy wzorzec (np. p→q) pasuje do wyrażenia (np. A→B), tworząc mapowanie meta-zmiennych: p→A, q→B. To pozwala aksjomatom działać na różnych wyrażeniach przez podstawienie.',
+    examples: []
   },
 ];
 

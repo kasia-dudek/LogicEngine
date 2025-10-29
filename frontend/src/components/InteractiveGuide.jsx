@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Tooltip } from './Glossary';
 
 const InteractiveGuide = () => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [currentGuide, setCurrentGuide] = useState(0);
 
   const guides = [
@@ -148,15 +148,17 @@ const InteractiveGuide = () => {
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-full text-sm font-medium transition-colors border border-purple-300 flex items-center gap-2"
-      >
-        Przewodnik krok po kroku
-      </button>
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 rounded-full text-sm font-medium transition-colors border border-purple-300 flex items-center gap-2"
+        >
+          Przewodnik krok po kroku
+        </button>
+      )}
       
       {isOpen && (
-        <div className="absolute z-50 w-96 bg-white border border-gray-300 rounded-lg shadow-lg mt-2 right-0">
+        <div className="w-full bg-white border border-gray-300 rounded-lg shadow-lg">
           <div className="p-4 border-b border-gray-200">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-semibold text-gray-800">Przewodnik metody Quine-McCluskey</h3>

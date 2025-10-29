@@ -24,7 +24,7 @@ def bin_to_expr(mask: str, vars_: List[str]) -> str:
             terms.append(vars_[i])
         elif ch == "0":
             terms.append(f"¬{vars_[i]}")
-    return " ∧ ".join(terms) if terms else "1"
+    return f"({' ∧ '.join(terms)})" if len(terms) > 1 else (terms[0] if terms else "1")
 
 
 def count_literals(expr: str) -> int:

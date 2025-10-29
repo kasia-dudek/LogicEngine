@@ -3,8 +3,6 @@
 
 import logging
 
-from .validation import validate, ValidationError
-
 logger = logging.getLogger(__name__)
 
 
@@ -14,11 +12,6 @@ class ONPError(Exception):
 
 def to_onp(expr: str) -> str:
     # single syntax check (no extra parsing)
-    try:
-        validate(expr)
-    except ValidationError as e:
-        logger.error(f"Błąd walidacji: {e}")
-        raise ONPError(str(e))
 
     output = []
     stack = []

@@ -4,7 +4,7 @@ export function getAstExpr(node) {
   if (!node) return '?';
   if (typeof node === 'string') return node;
   if (node.node === '¬') return `¬(${getAstExpr(node.child)})`;
-  if (['∧', '∨', '→', '↔'].includes(node.node)) {
+  if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(node.node)) {
     return `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
   }
   return '?';
@@ -24,7 +24,7 @@ export function getAstStepsNoVars(ast) {
         steps.push({ expr, node });
         seen.add(expr);
       }
-    } else if (['∧', '∨', '→', '↔'].includes(node.node)) {
+    } else if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(node.node)) {
       traverse(node.left);
       traverse(node.right);
       const expr = `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
@@ -46,11 +46,23 @@ export function evalAst(node, row) {
     if (node === '1') return 1;
     return row[node] || 0;
   }
-  if (node.node === '¬') return 1 - evalAst(node.child, row);
-  if (node.node === '∧') return evalAst(node.left, row) && evalAst(node.right, row);
-  if (node.node === '∨') return evalAst(node.left, row) || evalAst(node.right, row);
-  if (node.node === '→') return (1 - evalAst(node.left, row)) || evalAst(node.right, row);
-  if (node.node === '↔') return evalAst(node.left, row) === evalAst(node.right, row);
+  
+  // Unary operators
+  if (node.node === '¬') return evalAst(node.child, row) === 0 ? 1 : 0;
+  
+  // Binary operators
+  const left = evalAst(node.left, row);
+  const right = evalAst(node.right, row);
+  
+  if (node.node === '∧') return (left === 1 && right === 1) ? 1 : 0;
+  if (node.node === '∨') return (left === 1 || right === 1) ? 1 : 0;
+  if (node.node === '⊕') return (left !== right) ? 1 : 0;
+  if (node.node === '↑') return (left === 1 && right === 1) ? 0 : 1; // NAND
+  if (node.node === '↓') return (left === 1 || right === 1) ? 0 : 1; // NOR
+  if (node.node === '→') return (left === 0 || right === 1) ? 1 : 0;
+  if (node.node === '↔') return (left === right) ? 1 : 0;
+  if (node.node === '≡') return (left === right) ? 1 : 0;
+  
   return null;
 }
 
@@ -66,7 +78,7 @@ export function getStepArgs(step) {
   if (!step.node) return [];
   if (typeof step.node === 'string') return [step.node];
   if (step.node.node === '¬') return getStepArgs({ node: step.node.child });
-  if (['∧', '∨', '→', '↔'].includes(step.node.node)) {
+  if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(step.node.node)) {
     return [
       ...getStepArgs({ node: step.node.left }),
       ...getStepArgs({ node: step.node.right })

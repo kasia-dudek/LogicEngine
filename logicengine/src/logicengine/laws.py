@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Optional, Iterable
 from itertools import combinations
 
-from .ast import generate_ast, normalize_bool_ast, canonical_str
+from .ast import generate_ast, normalize_bool_ast, canonical_str, canonical_str_minimal
 
 
 def VAR(name: str) -> Dict[str, Any]:
@@ -25,7 +25,7 @@ def OR(args: Iterable[Any]) -> Dict[str, Any]:
 
 
 def pretty(n: Any) -> str:
-    return canonical_str(n)
+    return canonical_str_minimal(n)
 
 def count_nodes(n: Any) -> int:
     if not isinstance(n, dict):
@@ -244,22 +244,38 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                 args = [a for a in sub["args"] if not (isinstance(a, dict) and a.get("op") == "CONST" and a["value"] == 1)]
                 after = args[0] if len(args) == 1 else {"op": "AND", "args": args}
                 out.append({
-                    "law": "Element neutralny (∧1)",
+                    "law": "Element neutralny (A∧1)",
                     "path": path,
                     "before": sub,
                     "after": after,
-                    "note": "X∧1=X",
+                    "note": "Element neutralny dla koniunkcji: A∧1 = A",
                 })
             if any(isinstance(a, dict) and a.get("op") == "CONST" and a["value"] == 0 for a in sub["args"]):
                 out.append({
-                    "law": "Element pochłaniający (∧0)",
+                    "law": "Element pochłaniający (A∧0)",
                     "path": path,
                     "before": sub,
                     "after": CONST(0),
-                    "note": "X∧0=0",
+                    "note": "Element pochłaniający dla koniunkcji: A∧0 = 0",
                 })
             
-            # Contradiction: A ∧ ¬A = 0
+            args = sub.get("args", [])
+            for i, a in enumerate(args):
+                for j, b in enumerate(args):
+                    if i != j and _is_absorbed_by(a, b):
+                        new_args = [arg for k, arg in enumerate(args) if k != i]
+                        after = new_args[0] if len(new_args) == 1 else {"op": "AND", "args": new_args}
+                        out.append({
+                            "law": "Absorpcja (∧)",
+                            "path": path,
+                            "before": sub,
+                            "after": after,
+                            "note": "A ∧ (A ∨ B) = A",
+                        })
+                        break
+                if len(out) > 0 and out[-1]["law"] == "Absorpcja (∧)":
+                    break
+            
             args = sub.get("args", [])
             for i, a in enumerate(args):
                 if isinstance(a, dict) and a.get("op") == "NOT":
@@ -274,7 +290,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                     "path": path,
                                     "before": sub,
                                     "after": CONST(0),
-                                    "note": "A∧¬A=0",
+                                    "note": "Kontradykcja: A∧¬A = 0",
                                 })
                                 break
             
@@ -302,7 +318,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                 "path": path,
                                 "before": sub,
                                 "after": after,
-                                "note": "(A∨B)∧C = (A∧C)∨(B∧C)",
+                                "note": "Dystrybutywność koniunkcji względem alternatywy: (A∨B)∧C = (A∧C)∨(B∧C)",
                             })
                             break
             
@@ -330,7 +346,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                 "path": path,
                                 "before": sub,
                                 "after": after,
-                                "note": "A∧(B∨C) = (A∧B)∨(A∧C)",
+                                "note": "Dystrybutywność koniunkcji względem alternatywy: A∧(B∨C) = (A∧B)∨(A∧C)",
                             })
                             break
 
@@ -339,30 +355,30 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                 args = [a for a in sub["args"] if not (isinstance(a, dict) and a.get("op") == "CONST" and a["value"] == 0)]
                 after = args[0] if len(args) == 1 else {"op": "OR", "args": args}
                 out.append({
-                    "law": "Element neutralny (∨0)",
+                    "law": "Element neutralny (A∨0)",
                     "path": path,
                     "before": sub,
                     "after": after,
-                    "note": "X∨0=X",
+                    "note": "Element neutralny dla alternatywy: A∨0 = A",
                 })
             if any(isinstance(a, dict) and a.get("op") == "CONST" and a["value"] == 1 for a in sub["args"]):
                 out.append({
-                    "law": "Element pochłaniający (∨1)",
+                    "law": "Element pochłaniający (A∨1)",
                     "path": path,
                     "before": sub,
                     "after": CONST(1),
-                    "note": "X∨1=1",
+                    "note": "Element pochłaniający dla alternatywy: A∨1 = 1",
                 })
 
             # P ∨ ¬P = 1
             lits_list = [to_lit(x) for x in sub.get("args", [])]
             if None not in lits_list and or_factor_is_tautology([t for t in lits_list if t]):
                 out.append({
-                    "law": "Dopełnienie (X ∨ ¬X)",
+                                "law": "Dopełnienie (A ∨ ¬A)",
                     "path": path,
                     "before": sub,
                     "after": CONST(1),
-                    "note": "P ∨ ¬P = 1",
+                    "note": "Tautologia: A∨¬A = 1",
                 })
 
             # remove (P ∧ ¬P) factors inside OR
@@ -501,18 +517,22 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                 #         "after": after,
                 #         "note": "krótszy składnik pokrywa dłuższy",
                 #     })
-                # consensus
                 for var in {v for lits in terms for (v, _) in lits}:
-                    pos = [set(ls) - {(var, True)} for ls in terms if (var, True) in ls]
-                    neg = [set(ls) - {(var, False)} for ls in terms if (var, False) in ls]
-                    candidates = [set(ls) for ls in terms]
+                    pos_terms = [set(ls) - {(var, True)} for ls in terms if (var, True) in ls]
+                    neg_terms = [set(ls) - {(var, False)} for ls in terms if (var, False) in ls]
+                    
+                    consensus_candidates = []
+                    for P in pos_terms:
+                        for N in neg_terms:
+                            consensus = canonical_lits(list(P | N))
+                            consensus_candidates.append(consensus)
+                    
                     to_remove = set()
-                    for P in pos:
-                        for N in neg:
-                            target = canonical_lits(list(P | N))
-                            for idx, C in enumerate(candidates):
-                                if set(target) == C:
-                                    to_remove.add(idx)
+                    for consensus in consensus_candidates:
+                        for idx, term_lits in enumerate(terms):
+                            if set(consensus).issubset(set(term_lits)):
+                                to_remove.add(idx)
+                    
                     if to_remove:
                         new = [a for k, a in enumerate(sub["args"]) if k not in to_remove]
                         after = new[0] if len(new) == 1 else {"op": "OR", "args": new}
@@ -524,13 +544,37 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                             "note": "XY + X'Z + YZ = XY + X'Z",
                         })
                         break
-                # factorization
                 for i, j in combinations(range(len(terms)), 2):
                     S = set(terms[i]); T = set(terms[j])
                     C = S & T
                     if not C:
                         continue
                     R1 = S - C; R2 = T - C
+                    
+                    # Sprawdź czy jeden z termów jest podzbiorem drugiego
+                    if not R1 or not R2:
+                        # Jeden z termów jest podzbiorem drugiego - użyj absorpcji
+                        if not R1:  # S jest podzbiorem T
+                            # A ∧ B ∨ A = A (absorpcja)
+                            after = sub["args"][j]  # użyj większego termu
+                        else:  # T jest podzbiorem S
+                            # A ∨ A ∧ B = A (absorpcja)
+                            after = sub["args"][i]  # użyj większego termu
+                        
+                        if measure(after) < measure(OR([sub["args"][i], sub["args"][j]])):
+                            new_terms = [a for k, a in enumerate(sub["args"]) if k not in {i, j}]
+                            new_terms.append(after)
+                            after = OR(new_terms)
+                            out.append({
+                                "law": "Absorpcja (∨)",
+                                "path": path,
+                                "before": sub,
+                                "after": after,
+                                "note": "X ∨ X∧Y = X",
+                            })
+                            break
+                        continue
+                    
                     C_node = term_from_lits(canonical_lits(list(C)))
                     R1_node = term_from_lits(canonical_lits(list(R1)))
                     R2_node = term_from_lits(canonical_lits(list(R2)))
@@ -731,8 +775,9 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         node = normalize_bool_ast(node)
         after_str = pretty(node)
 
-        # Check for oscillation - if we've seen this AFTER expression before, stop
-        if after_str in seen_expressions:
+        # Check for oscillation - use canonical_str for structural comparison
+        after_canonical = canonical_str(node)
+        if after_canonical in seen_expressions:
             steps.append({
                 "law": "Zatrzymano (oscylacja)",
                 "note": "Wykryto oscylację - system zatrzymany",
@@ -749,10 +794,25 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             })
             break
 
-        # Add current AFTER expression to seen set AFTER checking for oscillation
-        seen_expressions.add(after_str)
+        before_measure = measure(sub_before)
+        after_measure = measure(sub_after)
 
-        applicable_here = [m["law"] for m in matches if m["path"] == path and m["law"] != choice["law"]]
+        if after_measure >= before_measure and choice.get("source") != "axiom":
+            continue
+
+        seen_expressions.add(after_canonical)
+
+        applicable_here = []
+        applied_law = choice["law"]
+        applied_path_tuple = tuple(path)
+        seen_laws = {applied_law}
+        
+        for m in matches:
+            m_path_tuple = tuple(m["path"])
+            m_law = m["law"]
+            if m_path_tuple == applied_path_tuple and m_law not in seen_laws:
+                seen_laws.add(m_law)
+                applicable_here.append(m_law)
 
         steps.append({
             "law": choice["law"],
@@ -813,3 +873,39 @@ def apply_law_once(expr: str, path: List[List[Optional[int]]], law: str) -> Dict
         "after_subexpr": pretty(choice["after"]),
         "alternatives_here": [m["law"] for m in here],
     }
+
+
+
+def _is_absorbed_by(a: Any, b: Any) -> bool:
+    if not isinstance(a, dict) or not isinstance(b, dict):
+        return False
+    
+    a_lits = _extract_literals(a)
+    b_lits = _extract_literals(b)
+    
+    return set(a_lits).issubset(set(b_lits))
+
+def _extract_literals(node: Any) -> List[Lit]:
+    if isinstance(node, str):
+        return [(node, True)]
+    
+    if not isinstance(node, dict):
+        return []
+    
+    op = node.get("op")
+    if op == "VAR":
+        return [(node.get("name", "?"), True)]
+    elif op == "CONST":
+        return []
+    elif op == "NOT":
+        child = node.get("child")
+        if isinstance(child, dict) and child.get("op") == "VAR":
+            return [(child.get("name", "?"), False)]
+        return []
+    elif op in {"AND", "OR"}:
+        result = []
+        for arg in node.get("args", []):
+            result.extend(_extract_literals(arg))
+        return result
+    
+    return []

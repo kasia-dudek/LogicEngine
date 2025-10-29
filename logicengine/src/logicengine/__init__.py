@@ -1,6 +1,6 @@
 ﻿# Core parser and validation
 from .parser import LogicParser, LogicExpressionError, validate_and_standardize
-from .validation import equivalent, ValidationError
+from .validation import ValidationError
 
 # AST and processing
 from .ast import generate_ast, ASTError
@@ -26,7 +26,7 @@ from . import rules
 __all__ = [
     # Core
     'LogicParser', 'LogicExpressionError', 'validate_and_standardize',
-    'ValidationError', 'equivalent',
+    'ValidationError',
     
     # Processing
     'generate_ast', 'ASTError',

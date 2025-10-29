@@ -32,8 +32,8 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
     vars_ = [k for k in table[0] if k != "result"]
     if not vars_:
         raise QMError("Brak zmiennych w wyrażeniu.")
-    if len(vars_) > 4:
-        raise QMError("Obsługiwane są maksymalnie 4 zmienne.")
+    if len(vars_) > 6:
+        raise QMError("Obsługiwane są maksymalnie 6 zmiennych (dla większej liczby obliczenia mogą być bardzo wolne).")
 
     n = len(vars_)
 

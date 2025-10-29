@@ -187,24 +187,49 @@ export default function ASTDisplay({ ast, highlightExpr }) {
     const root = d3.hierarchy(rootH, d => d.children || []);
     const depth = root.height + 1;
     const leaves = Math.max(1, leafCount(ast));
-    const margin = 60;
-    const nodeW = 140;
-    const svgW = Math.max(440, leaves * nodeW + margin * 2);
-    const svgH = 120 + 120 * depth;
-    const layout = d3.tree().size([svgW - margin * 2, svgH - 100]);
+    // Scale based on tree size - smaller trees get smaller nodes and spacing
+    const totalNodes = root.descendants().length;
+    const scaleFactor = Math.min(1, Math.max(0.5, 1 - (totalNodes - 2) * 0.1)); // Scale down small trees
+    
+    const marginX = 60 * scaleFactor;   // horizontal padding
+    const marginY = 20 * scaleFactor;   // vertical padding to prevent clipping
+    const nodeW = 140 * scaleFactor;
+    const levelGap = 120 * scaleFactor;  // vertical distance between levels
+    const svgW = Math.max(440, leaves * nodeW + marginX);
+    
+    // Manual positioning instead of d3.tree() automatic layout
+    const layout = d3.tree().size([svgW - marginX , 0]); // height=0, we'll set Y manually√
     layout(root);
-    return { root, svgW, svgH, margin };
+    
+    // Set Y positions manually based on depth
+    root.descendants().forEach(d => {
+      d.y = marginY + d.depth * levelGap; // Add small top margin
+    });
+    
+    // Calculate actual height needed based on real node positions
+    let minY = Infinity, maxY = -Infinity;
+    root.descendants().forEach(d => {
+      minY = Math.min(minY, d.y);
+      maxY = Math.max(maxY, d.y);
+    });
+    
+    // Height = space from top to bottom node + node radius + minimal padding
+    const nodeRadius = 24 * scaleFactor; // Scale node radius too
+    const strokeWidth = 3 * scaleFactor;
+    const svgH = maxY - minY + nodeRadius * 2 + 30; // space for node radius top/bottom + extra padding
+    
+    return { root, svgW, svgH, marginX, marginY, nodeRadius, strokeWidth };
   }, [ast]);
 
   /* 2) Rysowanie statyczne – tylko kiedy zmieni się AST */
   useEffect(() => {
     if (!memo || !svgRef.current) return;
-    const { root, svgW, svgH, margin } = memo;
+    const { root, svgW, svgH, marginX, marginY, nodeRadius, strokeWidth } = memo;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    svg.attr('viewBox', `0 0 ${svgW} ${svgH}`).attr('width', '100%').attr('height', svgH);
+    svg.attr('viewBox', `0 0 ${svgW} ${svgH}`).attr('width', '100%').attr('height', 'auto');
 
     // defs (gradienty, cień)
     const defs = svg.append('defs');
@@ -229,12 +254,12 @@ export default function ASTDisplay({ ast, highlightExpr }) {
       .selectAll('line')
       .data(root.links())
       .enter().append('line')
-      .attr('x1', d => d.source.x + margin)
-      .attr('y1', d => d.source.y + margin)
-      .attr('x2', d => d.target.x + margin)
-      .attr('y2', d => d.target.y + margin)
+      .attr('x1', d => d.source.x + marginX)
+      .attr('y1', d => d.source.y + marginY)
+      .attr('x2', d => d.target.x + marginX)
+      .attr('y2', d => d.target.y + marginY)
       .attr('stroke','#3b82f6')
-      .attr('stroke-width',3)
+      .attr('stroke-width', strokeWidth)
       .attr('fill','none');
 
     // węzły
@@ -243,28 +268,28 @@ export default function ASTDisplay({ ast, highlightExpr }) {
       .data(root.descendants())
       .enter().append('g')
       .attr('class','node')
-      .attr('transform', d => `translate(${d.x + margin},${d.y + margin})`)
+      .attr('transform', d => `translate(${d.x + marginX},${d.y + marginY})`)
       .style('cursor','pointer');
 
     gNodes.append('circle')
-      .attr('r',24)
+      .attr('r', nodeRadius)
       .attr('fill', d => d.data.type === 'op' ? 'url(#node-grad)' : '#bbf7d0')
       .attr('stroke', d => d.data.type === 'op' ? '#1e40af' : '#059669')
-      .attr('stroke-width',3)
+      .attr('stroke-width', strokeWidth)
       .attr('filter','url(#shadow)');
 
     gNodes.append('text')
       .attr('text-anchor','middle')
       .attr('dy','0.35em')
       .attr('fill', d => d.data.type === 'op' ? 'white' : '#059669')
-      .attr('font-size',22)
+      .attr('font-size',18)
       .attr('font-weight',700)
       .text(d => d.data.name);
 
     // interakcje (tooltips)
     gNodes
       .on('mouseenter', function (event, d) {
-        d3.select(this).select('circle').attr('stroke','#f59e42').attr('stroke-width',5);
+        d3.select(this).select('circle').attr('stroke','#f59e42').attr('stroke-width', strokeWidth * 1.7);
         let content;
         const sym = d.data.name;
         if (d.data.type === 'op' && OP_DEFS[sym]) {
@@ -298,7 +323,7 @@ export default function ASTDisplay({ ast, highlightExpr }) {
           content = <div className="font-mono text-xs">Poddrzewo: {subtreeText(d.data.raw)}</div>;
         }
         const svgEl = svgRef.current;
-        const pt = svgEl.createSVGPoint(); pt.x = d.x + margin; pt.y = d.y + margin;
+        const pt = svgEl.createSVGPoint(); pt.x = d.x + marginX; pt.y = d.y + marginY;
         const ctm = svgEl.getScreenCTM();
         const { x, y } = pt.matrixTransform(ctm);
         const rect = svgEl.parentNode.getBoundingClientRect();
@@ -307,17 +332,17 @@ export default function ASTDisplay({ ast, highlightExpr }) {
       .on('mouseleave', function () {
         d3.select(this).select('circle')
           .attr('stroke', d => d.data.type === 'op' ? '#1e40af' : '#059669')
-          .attr('stroke-width',3);
+          .attr('stroke-width', strokeWidth);
         setTooltip({ visible: false, x: 0, y: 0, content: null });
       });
   }, [memo]);
 
   /* 3) Szybkie podświetlenie – bez przerysowywania całego SVG */
   useEffect(() => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !memo) return;
     const svg = d3.select(svgRef.current);
     const circles = svg.selectAll('g.nodes > g.node > circle');
-    circles.attr('stroke-width',3).attr('stroke', function() {
+    circles.attr('stroke-width', memo.strokeWidth).attr('stroke', function() {
       const d = d3.select(this.parentNode).datum();
       return d.data.type === 'op' ? '#1e40af' : '#059669';
     });
@@ -325,10 +350,10 @@ export default function ASTDisplay({ ast, highlightExpr }) {
     circles.each(function () {
       const d = d3.select(this.parentNode).datum();
       if (subtreeText(d.data.raw) === highlightExpr) {
-        d3.select(this).attr('stroke','#10b981').attr('stroke-width',6);
+        d3.select(this).attr('stroke','#10b981').attr('stroke-width', memo.strokeWidth * 2);
       }
     });
-  }, [highlightExpr]);
+  }, [highlightExpr, memo]);
 
   if (!ast) return <div className="text-gray-500">Brak danych do wyświetlenia AST.</div>;
 

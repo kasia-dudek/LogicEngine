@@ -6,7 +6,6 @@ DNF minimal via Quine–McCluskey + Petrick; CNF minimal by duality from ¬f.
 from __future__ import annotations
 from typing import Dict, Any, List, Tuple, Set, Iterable, Optional
 
-from .parser import LogicParser
 from .truth_table import generate_truth_table
 from .utils import to_bin
 
@@ -19,17 +18,16 @@ def compute_minimal_forms(expr: str) -> Dict[str, Any]:
     notes: List[str] = []
 
     try:
-        std = LogicParser.standardize(expr)
-        table = generate_truth_table(std)
+        table = generate_truth_table(expr)
         if not table:
-            return _error_payload("Empty truth table (input contains no variables?)")
+            return _error_payload("Pusta tabela prawdy (wyrażenie nie zawiera zmiennych?)")
         vars_ = [k for k in table[0].keys() if k != "result"]
         n = len(vars_)
     except Exception as e:
-        return _error_payload(f"Parsing/standardization error: {e}")
+        return _error_payload(f"Błąd generowania tabeli prawdy: {e}")
 
-    # complexity limitation (16 rows)
-    if n > 4:
+    # complexity limitation (64 rows)
+    if n > 6:
         return _too_complex_payload(vars_, n)
 
     try:
@@ -37,13 +35,13 @@ def compute_minimal_forms(expr: str) -> Dict[str, Any]:
         zeros = [i for i, r in enumerate(table) if r["result"] == 0]
 
         if not ones:
-            notes.append("Contradiction → DNF=0, CNF=0.")
+            notes.append("Sprzeczność → DNF=0, CNF=0.")
             dnf_expr = "0"
             cnf_expr = "0"
             dnf_terms, dnf_lits = (0, 0)
             cnf_terms, cnf_lits = (0, 0)
         elif not zeros:
-            notes.append("Tautology → DNF=1, CNF=1.")
+            notes.append("Tautologia → DNF=1, CNF=1.")
             dnf_expr = "1"
             cnf_expr = "1"
             dnf_terms, dnf_lits = (1, 0)
@@ -64,15 +62,15 @@ def compute_minimal_forms(expr: str) -> Dict[str, Any]:
             "dnf": {"expr": dnf_expr, "terms": dnf_terms, "literals": dnf_lits},
             "cnf": {"expr": cnf_expr, "terms": cnf_terms, "literals": cnf_lits},
             # disabled (UI placeholders)
-            "anf": {"expr": "Disabled", "monomials": 0},
-            "nand": {"expr": "Disabled", "gates": 0},
-            "nor": {"expr": "Disabled", "gates": 0},
-            "andonly": {"expr": "Disabled", "literals": 0},
-            "oronly": {"expr": "Disabled", "literals": 0},
+            "anf": {"expr": "Wyłączone", "monomials": 0},
+            "nand": {"expr": "Wyłączone", "gates": 0},
+            "nor": {"expr": "Wyłączone", "gates": 0},
+            "andonly": {"expr": "Wyłączone", "literals": 0},
+            "oronly": {"expr": "Wyłączone", "literals": 0},
             "notes": notes,
         }
     except Exception as e:
-        return _error_payload(f"Computation error: {e}")
+        return _error_payload(f"Błąd obliczeń: {e}")
 
 
 # ----------------- Quine–McCluskey core -----------------
@@ -213,7 +211,7 @@ def _patterns_to_dnf(patterns: List[str], vars_: List[str]) -> str:
                 lits.append(vars_[i])
             elif ch == '0':
                 lits.append(f"¬{vars_[i]}")
-        terms.append(" ∧ ".join(lits) if lits else "1")
+        terms.append(f"({' ∧ '.join(lits)})" if len(lits) > 1 else (lits[0] if lits else "1"))
     return " ∨ ".join(terms)
 
 def _comp_implicants_to_cnf(patterns: List[str], vars_: List[str]) -> str:
@@ -237,7 +235,7 @@ def _comp_implicants_to_cnf(patterns: List[str], vars_: List[str]) -> str:
                 # g has ¬Xi → clause gets Xi
                 lits.append(vars_[i])
             # '-' (don't care) → brak literału w tej klauzuli
-        clause = " ∨ ".join(lits) if lits else "1"
+        clause = f"({' ∨ '.join(lits)})" if len(lits) > 1 else (lits[0] if lits else "1")
         clauses.append(clause)
     # Jeśli któraś klauzula jest "1", całe CNF staje się "1 ∧ ..." = ...
     # ale taka sytuacja nie powinna wystąpić dla sensownych implicantów.
@@ -274,14 +272,14 @@ def _count_terms_literals_disj(expr: str) -> Tuple[int, int]:
 def _too_complex_payload(vars_: List[str], n: int) -> Dict[str, Any]:
     return {
         "vars": vars_,
-        "dnf": {"expr": "Too complex", "terms": 0, "literals": 0},
-        "cnf": {"expr": "Too complex", "terms": 0, "literals": 0},
-        "anf": {"expr": "Disabled", "monomials": 0},
-        "nand": {"expr": "Disabled", "gates": 0},
-        "nor": {"expr": "Disabled", "gates": 0},
-        "andonly": {"expr": "Disabled", "literals": 0},
-        "oronly": {"expr": "Disabled", "literals": 0},
-        "notes": [f"Expression has {n} variables - too complex to process"],
+        "dnf": {"expr": "Za złożone", "terms": 0, "literals": 0},
+        "cnf": {"expr": "Za złożone", "terms": 0, "literals": 0},
+        "anf": {"expr": "Wyłączone", "monomials": 0},
+        "nand": {"expr": "Wyłączone", "gates": 0},
+        "nor": {"expr": "Wyłączone", "gates": 0},
+        "andonly": {"expr": "Wyłączone", "literals": 0},
+        "oronly": {"expr": "Wyłączone", "literals": 0},
+        "notes": [f"Wyrażenie ma {n} zmiennych - za złożone do przetworzenia (maksymalnie 6 zmiennych)"],
     }
 
 def _error_payload(msg: str) -> Dict[str, Any]:
@@ -289,10 +287,10 @@ def _error_payload(msg: str) -> Dict[str, Any]:
         "vars": [],
         "dnf": {"expr": msg, "terms": 0, "literals": 0},
         "cnf": {"expr": msg, "terms": 0, "literals": 0},
-        "anf": {"expr": "Disabled", "monomials": 0},
-        "nand": {"expr": "Disabled", "gates": 0},
-        "nor": {"expr": "Disabled", "gates": 0},
-        "andonly": {"expr": "Disabled", "literals": 0},
-        "oronly": {"expr": "Disabled", "literals": 0},
+        "anf": {"expr": "Wyłączone", "monomials": 0},
+        "nand": {"expr": "Wyłączone", "gates": 0},
+        "nor": {"expr": "Wyłączone", "gates": 0},
+        "andonly": {"expr": "Wyłączone", "literals": 0},
+        "oronly": {"expr": "Wyłączone", "literals": 0},
         "notes": [msg],
     }

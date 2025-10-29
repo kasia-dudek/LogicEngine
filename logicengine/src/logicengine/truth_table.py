@@ -4,7 +4,6 @@
 from typing import List, Dict, Any, Optional
 from itertools import product
 
-from .validation import validate, ValidationError
 from .onp import to_onp
 
 
@@ -64,10 +63,6 @@ def _eval_rpn(tokens: List[str], env: Dict[str, int]) -> int:
 
 def generate_truth_table(expr: str, force_vars: Optional[List[str]] = None) -> List[Dict[str, Any]]:
     """Return a truth table as a list of rows: {A:0,...,'result':0}."""
-    try:
-        validate(expr)
-    except ValidationError as e:
-        raise TruthTableError(f"Błąd walidacji wyrażenia: {e}")
 
     vars_ = force_vars if force_vars is not None else _vars_in_expr(expr)
     if not vars_ and expr not in {"0", "1"}:

@@ -1,6 +1,7 @@
 ﻿"""HTTP API for the logic engine (FastAPI)."""
 
 from __future__ import annotations
+from typing import List, Optional, Tuple, Union, Any as TypingAny
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -13,7 +14,7 @@ from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 from .tautology import is_tautology
 from .contradiction import is_contradiction
-from .laws import simplify_with_laws
+from .laws import simplify_with_laws, apply_law_once
 from .minimal_forms import compute_minimal_forms
 
 app = FastAPI(title="Logic Engine API")
@@ -34,6 +35,22 @@ class ExprRequest(BaseModel):
 class LawsRequest(BaseModel):
     expr: str
     mode: str = "mixed"  # "algebraic", "axioms", "mixed"
+
+class ApplyLawRequest(BaseModel):
+    expr: str
+    path: List[List[Union[str, int, None]]]  # Format JSON: [["args", 0], ["args", 1], ...] lub [["child", null]]
+    law: str
+    
+    def get_path(self):
+        """Convert path from JSON format to Python tuples."""
+        result = []
+        for item in self.path:
+            if isinstance(item, list) and len(item) == 2:
+                # item is ["args", 0] or ["child", null]
+                result.append((item[0], item[1]))
+            else:
+                result.append((item[0] if isinstance(item, (list, tuple)) and len(item) > 0 else "", None))
+        return result
 
 # ---------- endpoints ----------
 
@@ -126,6 +143,19 @@ def laws(req: LawsRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
+@app.post("/laws_apply")
+def laws_apply(req: ApplyLawRequest):
+    """Apply a specific law at a given path for preview or alternative simplification."""
+    try:
+        std_expr = validate_and_standardize(req.expr)
+        # Convert path from JSON format to Python tuples
+        path = req.get_path()
+    result = apply_law_once(std_expr, path, req.law)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/minimal_forms")
 def minimal_forms(req: ExprRequest):
     """Returns all minimal forms for display in ResultScreen/MinimalForms.jsx."""
@@ -134,3 +164,4 @@ def minimal_forms(req: ExprRequest):
         return compute_minimal_forms(std_expr)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
+

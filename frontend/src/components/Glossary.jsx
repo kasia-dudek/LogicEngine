@@ -41,7 +41,7 @@ const glossary = {
 };
 
 const Glossary = () => {
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTerm, setSelectedTerm] = useState(null);
 
@@ -52,15 +52,17 @@ const Glossary = () => {
 
   return (
     <div className="relative">
-      <button
-        onClick={() => setIsOpen(!isOpen)}
-        className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full text-sm font-medium transition-colors border border-blue-300"
-      >
-        Słownik pojęć
-      </button>
+      {!isOpen && (
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1 rounded-full text-sm font-medium transition-colors border border-blue-300"
+        >
+          Słownik pojęć
+        </button>
+      )}
       
       {isOpen && (
-        <div className="absolute z-50 w-96 bg-white border border-gray-300 rounded-lg shadow-lg mt-2 right-0">
+        <div className="w-full bg-white border border-gray-300 rounded-lg shadow-lg">
           <div className="p-4 border-b border-gray-200">
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-semibold text-gray-800">Słownik pojęć</h3>

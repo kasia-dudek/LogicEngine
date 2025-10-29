@@ -161,7 +161,7 @@ function groupExpr(group, vars, n) {
     if (common[i] === "1") parts.push(vars[i]);
     else if (common[i] === "0") parts.push(`¬${vars[i]}`);
   }
-  const expr = parts.length ? parts.join(" ∧ ") : "1";
+  const expr = parts.length ? `(${parts.join(" ∧ ")})` : "1";
   const literals = parts.length; // dla '1' = 0
   return { pattern: common.join(""), expr, literals };
 }
@@ -249,14 +249,27 @@ function detectWrap(cells, nRows, nCols) {
 
 /** ————— PUBLICZNY KOMPONENT ————— */
 export default function KMapDisplay(props) {
-  const { vars, minterms } = props;
+  const { vars, minterms, error } = props;
   const backendOnly = !Array.isArray(vars) || !Array.isArray(minterms);
-  if (backendOnly) return <KMapBackendOnly {...props} />;
+  if (backendOnly) return <KMapBackendOnly {...props} error={error} />;
   return <KMapWithAxis {...props} />;
 }
 
 /** ————— TRYB: BACKEND ONLY ————— */
-function KMapBackendOnly({ kmap, groups = [], all_groups = [], showAll = false, result }) {
+function KMapBackendOnly({ kmap, groups = [], all_groups = [], showAll = false, result, error }) {
+  if (error) {
+    return (
+      <div className="text-center p-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="text-yellow-800 font-semibold mb-2">
+          ⚠️ Mapa Karnaugha niedostępna
+        </div>
+        <div className="text-yellow-700">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   if (!kmap || !Array.isArray(kmap) || !kmap.length || !Array.isArray(kmap[0]) || !kmap[0].length) {
     return (
       <div className="text-red-600 font-semibold">
@@ -504,6 +517,10 @@ function KMapTable({ kmap, rowLabels, colLabels, groups, highlightMap, result, s
                           })}
                         </div>
                       ) : null}
+                      {/* Znak zapytania dla niewybranych grup */}
+                      {!first && active === null && (
+                        <span className="absolute top-1 right-1 text-xs font-semibold text-gray-400" title="Ta komórka nie jest w żadnej wybranej grupie">?</span>
+                      )}
                     </td>
                   );
                 })}
@@ -543,11 +560,16 @@ function KMapTable({ kmap, rowLabels, colLabels, groups, highlightMap, result, s
         Uproszczone: <span className="font-mono text-green-700">{result}</span>
       </div>
 
-      <div className="text-xs text-gray-500 max-w-lg text-center">
-        {anyWrap
-          ? "Niektóre grupy zawijają się przez krawędzie mapy (↔/↕). Kliknij chip grupy, aby ją odizolować."
-          : "Kliknij chip grupy, aby ją odizolować. Kropki w komórce pokazują przynależność do dodatkowych grup."}
-      </div>
+      {anyWrap && (
+        <div className="text-xs text-gray-500 max-w-lg text-center">
+          Niektóre grupy zawijają się przez krawędzie mapy (↔/↕). Kliknij chip grupy, aby ją odizolować.
+        </div>
+      )}
+      {!anyWrap && groups.length > 0 && (
+        <div className="text-xs text-gray-500 max-w-lg text-center">
+          Kropki w komórce pokazują przynależność do dodatkowych grup. Kliknij chip grupy, aby ją odizolować.
+        </div>
+      )}
     </>
   );
 }

@@ -5,34 +5,11 @@ import ExpressionHistory from './components/ExpressionHistory';
 import StartScreen from './components/StartScreen';
 import PrintableResults from './components/PrintableResults';
 
-const EXAMPLES = [
-  '(A ∧ B) ∨ ¬C',
-  'A ∨ (B ∧ C)',
-  'A → B',
-  'A ↔ B',
-  '¬(A ∧ B)',
-  'A ∧ (B ∨ C)',
-  'A ∨ B ∨ C',
-  'A ∧ B ∧ C',
-  'A ∨ ¬A',
-  'A ∧ ¬A',
-  '((A ∧ B) ∨ (C ∧ D)) → (¬D ∨ (A ∧ C))',
-  '¬((A ∨ B) ∧ (C ∨ D)) ∨ (D ∧ (A → D))',
-  '((A ↔ B) ∧ (C → D)) ∨ (¬A ∧ (B ∨ C))',
-  '((A ∧ (B ∨ C)) → (D ∨ A)) ∧ (¬B ∨ (C ∧ D))',
-  '((A ∨ B ∨ C) ∧ (D ∨ A)) → (A ∧ ¬D)',
-  'A ⊕ B',
-  'A ↑ B',
-  'A ↓ B',
-  'A ≡ B',
-];
-
 function App() {
   const [screen, setScreen] = useState('start');
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [showExamples, setShowExamples] = useState(false);
   const [printData, setPrintData] = useState(null);
 
   // Obsługa URL routing dla /print
@@ -103,14 +80,8 @@ function App() {
   };
 
   const handleLoadHistory = (item) => {
-    setHistoryItem(item);
     setInput(item.expression);
     setScreen('result');
-  };
-
-  const handleExample = (expr) => {
-    setShowExamples(false);
-    handleAnalyze(expr);
   };
 
   const handleExportToPrint = (data, input) => {
@@ -141,29 +112,8 @@ function App() {
           <StartScreen
             onSubmit={handleAnalyze}
             onDefinitions={handleShowDefinitions}
-            onExamples={() => setShowExamples(true)}
             onHistory={handleShowHistory}
           />
-          {showExamples && (
-            <div className="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
-              <div className="bg-white rounded-2xl shadow-2xl p-8 max-w-md w-full relative animate-fade-in border border-blue-100 overflow-y-auto max-h-[90vh]">
-                <button className="absolute top-2 right-2 text-gray-500 hover:text-gray-800 text-2xl" onClick={() => setShowExamples(false)}>✕</button>
-                <h2 className="text-2xl font-bold mb-6 text-blue-700 text-center">Przykładowe wyrażenia</h2>
-                <ul className="space-y-3">
-                  {EXAMPLES.map((ex, i) => (
-                    <li key={i}>
-                      <button
-                        className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 font-mono px-4 py-2 rounded-xl transition-all text-lg text-left shadow"
-                        onClick={() => handleExample(ex)}
-                      >
-                        {ex}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </div>
-          )}
         </>
       )}
       {screen === 'result' && <ResultScreen input={input} onBack={() => setScreen('start')} saveToHistory={saveToHistory} onExportToPrint={handleExportToPrint} onShowDefinitions={handleShowDefinitions} />}

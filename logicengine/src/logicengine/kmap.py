@@ -6,7 +6,6 @@ from typing import List, Dict, Any, Tuple
 
 from .truth_table import generate_truth_table, TruthTableError
 from .utils import to_bin, bin_to_expr, count_literals
-from .validation import validate, ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +27,6 @@ def _default_axis(vars: List[str]) -> Dict[str, List[str]]:
 
 def simplify_kmap(expr: str) -> Dict[str, Any]:
     steps: List[Dict[str, Any]] = []
-    try:
-        validate(expr)
-    except ValidationError as e:
-        raise KMapError(f"Błąd walidacji: {e}")
 
     try:
         table = generate_truth_table(expr)
@@ -40,8 +35,8 @@ def simplify_kmap(expr: str) -> Dict[str, Any]:
 
     vars_ = sorted({ch for ch in expr if ch.isalpha()})
     n = len(vars_)
-    if n < 1 or n > 4:
-        raise KMapError("Obsługiwane są wyrażenia z 1-4 zmiennymi")
+    if n < 1 or n > 5:
+        raise KMapError("Obsługiwane są wyrażenia z 1-5 zmiennymi (powyżej 5 zmiennych wizualizacja mapy Karnaugha staje się bardzo trudna)")
 
     minterms = [i for i, row in enumerate(table) if row["result"]]
     steps.append({"step": "Krok 1: Znajdź mintermy", "data": {"minterms": minterms}})

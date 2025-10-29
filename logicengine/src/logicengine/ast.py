@@ -4,7 +4,6 @@
 import logging
 from typing import Any, Dict, List, Optional
 
-from .validation import validate, ValidationError
 from .parser import LogicParser, LogicExpressionError
 
 logger = logging.getLogger(__name__)
@@ -142,11 +141,6 @@ def generate_ast(expr: str) -> Dict[str, Any]:
         std = LogicParser.parse(expr)
     except LogicExpressionError as e:
         logger.error(f"Parser error: {e}")
-        raise ASTError(str(e))
-
-    try:
-        validate(std)
-    except ValidationError as e:
         raise ASTError(str(e))
 
     try:
@@ -338,6 +332,123 @@ def canonical_str(node: Any) -> str:
             left = canonical_str(node.get('left'))
             right = canonical_str(node.get('right'))
             return f"({left} {op} {right})"
+
+    return str(node)
+
+
+def canonical_str_minimal(node: Any, parent_precedence: int = 0) -> str:
+    """Minimal string representation with fewer parentheses based on operator precedence.
+    
+    Precedence: NOT (100) > AND (2) > OR (3) > other (10)
+    Lower precedence value = higher priority.
+    """
+    if node is None:
+        return '?'
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return str(node)
+    
+    try:
+        return _canonical_str_minimal_internal(node, parent_precedence)
+    except (RecursionError, MemoryError):
+        return canonical_str(node)
+
+
+def _canonical_str_minimal_internal(node: Any, parent_precedence: int = 0) -> str:
+    if node is None:
+        return '?'
+    if isinstance(node, str):
+        return node
+    if not isinstance(node, dict):
+        return str(node)
+
+    op_map = {
+        'NOT': ('¬', 100),
+        'AND': ('∧', 2),
+        'OR': ('∨', 3),
+    }
+    
+    if 'op' in node:
+        op = node['op']
+        
+        # Variable or constant
+        if op == 'VAR':
+            return node.get('name', '?')
+        if op == 'CONST':
+            return str(node.get('value', '?'))
+        
+        symbol, my_prec = op_map.get(op, (op, 10))
+        
+        if op == 'NOT':
+            child = _canonical_str_minimal_internal(node.get('child'), my_prec)
+            if isinstance(child, str) and len(child) == 1 and child.isupper():
+                result = f"¬{child}"
+            elif isinstance(child, str) and not child.startswith('(') and not ' ' in child:
+                result = f"¬{child}"
+            elif isinstance(child, str) and child.startswith('(') and child.endswith(')') and len(child) == 3:
+                result = f"¬{child[1:-1]}"
+            elif isinstance(child, str) and not child.startswith('(') and ' ' in child and not child.startswith('¬'):
+                result = f"¬({child})"
+            else:
+                result = f"¬{child}"
+            return result if parent_precedence <= 0 or my_prec < parent_precedence else f"({result})"
+        
+        if op in {'AND', 'OR'}:
+            args = node.get('args', [])
+            if not args:
+                return '?'
+            
+            def get_arg_precedence(arg_node):
+                if not isinstance(arg_node, dict) or 'op' not in arg_node:
+                    return None
+                arg_op = arg_node.get('op')
+                return op_map.get(arg_op, ('', 10))[1] if arg_op in {'NOT', 'AND', 'OR'} else None
+            
+            parts = []
+            for arg in args:
+                arg_prec = get_arg_precedence(arg)
+                arg_parent_prec = my_prec if arg_prec is None or arg_prec >= my_prec else 0
+                arg_str = _canonical_str_minimal_internal(arg, arg_parent_prec)
+                parts.append(arg_str)
+            
+            inner = f" {symbol} ".join(parts)
+            
+            if parent_precedence <= 0:
+                return inner
+            elif my_prec < parent_precedence:
+                return inner
+            else:
+                return f"({inner})"
+        
+        left = _canonical_str_minimal_internal(node.get('left'), 10)
+        right = _canonical_str_minimal_internal(node.get('right'), 10)
+        result = f"{left} {op} {right}"
+        if parent_precedence <= 0:
+            return result
+        return f"({result})"
+
+    if 'node' in node:
+        op = node['node']
+        symbol, my_prec = op_map.get(op, (op, 10))
+        
+        if op == '¬':
+            child = _canonical_str_minimal_internal(_guess_unary_child(node), my_prec)
+            if isinstance(child, str) and not child.startswith('(') and ' ' in child and not child.startswith('¬'):
+                result = f"¬({child})"
+            else:
+                result = f"¬{child}"
+            return result if parent_precedence <= 0 or my_prec < parent_precedence else f"({result})"
+        
+        if op in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
+            my_prec = 2 if op == '∧' else 3 if op == '∨' else 10
+            left = _canonical_str_minimal_internal(node.get('left'), my_prec)
+            right = _canonical_str_minimal_internal(node.get('right'), my_prec)
+            
+            result = f"{left} {op} {right}"
+            if parent_precedence <= 0 or my_prec < parent_precedence:
+                return result
+            return f"({result})"
 
     return str(node)
 

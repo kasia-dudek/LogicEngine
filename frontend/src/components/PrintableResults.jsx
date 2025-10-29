@@ -4,7 +4,7 @@ import QMSteps from './QMSteps';
 import KMapDisplay from './KMapDisplay';
 import ASTDisplay from './ASTDisplay';
 import LogicGatesDisplay from './LogicGatesDisplay';
-import { computeStepValues, getStepArgs } from '../utils/astHelpers';
+import { getStepArgs, computeStepValues } from '../utils/astHelpers';
 
 
 export default function PrintableResults({ data, input, onBack }) {

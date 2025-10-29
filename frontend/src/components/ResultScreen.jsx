@@ -7,8 +7,7 @@ import LogicGatesDisplay from './LogicGatesDisplay';
 import Toast from './Toast';
 import ExportResults from './ExportResults';
 import LawsPanel from './LawsPanel';
-import MinimalForms from './MinimalForms';
-import { getAstStepsNoVars, computeStepValues, getStepArgs } from '../utils/astHelpers';
+import { getAstStepsNoVars, evalAst, getStepArgs } from '../utils/astHelpers';
 
 const TABS = [
   { key: 'truth', label: 'Tabela prawdy' },
@@ -28,6 +27,9 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const [slideStep, setSlideStep] = useState(0);
   const [highlightExpr, setHighlightExpr] = useState(null);
   const [pickedLawStep, setPickedLawStep] = useState(null);
+  const [showTruthTableLegend, setShowTruthTableLegend] = useState(false);
+  const [showDnfLegend, setShowDnfLegend] = useState(false);
+  const [showCnfLegend, setShowCnfLegend] = useState(false);
 
   const resetHighlighting = () => {
     setHighlightExpr(null);
@@ -57,12 +59,24 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
             });
-            if (!probeRes.ok) throw new Error(`HTTP ${probeRes.status}`);
+            if (!probeRes.ok) {
+              // Try to get error details from response
+              let errorMessage = `HTTP ${probeRes.status}`;
+              try {
+                const errorData = await probeRes.json();
+                if (errorData.detail) {
+                  errorMessage = errorData.detail;
+                }
+              } catch (parseError) {
+                // If we can't parse error response, use status code
+              }
+              throw new Error(errorMessage);
+            }
             probe = await probeRes.json();
           } catch (e) {
-            setError(`Backend connection failed: ${e.message}`);
+            setError(`Błąd walidacji: ${e.message}`);
             setLoading(false);
-            setToast({ message: `Backend niedostępny: ${e.message}`, type: 'error' });
+            setToast({ message: `Błąd: ${e.message}`, type: 'error' });
             return;
           }
 
@@ -108,40 +122,96 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) {
+                const errorData = await r.json();
+                throw new Error(errorData.detail || `HTTP ${r.status}`);
+              }
+              return r.json();
+            }),
             fetchWithTimeout(`${apiUrl}/qm`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) {
+                const errorData = await r.json();
+                throw new Error(errorData.detail || `HTTP ${r.status}`);
+              }
+              return r.json();
+            }),
             fetchWithTimeout(`${apiUrl}/laws`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input, mode: 'mixed' }),
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) {
+                const errorData = await r.json();
+                throw new Error(errorData.detail || `HTTP ${r.status}`);
+              }
+              return r.json();
+            }),
             fetchWithTimeout(`${apiUrl}/minimal_forms`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
-            }).then(r => r.json()),
+            }).then(async r => {
+              if (!r.ok) {
+                const errorData = await r.json();
+                throw new Error(errorData.detail || `HTTP ${r.status}`);
+              }
+              return r.json();
+            }),
           ]);
 
           // Helper function to extract data from Promise.allSettled results
-          const getResult = (result) => result.status === 'fulfilled' ? result.value : null;
+          const getResult = (result) => {
+            if (result.status === 'fulfilled') {
+              return { data: result.value, error: null };
+            } else {
+              // Extract error message from rejected promise
+              let errorMessage = 'Nieznany błąd';
+              if (result.reason && result.reason.message) {
+                errorMessage = result.reason.message;
+              } else if (result.reason && typeof result.reason === 'string') {
+                errorMessage = result.reason;
+              }
+              return { data: null, error: errorMessage };
+            }
+          };
           
+          const astResult = getResult(astRes);
+          const onpResult = getResult(onpRes);
+          const truthResult = getResult(truthRes);
+          const tautResult = getResult(tautRes);
+          const contrResult = getResult(contrRes);
+          const kmapResult = getResult(kmapRes);
+          const qmResult = getResult(qmRes);
+          const lawsResult = getResult(lawsRes);
+          const minimalFormsResult = getResult(minimalFormsRes);
+
           const res = {
             expression: input,
             standardized: probe.standardized,
-            ast: getResult(astRes)?.ast || null,
-            onp: getResult(onpRes)?.onp || null,
-            truth_table: getResult(truthRes)?.truth_table || null,
-            kmap: getResult(kmapRes) || null,
-            kmap_simplification: getResult(kmapRes) || null,
-            qm: getResult(qmRes) || null,
-            is_tautology: getResult(tautRes)?.is_tautology || false,
-            is_contradiction: getResult(contrRes)?.is_contradiction || false,
-            laws: getResult(lawsRes) || null,
-            minimal_forms: getResult(minimalFormsRes) || null,
+            ast: astResult.data?.ast || null,
+            ast_error: astResult.error,
+            onp: onpResult.data?.onp || null,
+            onp_error: onpResult.error,
+            truth_table: truthResult.data?.truth_table || null,
+            truth_error: truthResult.error,
+            kmap: kmapResult.data || null,
+            kmap_error: kmapResult.error,
+            kmap_simplification: kmapResult.data || null,
+            qm: qmResult.data || null,
+            qm_error: qmResult.error,
+            is_tautology: tautResult.data?.is_tautology || false,
+            taut_error: tautResult.error,
+            is_contradiction: contrResult.data?.is_contradiction || false,
+            contr_error: contrResult.error,
+            laws: lawsResult.data || null,
+            laws_error: lawsResult.error,
+            minimal_forms: minimalFormsResult.data || null,
+            minimal_forms_error: minimalFormsResult.error,
           };
 
           setData(res);
@@ -156,13 +226,13 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
         }
 
         // This should not happen as we set default API URL
-        setError('No API URL configured');
+        setError('Brak skonfigurowanego URL API');
         setLoading(false);
-        setToast({ message: 'No API URL configured', type: 'error' });
+        setToast({ message: 'Brak skonfigurowanego URL API', type: 'error' });
       } catch (e) {
-        setError(e.message || 'API error');
+        setError(e.message || 'Błąd API');
         setLoading(false);
-        setToast({ message: `Error: ${e.message}`, type: 'error' });
+        setToast({ message: `Błąd: ${e.message}`, type: 'error' });
       }
     };
 
@@ -196,7 +266,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
           </h1>
 
           {/* Summary cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <div className="bg-blue-50 rounded-xl p-4 border border-blue-100">
               <div className="text-xs text-blue-700 font-semibold uppercase">Wpisane wyrażenie</div>
               <div className="font-mono text-lg break-all">{data.expression}</div>
@@ -248,8 +318,103 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
             </div>
           </div>
 
+          {/* DNF/CNF Row */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+            {/* DNF Card */}
+            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 relative">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-blue-700 font-semibold uppercase">DNF (Suma iloczynów)</div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onMouseEnter={() => setShowDnfLegend(true)}
+                      onMouseLeave={() => setShowDnfLegend(false)}
+                      className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center border border-blue-300 hover:bg-blue-200 transition-colors"
+                      aria-label="Wyjaśnienie DNF"
+                      title="Wyjaśnienie DNF"
+                    >
+                      ?
+                    </button>
+                    {showDnfLegend && (
+                      <div className="absolute z-50 w-80 p-3 mt-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg border border-gray-700 transform -translate-x-1/2 left-1/2">
+                        <div className="font-semibold text-blue-300 mb-1">DNF (Disjunctive Normal Form)</div>
+                        <div className="text-gray-200">
+                          <strong>Metoda:</strong> Quine-McCluskey + Petrick<br/>
+                          <strong>Opis:</strong> Suma iloczynów literałów (mintermy). Każdy minterm reprezentuje jeden wiersz tabeli prawdy z wynikiem 1.<br/>
+                          <strong>Przykład:</strong> (A∧B) ∨ (¬A∧C) ∨ (B∧¬C)
+                        </div>
+                        <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-l border-t border-gray-700"></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Statystyki w górnym prawym rogu */}
+                <div className="text-xs">
+                  <div className="bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-gray-500">Terminy:</span> <span className="font-bold text-blue-600">{data.minimal_forms?.dnf?.terms || 0}</span> | 
+                    <span className="text-gray-500"> Literały:</span> <span className="font-bold text-blue-600">{data.minimal_forms?.dnf?.literals || 0}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="font-mono text-lg break-all">
+                {data.minimal_forms?.dnf?.expr || <span className="text-gray-400">Brak</span>}
+              </div>
+            </div>
+
+            {/* CNF Card */}
+            <div className="bg-green-50 rounded-xl p-4 border border-green-100 relative">
+              <div className="flex items-start justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="text-xs text-green-700 font-semibold uppercase">CNF (Iloczyn sum)</div>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onMouseEnter={() => setShowCnfLegend(true)}
+                      onMouseLeave={() => setShowCnfLegend(false)}
+                      className="w-5 h-5 rounded-full bg-green-100 text-green-700 text-xs flex items-center justify-center border border-green-300 hover:bg-green-200 transition-colors"
+                      aria-label="Wyjaśnienie CNF"
+                      title="Wyjaśnienie CNF"
+                    >
+                      ?
+                    </button>
+                    {showCnfLegend && (
+                      <div className="absolute z-50 w-80 p-3 mt-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg border border-gray-700 transform -translate-x-1/2 left-1/2">
+                        <div className="font-semibold text-green-300 mb-1">CNF (Conjunctive Normal Form)</div>
+                        <div className="text-gray-200">
+                          <strong>Metoda:</strong> Duality via Quine-McCluskey + Petrick<br/>
+                          <strong>Opis:</strong> Iloczyn sum literałów (maxtermy). Każdy maxterm reprezentuje jeden wiersz tabeli prawdy z wynikiem 0.<br/>
+                          <strong>Przykład:</strong> (A∨B) ∧ (¬A∨C) ∧ (B∨¬C)
+                        </div>
+                        <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-l border-t border-gray-700"></div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+                {/* Statystyki w górnym prawym rogu */}
+                <div className="text-xs">
+                  <div className="bg-gray-100 px-2 py-1 rounded">
+                    <span className="text-gray-500">Terminy:</span> <span className="font-bold text-green-600">{data.minimal_forms?.cnf?.terms || 0}</span> | 
+                    <span className="text-gray-500"> Literały:</span> <span className="font-bold text-green-600">{data.minimal_forms?.cnf?.literals || 0}</span>
+                  </div>
+                </div>
+              </div>
+              <div className="font-mono text-lg break-all">
+                {data.minimal_forms?.cnf?.expr || <span className="text-gray-400">Brak</span>}
+              </div>
+            </div>
+          </div>
+
+          {/* AST always visible below summary cards */}
+          {data?.ast && (
+            <div className="mt-4 mb-4 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
+              <h3 className="text-xl font-bold text-gray-800 mb-4">Drzewo składniowe (AST)</h3>
+              <ASTDisplay ast={data.ast} highlightExpr={highlightExpr} />
+            </div>
+          )}
+
         {/* Tabs */}
-        <div className="mb-8">
+        <div className="mb-4">
           <div className="flex gap-2 mb-4 justify-center">
             {TABS.map(t => (
               <button
@@ -275,6 +440,34 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
               <div className="overflow-x-auto">
                 {data.truth_table && data.truth_table.length > 0 ? (
                   <>
+                    <div className="flex items-center gap-2 mb-4">
+                      <h3 className="text-xl font-bold text-gray-800">Tabela prawdy</h3>
+                      <button
+                        className="w-6 h-6 rounded-full bg-blue-100 hover:bg-blue-200 text-blue-700 flex items-center justify-center text-sm font-bold"
+                        onClick={() => setShowTruthTableLegend(!showTruthTableLegend)}
+                        title="Wyjaśnienie tabeli prawdy"
+                      >
+                        ?
+                      </button>
+                    </div>
+                    {showTruthTableLegend && (
+                      <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4 rounded">
+                        <button
+                          className="float-right text-blue-700 hover:text-blue-900 text-xl font-bold"
+                          onClick={() => setShowTruthTableLegend(false)}
+                        >
+                          ✕
+                        </button>
+                        <h4 className="font-bold text-blue-900 mb-2">Wyjaśnienie tabeli prawdy:</h4>
+                        <ul className="list-disc list-inside space-y-1 text-sm text-gray-700">
+                          <li><strong>Wiersze z wynikiem 1</strong> (podświetlone na zielono) to <strong>mintermy</strong> - kombinacje zmiennych, dla których wyrażenie jest prawdziwe</li>
+                          <li><strong>Kroki obliczeń (slajdy):</strong> Prezentacja krok po kroku, jak wygląda obliczenie każdego podwyrażenia</li>
+                          <li><strong>Podświetlona kolumna (żółta):</strong> Aktualnie obliczany krok w drzewie AST</li>
+                          <li><strong>Niebieskie kolumny:</strong> Argumenty potrzebne do obliczenia aktualnego kroku</li>
+                          <li>Przyciski "Wstecz" i "Dalej" pozwalają przejść przez wszystkie kroki obliczeń</li>
+                        </ul>
+                      </div>
+                    )}
                     <table className="min-w-full border border-gray-300 rounded">
                       <thead>
                         <tr>
@@ -322,7 +515,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                           const allColValues = allColNodes.map(col =>
                             typeof col.node === 'string'
                               ? data.truth_table.map(row => row[col.node])
-                              : computeStepValues(col, data.truth_table)
+                              : data.truth_table.map(row => evalAst(col.node, row))
                           );
 
                           const shownColNames = [
@@ -416,64 +609,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
 
             {tab === 'qm' && (
               <div>
-                {/* Pasek z pomocą - nad krokami QM */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
-                      Skrót pojęć
-                    </h3>
-                    <button 
-                      className="w-full bg-white rounded-md p-2 border border-gray-200 hover:bg-gray-50 transition-colors text-left"
-                      onClick={() => {
-                        if (onShowDefinitions) {
-                          onShowDefinitions();
-                        } else {
-                          setToast({ message: 'Funkcja definicji nie jest dostępna', type: 'error' });
-                        }
-                      }}
-                    >
-                      <div className="text-xs text-gray-700">
-                        Kluczowe pojęcia metody Quine-McCluskey
-                      </div>
-                      <div className="text-xs text-gray-500 mt-1">(6 pojęć) +</div>
-                    </button>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
-                      Przewodnik
-                    </h3>
-                    <button 
-                      className="w-full bg-purple-100 hover:bg-purple-200 text-purple-800 font-medium py-1.5 px-3 rounded-md border border-purple-200 transition-colors text-xs"
-                      onClick={() => {
-                        // TODO: Implement step by step guide
-                        setToast({ message: 'Przewodnik krok po kroku będzie dostępny wkrótce', type: 'info' });
-                      }}
-                    >
-                      Krok po kroku
-                    </button>
-                  </div>
-                  
-                  <div className="bg-white rounded-lg shadow-md p-3 border border-blue-100">
-                    <h3 className="text-xs font-semibold uppercase tracking-wide text-blue-700 mb-2">
-                      Słownik
-                    </h3>
-                    <button 
-                      className="w-full bg-blue-100 hover:bg-blue-200 text-blue-800 font-medium py-1.5 px-3 rounded-md border border-blue-200 transition-colors text-xs"
-                      onClick={() => {
-                        if (onShowDefinitions) {
-                          onShowDefinitions();
-                        } else {
-                          setToast({ message: 'Funkcja definicji nie jest dostępna', type: 'error' });
-                        }
-                      }}
-                    >
-                      Pojęcia
-                    </button>
-                  </div>
-                </div>
-
-                <QMSteps steps={data.qm?.steps} />
+                <QMSteps steps={data.qm?.steps} error={data.qm_error} />
               </div>
             )}
 
@@ -485,6 +621,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                 result={kmapData.result}
                 vars={kmapData.vars}
                 minterms={kmapData.minterms}
+                error={data.kmap_error}
               />
             )}
 
@@ -507,29 +644,16 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
             )}
           </div>
 
-          {/* AST always visible below */}
-          {data?.ast && (
-            <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Drzewo składniowe (AST)</h3>
-              <ASTDisplay ast={data.ast} highlightExpr={highlightExpr} />
-            </div>
-          )}
 
           {/* Logic Gates always visible below AST */}
-          {data?.ast && (
+          {/* Logic gates display - temporarily hidden */}
+          {/* {data?.ast && (
             <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
               <h3 className="text-xl font-bold text-gray-800 mb-4">Bramki logiczne</h3>
-              <LogicGatesDisplay ast={data.ast} highlightExpr={highlightExpr} />
+              <LogicGatesDisplay ast={data.ast} expression={data.expression} highlightExpr={highlightExpr} />
             </div>
-          )}
+          )} */}
 
-          {/* Minimal forms (DNF/CNF/ANF/NAND/NOR/AND/OR) */}
-          {data?.minimal_forms && (
-            <div className="mt-8 p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
-              <h3 className="text-xl font-bold text-gray-800 mb-4">Formy minimalne</h3>
-              <MinimalForms data={data.minimal_forms} />
-            </div>
-          )}
         </div>
 
         <ExportResults data={data} input={input} onExportToPrint={onExportToPrint} />

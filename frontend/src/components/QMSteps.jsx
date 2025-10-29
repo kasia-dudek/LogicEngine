@@ -1,10 +1,10 @@
 // QMSteps.jsx — układ: pasek narzędzi u góry + jedna szeroka kolumna
-import React from 'react';
-import Glossary, { Tooltip } from './Glossary';
+import React, { useState } from 'react';
+import { Tooltip } from './Glossary';
 import InteractiveGuide from './InteractiveGuide';
+import Glossary from './Glossary';
 import ConnectionVisualization from './ConnectionVisualization';
 import AnimatedStep from './AnimatedStep';
-import KeyConceptsSummary from './KeyConceptsSummary';
 
 /* --- UI helpers --- */
 function SectionTitle({ children }) {
@@ -15,7 +15,7 @@ function SectionTitle({ children }) {
   );
 }
 
-function StepCard({ title, subtitle, children, tone = 'default' }) {
+function StepCard({ title, subtitle, children, tone = 'default', onInfoHover, onInfoLeave, showInfo = false, tooltipContent }) {
   const tones = {
     default: 'bg-white border-blue-100',
     info: 'bg-blue-50 border-blue-200',
@@ -24,7 +24,32 @@ function StepCard({ title, subtitle, children, tone = 'default' }) {
   const toneCls = tones[tone] || tones.default;
   return (
     <div className={`rounded-xl shadow p-4 border ${toneCls}`}>
-      {title && <div className="font-bold text-blue-800 mb-1">{title}</div>}
+      {title && (
+        <div className="font-bold text-blue-800 mb-1 flex items-center gap-2">
+          <span>{title}</span>
+          {showInfo && (
+            <span className="relative inline-block">
+              <button
+                type="button"
+                onMouseEnter={onInfoHover}
+                onMouseLeave={onInfoLeave}
+                className="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs flex items-center justify-center border border-blue-300 hover:bg-blue-200 transition-colors"
+                aria-label="Wyjaśnienie kroku"
+                title="Wyjaśnienie tego kroku"
+              >
+                ?
+              </button>
+              {tooltipContent && (
+                <div className="absolute z-[9999] w-80 p-3 mt-2 bg-gray-900 text-white text-sm rounded-lg shadow-lg border border-gray-700 transform -translate-x-1/2 left-1/2">
+                  <div className="font-semibold text-blue-300 mb-1">{title}</div>
+                  <div className="text-gray-200">{tooltipContent}</div>
+                  <div className="absolute -top-1 left-1/2 transform -translate-x-1/2 w-2 h-2 bg-gray-900 rotate-45 border-l border-t border-gray-700"></div>
+                </div>
+              )}
+            </span>
+          )}
+        </div>
+      )}
       {subtitle && <div className="text-sm text-gray-600 mb-3">{subtitle}</div>}
       {children}
     </div>
@@ -45,6 +70,51 @@ function InfoCallout({ children, color = 'blue' }) {
   return (
     <div className={`text-sm p-3 rounded-lg border ${map[color] || map.blue}`}>
       {children}
+    </div>
+  );
+}
+
+// Helper component for collapsible explanations
+function CollapsibleExplanation({ title, children, color = 'blue' }) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  
+  const colorMap = {
+    blue: { button: 'text-blue-600 hover:text-blue-800', close: 'text-blue-600 hover:text-blue-800' },
+    purple: { button: 'text-purple-600 hover:text-purple-800', close: 'text-purple-600 hover:text-purple-800' },
+    orange: { button: 'text-orange-600 hover:text-orange-800', close: 'text-orange-600 hover:text-orange-800' },
+    indigo: { button: 'text-indigo-600 hover:text-indigo-800', close: 'text-indigo-600 hover:text-indigo-800' },
+  };
+  
+  const colors = colorMap[color] || colorMap.blue;
+  
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <h4 className="text-sm font-semibold text-gray-700">{title}</h4>
+        <button
+          onClick={() => setIsExpanded(!isExpanded)}
+          className={`${colors.button} text-xs font-bold`}
+          title={isExpanded ? "Ukryj wyjaśnienie" : "Pokaż wyjaśnienie"}
+        >
+          ℹ️
+        </button>
+      </div>
+      
+      {isExpanded && (
+        <InfoCallout color={color}>
+          <div className="flex justify-between items-start">
+            <div className="flex-1">
+              {children}
+            </div>
+            <button
+              onClick={() => setIsExpanded(false)}
+              className={`${colors.close} font-bold ml-2`}
+            >
+              ✕
+            </button>
+          </div>
+        </InfoCallout>
+      )}
     </div>
   );
 }
@@ -90,11 +160,6 @@ function TruthTable({ vars, rows }) {
 
   return (
     <div className="space-y-3">
-      <InfoCallout color="blue">
-        <strong>Tabela prawdy.</strong> Wszystkie kombinacje zmiennych i wynik funkcji.
-        <span className="ml-1">Wiersze z wynikiem 1 to <Tooltip term="minterm">mintermy</Tooltip>.</span>
-      </InfoCallout>
-
       <Table
         headers={headers}
         rows={rows.map(r => ([
@@ -109,7 +174,20 @@ function TruthTable({ vars, rows }) {
       />
 
       <InfoCallout color="green">
-        <strong>Mintermy:</strong> <span className="font-mono ml-1">m{minterms.join(', m')}</span>
+        <strong>Mintermy:</strong> 
+        <div className="mt-2">
+          <Table
+            headers={['Minterm', 'Binarnie']}
+            rows={minterms.map(m => {
+              const row = rows.find(r => r.i === m);
+              const binary = row ? row.binary || m.toString(2).padStart(vars.length, '0') : m.toString(2).padStart(vars.length, '0');
+              return [
+                <span className="font-mono">m{m}</span>,
+                <span className="font-mono">{binary}</span>
+              ];
+            })}
+          />
+        </div>
       </InfoCallout>
     </div>
   );
@@ -117,49 +195,71 @@ function TruthTable({ vars, rows }) {
 
 /* --- Pasek narzędzi (jeden rząd, nad krokami) --- */
 function ToolsBar() {
+  const [showGuide, setShowGuide] = useState(false);
+  const [showGlossary, setShowGlossary] = useState(false);
+
   return (
     <div className="w-full">
       <div className="rounded-xl border border-gray-200 bg-white shadow p-3">
-        <div className="flex flex-wrap gap-3 items-stretch">
-          <details className="group flex-1 min-w-[220px]">
-            <summary className="cursor-pointer select-none px-3 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-800 text-sm font-semibold hover:bg-blue-100">
-              Skrót pojęć
-            </summary>
-            <div className="mt-3 p-3 rounded-lg border bg-gray-50">
-              <KeyConceptsSummary />
-            </div>
-          </details>
+        <div className="flex flex-wrap gap-3 items-center justify-center">
+          <button 
+            type="button"
+            className="bg-indigo-500 hover:bg-indigo-600 text-white font-medium py-3 px-6 rounded-full border-0 transition-colors text-sm cursor-pointer pointer-events-auto z-10 relative"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowGuide(!showGuide);
+              setShowGlossary(false);
+            }}
+          >
+            Przewodnik interaktywny
+          </button>
 
-          <details className="group flex-1 min-w-[220px]">
-            <summary className="cursor-pointer select-none px-3 py-2 rounded-lg bg-indigo-50 border border-indigo-200 text-indigo-800 text-sm font-semibold hover:bg-indigo-100">
-              Przewodnik interaktywny
-            </summary>
-            <div className="mt-3 p-3 rounded-lg border bg-gray-50">
-              <InteractiveGuide />
-            </div>
-          </details>
-
-          <details className="group flex-1 min-w-[220px]">
-            <summary className="cursor-pointer select-none px-3 py-2 rounded-lg bg-slate-50 border border-slate-200 text-slate-800 text-sm font-semibold hover:bg-slate-100">
-              Słownik
-            </summary>
-            <div className="mt-3 p-3 rounded-lg border bg-gray-50">
-              <Glossary />
-            </div>
-          </details>
+          <button 
+            type="button"
+            className="bg-slate-500 hover:bg-slate-600 text-white font-medium py-3 px-6 rounded-full border-0 transition-colors text-sm cursor-pointer pointer-events-auto z-10 relative"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setShowGlossary(!showGlossary);
+              setShowGuide(false);
+            }}
+          >
+            Słownik pojęć
+          </button>
         </div>
+        
+        {showGuide && (
+          <div className="mt-4 p-4 rounded-lg border bg-gray-50">
+            <InteractiveGuide />
+          </div>
+        )}
+        
+        {showGlossary && (
+          <div className="mt-4 p-4 rounded-lg border bg-gray-50">
+            <Glossary />
+          </div>
+        )}
       </div>
     </div>
   );
 }
 
 /* --- Render poszczególnych kroków --- */
-function renderStep(step) {
+function renderStep(step, stepIndex, hoveredStepIndex, setHoveredStepIndex, getStepExplanation) {
   const { data } = step;
+  const explanation = getStepExplanation(step);
+  const isHovered = hoveredStepIndex === stepIndex;
 
   if (step.step.includes('Tabela prawdy')) {
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
         <TruthTable vars={data.vars} rows={data.rows} />
       </StepCard>
     );
@@ -167,7 +267,13 @@ function renderStep(step) {
 
   if (step.step.includes('Znajdź mintermy')) {
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
         <Table
           headers={['Indeks', 'Binarnie']}
           rows={data.minterms.map(m => [<span className="font-mono">m{m}</span>, <span className="font-mono">{m.toString(2)}</span>])}
@@ -178,12 +284,14 @@ function renderStep(step) {
 
   if (step.step.includes('Grupowanie mintermów')) {
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
-        <InfoCallout color="purple">
-          Grupowanie wg liczby jedynek w zapisie <Tooltip term="binarnie">binarnym</Tooltip>. Łączone są wyłącznie grupy sąsiednie (różnica 1 bitu).
-        </InfoCallout>
-
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {Object.entries(data.groups).map(([ones, arr], i) => (
             <div key={i} className="bg-blue-50 rounded-lg p-3 border border-blue-200">
               <div className="font-semibold text-blue-700 mb-2 text-center">{ones} jedynek</div>
@@ -208,11 +316,13 @@ function renderStep(step) {
   if (step.step.includes('implikantów pierwszorzędnych')) {
     const pi = data.prime_implicants || [];
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
-        <InfoCallout color="orange">
-          Łączenie mintermów różniących się jednym bitem → w różniącym miejscu wstaw „-”.
-          <Tooltip term="implikant pierwszorzędny">PI</Tooltip> nie da się dalej połączyć.
-        </InfoCallout>
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
 
         {(data.rounds || []).map((r) => (
           <div key={r.round} className="mt-4">
@@ -246,10 +356,13 @@ function renderStep(step) {
     });
 
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
-        <InfoCallout color="indigo">
-          Tabela pokazuje, które PI pokrywają dane mintermy. Kolumna „istotna” jest jedynym pokryciem pewnego mintermu.
-        </InfoCallout>
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
 
         <div className="mt-3 overflow-x-auto">
           <table className="min-w-full border border-gray-200 rounded-xl text-sm">
@@ -291,7 +404,13 @@ function renderStep(step) {
 
   if (step.step.includes('Implikanty istotne') || step.step.includes('Zasada implikanty')) {
     return (
-      <StepCard title="Krok 5: Implikanty istotne" subtitle={data.opis}>
+      <StepCard 
+        title="Krok 5: Implikanty istotne" 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
         {data.essential?.length ? (
           <div className="grid gap-2">
             {data.essential.map((pi, i) => (
@@ -315,10 +434,13 @@ function renderStep(step) {
 
   if (step.step.includes('Minimalne pokrycie')) {
     return (
-      <StepCard title={step.step} subtitle={data.opis}>
-        <InfoCallout color="purple">
-          <Tooltip term="metoda Petricka">Metoda Petricka</Tooltip> wybiera najmniejszy zbiór PI pokrywający wszystkie mintermy.
-        </InfoCallout>
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
         <div className="mt-3">
           <Table
             headers={['Reprezentacja binarna', 'Wyrażenie logiczne']}
@@ -334,7 +456,14 @@ function renderStep(step) {
 
   if (step.step.includes('Uproszczone wyrażenie')) {
     return (
-      <StepCard title="Wynik" tone="success">
+      <StepCard 
+        title="Wynik" 
+        tone="success"
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
         <div className="text-center">
           <div className="text-2xl font-mono text-green-800 bg-white rounded-lg px-5 py-3 inline-block shadow border border-green-200">
             {data.result}
@@ -352,7 +481,18 @@ function renderStep(step) {
   }
 
   return (
-    <StepCard title={step.step}>
+    <StepCard 
+      title={step.step}
+      showInfo={true}
+      onInfoHover={() => setHoveredStepIndex(stepIndex)}
+      onInfoLeave={() => setHoveredStepIndex(null)}
+    >
+      {isHovered && (
+        <div className="absolute left-0 top-full mt-2 z-40 w-80 bg-white border border-gray-300 rounded-lg shadow-xl p-3 text-xs">
+          <div className="font-semibold text-blue-700 mb-1">{step.step}</div>
+          <div className="text-gray-700">{explanation}</div>
+        </div>
+      )}
       <pre className="text-xs text-gray-600 whitespace-pre-wrap">
         {JSON.stringify(data, null, 2)}
       </pre>
@@ -361,7 +501,60 @@ function renderStep(step) {
 }
 
 /* --- Główny komponent --- */
-export default function QMSteps({ steps }) {
+export default function QMSteps({ steps, error }) {
+  const [hoveredStepIndex, setHoveredStepIndex] = useState(null);
+
+  const getStepExplanation = (step) => {
+    const stepName = step.step;
+    
+    if (stepName.includes('Tabela prawdy')) {
+      return "Tabela prawdy pokazuje wszystkie możliwe kombinacje wartości zmiennych i wynik wyrażenia dla każdej kombinacji. Wiersze z wynikiem 1 to mintermy - kombinacje, dla których wyrażenie jest prawdziwe.";
+    }
+    
+    if (stepName.includes('Znajdź mintermy')) {
+      return "Mintermy to kombinacje zmiennych, dla których wyrażenie przyjmuje wartość 1. Każdy minterm reprezentuje jeden wiersz tabeli prawdy z wynikiem 1.";
+    }
+    
+    if (stepName.includes('Grupowanie mintermów')) {
+      return "Mintermy są grupowane według liczby jedynek w ich reprezentacji binarnej. To przygotowanie do łączenia sąsiednich mintermów.";
+    }
+    
+    if (stepName.includes('implikantów pierwszorzędnych')) {
+      return "Implikanty pierwszorzędne (PI) to największe możliwe grupy mintermów różniących się jednym bitem. W miejscu różnicy wstawiamy '-' (don't care).";
+    }
+    
+    if (stepName.includes('Tabela pokrycia')) {
+      return "Tabela pokrycia pokazuje, które implikanty pierwszorzędne pokrywają które mintermy. To podstawa do wyboru minimalnego pokrycia.";
+    }
+    
+    if (stepName.includes('Implikanty istotne') || stepName.includes('Zasada implikanty')) {
+      return "Implikanty istotne to te, które są jedynym pokryciem pewnego mintermu. Muszą być uwzględnione w ostatecznym rozwiązaniu.";
+    }
+    
+    if (stepName.includes('Minimalne pokrycie')) {
+      return "Metoda Petricka znajduje najmniejszy zbiór implikantów pierwszorzędnych, który pokrywa wszystkie mintermy. To daje nam minimalne wyrażenie.";
+    }
+    
+    if (stepName.includes('Uproszczone wyrażenie')) {
+      return "To końcowy wynik - minimalne wyrażenie w postaci DNF (Disjunctive Normal Form), które jest równoważne z oryginalnym wyrażeniem.";
+    }
+    
+    return "Ten krok jest częścią algorytmu Quine-McCluskey do minimalizacji wyrażeń logicznych.";
+  };
+
+  if (error) {
+    return (
+      <div className="text-center p-8 bg-yellow-50 border border-yellow-200 rounded-lg">
+        <div className="text-yellow-800 font-semibold mb-2">
+          ⚠️ Uproszczanie metodą Quine-McCluskey niedostępne
+        </div>
+        <div className="text-yellow-700">
+          {error}
+        </div>
+      </div>
+    );
+  }
+
   if (!steps || steps.length === 0) {
     return <div className="text-gray-500">Brak danych do wyświetlenia kroków QM.</div>;
   }
@@ -375,7 +568,7 @@ export default function QMSteps({ steps }) {
       <div className="space-y-4">
         {steps.map((step, idx) => (
           <AnimatedStep key={idx} stepNumber={idx + 1} isVisible={true}>
-            {renderStep(step)}
+            {renderStep(step, idx, hoveredStepIndex, setHoveredStepIndex, getStepExplanation)}
           </AnimatedStep>
         ))}
       </div>
