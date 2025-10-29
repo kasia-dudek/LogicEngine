@@ -715,6 +715,77 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                             "note": "X∨(Y∧Z)=(X∨Y)∧(X∨Z)",
                         })
                     break
+            
+            # Faktoryzacja: wyciąganie wspólnych czynników z OR
+            # Przykład: (A∧X)∨(A∧Y) = A∧(X∨Y)
+            if len(sub["args"]) >= 2:
+                args = sub["args"]
+                # Szukaj argumentów które są AND
+                and_args = [a for a in args if isinstance(a, dict) and a.get("op") == "AND"]
+                if len(and_args) >= 2:
+                    # Znajdź wspólne czynniki w AND argumentach
+                    for i in range(len(and_args)):
+                        for j in range(i + 1, len(and_args)):
+                            a1_args = and_args[i].get("args", [])
+                            a2_args = and_args[j].get("args", [])
+                            
+                            # Znajdź wspólne czynniki
+                            common = []
+                            for x in a1_args:
+                                if any(canon(x) == canon(y) for y in a2_args):
+                                    common.append(x)
+                            
+                            if common:
+                                # Wyciągnij wspólne czynniki
+                                remaining1 = [x for x in a1_args if not any(canon(x) == canon(c) for c in common)]
+                                remaining2 = [x for x in a2_args if not any(canon(x) == canon(c) for c in common)]
+                                
+                                # Usuń duplikaty z common (zachowaj tylko unikalne)
+                                unique_common = []
+                                seen_common = set()
+                                for c in common:
+                                    c_canon = canon(c)
+                                    if c_canon not in seen_common:
+                                        unique_common.append(c)
+                                        seen_common.add(c_canon)
+                                
+                                if unique_common:
+                                    # Stwórz factored wyrażenie
+                                    factor = unique_common[0] if len(unique_common) == 1 else AND(unique_common)
+                                    
+                                    # Stwórz pozostałą część
+                                    rem1_node = remaining1[0] if len(remaining1) == 1 else (AND(remaining1) if remaining1 else CONST(1))
+                                    rem2_node = remaining2[0] if len(remaining2) == 1 else (AND(remaining2) if remaining2 else CONST(1))
+                                    
+                                    # Połącz pozostałości w OR
+                                    remaining_or = OR([rem1_node, rem2_node])
+                                    
+                                    # Stwórz factored result
+                                    factored = AND([factor, remaining_or])
+                                    
+                                    # Dodaj pozostałe argumenty OR
+                                    # Użyj indeksów z oryginalnej listy args
+                                    and_indices_in_args = []
+                                    for k, a in enumerate(args):
+                                        if isinstance(a, dict) and a.get("op") == "AND" and (a is and_args[i] or a is and_args[j]):
+                                            and_indices_in_args.append(k)
+                                    other_args = [a for k, a in enumerate(args) if k not in and_indices_in_args]
+                                    if other_args:
+                                        factored = OR(other_args + [factored])
+                                    
+                                    # Sprawdź czy to poprawia measure
+                                    if measure(factored) < measure(sub):
+                                        out.append({
+                                            "law": "Faktoryzacja",
+                                            "path": path,
+                                            "before": sub,
+                                            "after": factored,
+                                            "note": "wyciągnij wspólny czynnik: (A∧X)∨(A∧Y)=A∧(X∨Y)",
+                                        })
+                                        break
+                        else:
+                            continue
+                        break
 
     return out
 
