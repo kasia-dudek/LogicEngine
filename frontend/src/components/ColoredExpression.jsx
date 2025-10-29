@@ -4,72 +4,63 @@ import React, { useMemo } from 'react';
  * Komponent do wyświetlania wyrażeń logicznych z kolorowanymi nawiasami
  * Nawiasy są kolorowane według poziomów zagnieżdżenia
  */
-export default function ColoredExpression({ expression, className = "", highlightRange = null, highlightText = null, highlightClass = "" }) {
-  // 1) Delikatne czyszczenie nawiasów bez kosztownych obliczeń
-  //    - (A) -> A
-  //    - (¬A) -> ¬A
-  //    - ((...)) -> (...)
-  //    - Usuwamy wielokrotne podwójne nawiasy w granicach maxIterations, aby uniknąć pętli
-  const cleanedExpression = useMemo(() => {
-    if (!expression) return '';
-    
-    try {
-      let result = String(expression);
+// Funkcja do czyszczenia nawiasów - wyodrębniona żeby używać dla fragmentu też
+function cleanExpression(expr) {
+  if (!expr) return '';
+  try {
+    let result = String(expr);
+    if (result.length < 4) return result;
 
-      // Szybkie wyjście dla bardzo krótkich wyrażeń
-      if (result.length < 4) return result;
-
-      // Usuwanie prostych przypadków w ograniczonej pętli
-      const maxIterations = 6;
-      for (let i = 0; i < maxIterations; i++) {
-        const before = result;
-
-        // (A) -> A  (pojedynczy literal)
-        result = result.replace(/\(([A-Z])\)/g, '$1');
-
-        // (¬A) -> ¬A  (negacja pojedynczego literalu)
-        result = result.replace(/\(¬([A-Z])\)/g, '¬$1');
-
-        // ((X)) -> (X)  (redukcja podwójnych nawiasów bez zagnieżdżeń wewnątrz matcha)
-        result = result.replace(/\(\(([^()]+)\)\)/g, '($1)');
-
-        // (X) -> X  (usunięcie zewnętrznych nawiasów jeśli całe wyrażenie jest w jednym nawiasie)
-        if (result.startsWith('(') && result.endsWith(')')) {
-          const inner = result.slice(1, -1);
-          // Sprawdź czy nawiasy są zbalansowane w środku
-          let balance = 0;
-          let canRemove = true;
-          for (let j = 0; j < inner.length; j++) {
-            if (inner[j] === '(') balance++;
-            else if (inner[j] === ')') balance--;
-            if (balance < 0) {
-              canRemove = false;
-              break;
-            }
-          }
-          if (canRemove && balance === 0) {
-            result = inner;
+    const maxIterations = 6;
+    for (let i = 0; i < maxIterations; i++) {
+      const before = result;
+      result = result.replace(/\(([A-Z])\)/g, '$1');
+      result = result.replace(/\(¬([A-Z])\)/g, '¬$1');
+      result = result.replace(/\(\(([^()]+)\)\)/g, '($1)');
+      
+      if (result.startsWith('(') && result.endsWith(')')) {
+        const inner = result.slice(1, -1);
+        let balance = 0;
+        let canRemove = true;
+        for (let j = 0; j < inner.length; j++) {
+          if (inner[j] === '(') balance++;
+          else if (inner[j] === ')') balance--;
+          if (balance < 0) {
+            canRemove = false;
+            break;
           }
         }
-
-        if (result === before) break; // nic się nie zmieniło → koniec
+        if (canRemove && balance === 0) {
+          result = inner;
+        }
       }
 
-      return result;
-    } catch (_) {
-      // W razie jakiegokolwiek problemu użyj oryginału — bezpieczeństwo i responsywność ważniejsze
-      return String(expression);
+      if (result === before) break;
     }
-  }, [expression]);
+    return result;
+  } catch (_) {
+    return String(expr);
+  }
+}
 
-  // Oblicz highlightRange z highlightText po czyszczeniu wyrażenia
-  // ZAWSZE zwraca wynik jeśli highlightText jest podany
+export default function ColoredExpression({ expression, className = "", highlightRange = null, highlightText = null, highlightClass = "" }) {
+  const cleanedExpression = useMemo(() => cleanExpression(expression), [expression]);
+  
+  // Wyczyść również fragment tak samo jak wyrażenie - to zapewni spójność
+  const cleanedHighlightText = useMemo(() => {
+    if (!highlightText) return null;
+    return cleanExpression(highlightText);
+  }, [highlightText]);
+
+  // Oblicz highlightRange z highlightText
+  // Używamy cleanedExpression i cleanedHighlightText dla spójności
+  // oba są czyszczone tak samo, więc pozycje będą się zgadzać
   const computedHighlightRange = useMemo(() => {
     if (highlightRange) return highlightRange;
-    if (!highlightText || !cleanedExpression) return null;
+    if (!cleanedHighlightText || !cleanedExpression) return null;
     
-    // Normalizuj highlightText tak samo jak wyrażenie (usuń spacje)
-    const normalizedHighlight = String(highlightText).replace(/\s+/g, '').trim();
+    // Normalizuj (usuń spacje) wyczyszczone wersje
+    const normalizedHighlight = cleanedHighlightText.replace(/\s+/g, '').trim();
     const normalizedExpression = cleanedExpression.replace(/\s+/g, '').trim();
     
     // 1. Spróbuj dokładnego dopasowania
@@ -258,7 +249,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       end: Math.min(normalizedHighlight.length, normalizedExpression.length),
       class: highlightClass || "bg-yellow-100"
     };
-  }, [cleanedExpression, highlightRange, highlightText, highlightClass]);
+  }, [cleanedExpression, cleanedHighlightText, highlightRange, highlightClass]);
 
   if (!expression) return null;
 

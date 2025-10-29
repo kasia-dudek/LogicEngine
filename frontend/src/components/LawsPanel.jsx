@@ -227,11 +227,8 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
     return <ColoredExpression expression={fullExpression} className={className} />;
   }
 
-  const highlightClass = strategy === "before" 
-    ? "bg-yellow-100 text-yellow-900 border-yellow-300"
-    : strategy === "after"
-    ? "bg-green-100 text-green-800 border-green-300"
-    : "bg-green-100 text-green-800 border-green-300";
+  // Używamy zielonego koloru dla obu (przed i po) dla spójności
+  const highlightClass = "bg-green-100 text-green-800 border-green-300";
 
   // Zawsze używaj oryginalnego target jako highlightText
   // ColoredExpression ma własną inteligentną logikę znajdowania, która obsługuje:
