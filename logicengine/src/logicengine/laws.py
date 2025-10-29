@@ -847,29 +847,45 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         before_sub_measure = measure(sub_before)
         after_sub_measure = measure(sub_after)
 
-        # Skip ONLY if transformation clearly makes the expression WORSE
-        # Allow neutral transformations (same measure) as they may enable further simplifications
+        # Skip ONLY if transformation makes the expression significantly WORSE
+        # We allow small regressions (especially in node count) if they might enable
+        # further simplifications. This is important for intermediate steps like De Morgan.
         # (unless it's an axiom/desugaring which we always allow)
-        if after_full_measure > before_full_measure and choice.get("source") != "axiom":
+        
+        # Compare measures: (literals, nodes, string_len)
+        # A transformation is "significantly worse" if:
+        # - It increases literal count (always bad)
+        # - OR it increases both node count AND string length by significant amounts
+        is_worse = False
+        if choice.get("source") != "axiom":
+            if after_full_measure[0] > before_full_measure[0]:
+                # More literals - definitely worse
+                is_worse = True
+            elif (after_full_measure[1] > before_full_measure[1] + 2 and 
+                  after_full_measure[2] > before_full_measure[2] + 3):
+                # Significantly more nodes AND longer string - probably worse
+                is_worse = True
+            elif (after_full_measure[1] > before_full_measure[1] + 5):
+                # Very large increase in nodes - definitely worse
+                is_worse = True
+        
+        if is_worse:
             # Mark this transformation as skipped using canonical representations of subexpressions
-            # This is more reliable than path+law since paths can change after normalization
             sub_before_canon = canonical_str(sub_before)
             sub_after_canon = canonical_str(sub_after)
             skipped_transformations.add((sub_before_canon, sub_after_canon, choice.get("law")))
             node = node_backup
             continue
         
-        # If measure is the same (neutral transformation), allow it but limit how many times
-        # we can apply the same transformation to avoid infinite loops
-        if after_full_measure == before_full_measure and choice.get("source") != "axiom":
-            # Check if we've seen this exact transformation result before
-            # (to avoid repeating the same neutral transformation)
-            if after_canonical in seen_expressions:
-                sub_before_canon = canonical_str(sub_before)
-                sub_after_canon = canonical_str(sub_after)
-                skipped_transformations.add((sub_before_canon, sub_after_canon, choice.get("law")))
-                node = node_backup
-                continue
+        # If measure is the same or slightly worse (neutral/acceptable transformation),
+        # allow it but check for oscillation to avoid infinite loops
+        if after_canonical in seen_expressions and choice.get("source") != "axiom":
+            # We've seen this result before - don't repeat
+            sub_before_canon = canonical_str(sub_before)
+            sub_after_canon = canonical_str(sub_after)
+            skipped_transformations.add((sub_before_canon, sub_after_canon, choice.get("law")))
+            node = node_backup
+            continue
 
         seen_expressions.add(after_canonical)
 
