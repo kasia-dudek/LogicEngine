@@ -7,7 +7,7 @@ function normalizeExpr(expr) {
   return String(expr).replace(/\s+/g, '').trim();
 }
 
-// Parsuj wyrażenie OR na części (uproszczone - dla prostych przypadków)
+// Parsuj wyrażenie OR/AND na części (uproszczone - dla prostych przypadków)
 function parseOrParts(expr) {
   let level = 0;
   const parts = [];
@@ -22,6 +22,31 @@ function parseOrParts(expr) {
       level--;
       current += char;
     } else if (char === '∨' && level === 0) {
+      if (current.trim()) parts.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current.trim()) parts.push(current.trim());
+  
+  return parts.length > 0 ? parts : [expr];
+}
+
+function parseAndParts(expr) {
+  let level = 0;
+  const parts = [];
+  let current = '';
+  
+  for (let i = 0; i < expr.length; i++) {
+    const char = expr[i];
+    if (char === '(') {
+      level++;
+      current += char;
+    } else if (char === ')') {
+      level--;
+      current += char;
+    } else if (char === '∧' && level === 0) {
       if (current.trim()) parts.push(current.trim());
       current = '';
     } else {
@@ -84,12 +109,37 @@ function findFragmentInExpression(fragment, expression) {
     }
   }
   
-  // 4. Podobnie dla AND
+  // 4. Podobnie dla AND - używaj parseAndParts dla złożonych wyrażeń
   if (normFragment.includes('∧')) {
     try {
-      const andParts = normFragment.split('∧');
-      if (andParts.length === 2) {
-        const reversed = normalizeExpr(andParts[1].trim() + '∧' + andParts[0].trim());
+      const fragmentParts = parseAndParts(normFragment);
+      const exprParts = parseAndParts(normExpr);
+      
+      // Sprawdź czy wszystkie części fragmentu występują w wyrażeniu (w dowolnej kolejności)
+      const matchingParts = [];
+      for (const part of fragmentParts) {
+        for (const exprPart of exprParts) {
+          if (exprPart === part || exprPart.includes(part) || part.includes(exprPart)) {
+            const idx = normExpr.indexOf(exprPart);
+            if (idx !== -1) {
+              matchingParts.push({ part: exprPart, index: idx });
+              break; // Znaleziono dopasowanie dla tej części
+            }
+          }
+        }
+      }
+      
+      // Jeśli wszystkie części zostały znalezione
+      if (matchingParts.length === fragmentParts.length && matchingParts.length > 0) {
+        const indices = matchingParts.map(m => m.index);
+        const start = Math.min(...indices);
+        const end = Math.max(...indices.map((idx, i) => idx + matchingParts[i].part.length));
+        return { start, end };
+      }
+      
+      // Dla prostych przypadków z 2 częściami, spróbuj zamienionej kolejności
+      if (fragmentParts.length === 2) {
+        const reversed = fragmentParts[1] + '∧' + fragmentParts[0];
         index = normExpr.indexOf(reversed);
         if (index !== -1) {
           return { start: index, end: index + reversed.length };
@@ -134,6 +184,19 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
   const normTarget = normalizeExpr(target);
   const normFull = normalizeExpr(fullExpression);
   
+  // Jeśli fragment jest równy całemu wyrażeniu, podświetl całość
+  if (normFull === normTarget) {
+    return (
+      <span className={`${highlightClass} px-1 rounded border inline-block`}>
+        <ColoredExpression 
+          expression={fullExpression} 
+          className={className}
+        />
+      </span>
+    );
+  }
+  
+  // Jeśli fragment jest zawarty w wyrażeniu
   if (normFull.includes(normTarget)) {
     return (
       <ColoredExpression 
