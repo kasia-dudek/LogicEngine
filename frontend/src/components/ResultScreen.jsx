@@ -7,6 +7,7 @@ import LogicGatesDisplay from './LogicGatesDisplay';
 import Toast from './Toast';
 import ExportResults from './ExportResults';
 import LawsPanel from './LawsPanel';
+import SimplifyDNF from './SimplifyDNF';
 import { getAstStepsNoVars, evalAst, getStepArgs } from '../utils/astHelpers';
 
 const TABS = [
@@ -14,6 +15,7 @@ const TABS = [
   { key: 'qm', label: 'Quine-McCluskey' },
   { key: 'kmap', label: 'K-Map' },
   { key: 'laws', label: 'Prawa logiczne' },
+  { key: 'simplify_dnf', label: 'Minimalny DNF' },
 ];
 
 
@@ -641,6 +643,10 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                 }}
                 pickedIndex={pickedLawStep}
               />
+            )}
+
+            {tab === 'simplify_dnf' && (
+              <SimplifyDNF expression={input} loading={loading} />
             )}
           </div>
 
