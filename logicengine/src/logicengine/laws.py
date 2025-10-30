@@ -712,11 +712,12 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
             if len(sub["args"]) >= 2:
                 args = sub["args"]
                 # Szukaj argumentów które są AND
-                and_args = [a for a in args if isinstance(a, dict) and a.get("op") == "AND"]
-                if len(and_args) >= 2:
+                and_indices = [idx for idx, a in enumerate(args) if isinstance(a, dict) and a.get("op") == "AND"]
+                if len(and_indices) >= 2:
+                    and_args = [args[idx] for idx in and_indices]
                     # Znajdź wspólne czynniki w AND argumentach
-                    for i in range(len(and_args)):
-                        for j in range(i + 1, len(and_args)):
+                    for i in range(len(and_indices)):
+                        for j in range(i + 1, len(and_indices)):
                             a1_args = and_args[i].get("args", [])
                             a2_args = and_args[j].get("args", [])
                             
@@ -755,12 +756,9 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                     factored = AND([factor, remaining_or])
                                     
                                     # Dodaj pozostałe argumenty OR
-                                    # Użyj indeksów z oryginalnej listy args
-                                    and_indices_in_args = []
-                                    for k, a in enumerate(args):
-                                        if isinstance(a, dict) and a.get("op") == "AND" and (a is and_args[i] or a is and_args[j]):
-                                            and_indices_in_args.append(k)
-                                    other_args = [a for k, a in enumerate(args) if k not in and_indices_in_args]
+                                    # Usuń indeksy and_indices[i] i and_indices[j] z args
+                                    indices_to_remove = [and_indices[i], and_indices[j]]
+                                    other_args = [arg for idx, arg in enumerate(args) if idx not in indices_to_remove]
                                     if other_args:
                                         factored = OR(other_args + [factored])
                                     
