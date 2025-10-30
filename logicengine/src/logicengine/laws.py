@@ -281,22 +281,8 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     "note": "Element pochłaniający dla koniunkcji: A∧0 = 0",
                 })
             
-            args = sub.get("args", [])
-            for i, a in enumerate(args):
-                for j, b in enumerate(args):
-                    if i != j and _is_absorbed_by(a, b):
-                        new_args = [arg for k, arg in enumerate(args) if k != i]
-                        after = new_args[0] if len(new_args) == 1 else {"op": "AND", "args": new_args}
-                        out.append({
-                            "law": "Absorpcja (∧)",
-                            "path": path,
-                            "before": sub,
-                            "after": after,
-                            "note": "A ∧ (A ∨ B) = A",
-                        })
-                        break
-                if len(out) > 0 and out[-1]["law"] == "Absorpcja (∧)":
-                    break
+            # REMOVED: General _is_absorbed_by check - it was too broad and produced incorrect results
+            # The correct absorption rules are checked below with specific conditions
             
             args = sub.get("args", [])
             for i, a in enumerate(args):
