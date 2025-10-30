@@ -14,7 +14,7 @@ from .contradiction import is_contradiction
 from .laws import simplify_with_laws
 from .ast import collect_variables, canonical_str, normalize_bool_ast, generate_ast
 from .utils import truth_table_hash, equivalent
-from .steps import Step, RuleName
+from .steps import Step, RuleName, StepCategory
 from .qm import simplify_qm
 from .minimal_forms import compute_minimal_forms
 
@@ -215,6 +215,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                     before_str=f"Mintermy {pair.get('from', [])}",
                                     after_str=pair.get("to", ""),
                                     rule="QM: łączenie sąsiednich mintermów",
+                                    category="proof",  # Hidden by default
                                     location=None,
                                     details={
                                         "left_minterm": pair.get("from", [])[0] if len(pair.get("from", [])) > 0 else "",
@@ -226,11 +227,12 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                 )
                                 steps.append(step)
                     else:
-                        # Regular QM step
+                        # Regular QM step - all QM steps are "proof"
                         step = Step(
                             before_str=step_name,
                             after_str=str(step_data),
                             rule=rule_name,
+                            category="proof",  # All QM steps hidden by default
                             location=None,
                             details=step_data,
                             proof={"method": "qm-trace", "equal": True}

@@ -46,7 +46,8 @@ def truth_table_hash(vars: List[str], expr_str: str) -> str:
     from .truth_table import generate_truth_table
     
     try:
-        table = generate_truth_table(expr_str)
+        # Use force_vars to ensure consistent variable ordering
+        table = generate_truth_table(expr_str, force_vars=vars)
         if not table:
             return ""
         

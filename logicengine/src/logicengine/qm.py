@@ -306,4 +306,14 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
         "data": {"zgodność": verification, "opis": verification_desc},
     })
 
-    return {"result": simplified, "steps": steps, "expr_for_tests": simplified, "tt_equal": verification}
+    # Build summary
+    all_pi_masks = [b for b, _ in all_prime_implicants]
+    summary = {
+        "dnf_terms": len(min_cover),
+        "dnf_literals": sum(count_literals(b) for b in min_cover),
+        "essential": list(essential),
+        "selected_pi": min_cover,
+        "all_pi": all_pi_masks
+    }
+
+    return {"result": simplified, "steps": steps, "expr_for_tests": simplified, "tt_equal": verification, "summary": summary}
