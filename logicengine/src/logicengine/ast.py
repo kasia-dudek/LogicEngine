@@ -258,10 +258,11 @@ def _flatten_sort_dedupe(node: Any) -> Any:
             has_one = any(isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 1 for a in unique)
             if has_one:
                 return {'op': 'CONST', 'value': 1}
-            # Remove CONST(0) from arguments
-            unique = [a for a in unique if not (isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 0)]
-            if not unique:
-                return {'op': 'CONST', 'value': 0}  # All were CONST(0)
+            # Don't remove CONST(0) here - let laws_matches handle it as "Element neutralny (A∨0)"
+            # This allows showing the explicit transformation A∨0 → A
+            # unique = [a for a in unique if not (isinstance(a, dict) and a.get('op') == 'CONST' and a.get('value') == 0)]
+            # if not unique:
+            #     return {'op': 'CONST', 'value': 0}  # All were CONST(0)
 
         # Sort with stable, deterministic ordering that preserves relative positions
         # when possible, while ensuring consistency across transformations

@@ -403,24 +403,29 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     "note": "Tautologia: A∨¬A = 1",
                 })
 
-            # remove (P ∧ ¬P) factors inside OR
+            # Replace (P ∧ ¬P) factors with CONST(0) in OR
+            # This is more explicit and shows the intermediate step
             new_args = []
-            removed = False
+            replaced = False
             for a in sub["args"]:
                 if isinstance(a, dict) and a.get("op") == "AND":
                     lits = [to_lit(x) for x in a.get("args", [])]
                     if None not in lits and term_is_contradictory([t for t in lits if t]):
-                        removed = True
-                        continue
-                new_args.append(a)
-            if removed:
+                        # Replace with CONST(0) instead of removing
+                        new_args.append(CONST(0))
+                        replaced = True
+                    else:
+                        new_args.append(a)
+                else:
+                    new_args.append(a)
+            if replaced:
                 after = new_args[0] if len(new_args) == 1 else {"op": "OR", "args": new_args}
                 out.append({
-                    "law": "Dopełnienie (X ∧ ¬X)",
+                    "law": "Kontradykcja (A ∧ ¬A)",
                     "path": path,
                     "before": sub,
                     "after": after,
-                    "note": "(P∧¬P)=0",
+                    "note": "A∧¬A = 0",
                 })
 
         # Absorption
