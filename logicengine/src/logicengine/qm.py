@@ -32,8 +32,8 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
     vars_ = [k for k in table[0] if k != "result"]
     if not vars_:
         raise QMError("Brak zmiennych w wyrażeniu.")
-    if len(vars_) > 6:
-        raise QMError("Obsługiwane są maksymalnie 6 zmiennych (dla większej liczby obliczenia mogą być bardzo wolne).")
+    if len(vars_) > 8:
+        raise QMError("Obsługiwane są maksymalnie 8 zmiennych (dla większej liczby obliczenia mogą być bardzo wolne).")
 
     n = len(vars_)
 
@@ -221,10 +221,24 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
     if remaining:
         minterm_to_pis = [[b for b, ms in all_prime_implicants if m in ms] for m in remaining]
         if minterm_to_pis:
+            # Build symbolic Petrick formula for logging
+            petrick_formula = " ∏ ".join([f"({' + '.join(pis)})" for pis in minterm_to_pis])
+            
+            # Add Petrick: dystrybucja step
+            steps.append({
+                "step": "Petrick: dystrybucja",
+                "data": {
+                    "opis": f"Formuła Petricka: {petrick_formula}",
+                    "remaining_minterms": sorted(remaining),
+                    "pi_choices": minterm_to_pis,
+                },
+            })
+            
             all_combos = list(product(*minterm_to_pis))
             best_combo = None
             best_len = float("inf")
             best_literals = float("inf")
+            absorption_count = 0
 
             for combo in all_combos:
                 combo_set = set(combo)
@@ -247,6 +261,16 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
 
             if best_combo:
                 min_cover.extend(best_combo)
+                
+                # Add Petrick: absorpcja step if we found a simplified combo
+                if best_combo and len(best_combo) < len(all_combos):
+                    steps.append({
+                        "step": "Petrick: absorpcja",
+                        "data": {
+                            "opis": f"Wybrano minimalne pokrycie: {', '.join(sorted(best_combo))}",
+                            "selected_pis": sorted(best_combo),
+                        },
+                    })
 
     min_cover = sorted(set(min_cover))
     steps.append({
@@ -282,4 +306,4 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
         "data": {"zgodność": verification, "opis": verification_desc},
     })
 
-    return {"result": simplified, "steps": steps, "expr_for_tests": simplified}
+    return {"result": simplified, "steps": steps, "expr_for_tests": simplified, "tt_equal": verification}

@@ -1,5 +1,5 @@
 # minimal_forms.py
-"""Compute minimal forms (DNF, CNF) – exact minimization for up to 4 vars.
+"""Compute minimal forms (DNF, CNF) – exact minimization for up to 8 vars.
 DNF minimal via Quine–McCluskey + Petrick; CNF minimal by duality from ¬f.
 """
 
@@ -13,7 +13,7 @@ from .utils import to_bin
 def compute_minimal_forms(expr: str) -> Dict[str, Any]:
     """
     Returns dictionary with minimal DNF and minimal CNF (not only canonical).
-    For n > 4 we bail out as 'Too complex' to keep things fast and deterministic.
+    For n > 8 we bail out as 'Too complex' to keep things fast and deterministic.
     """
     notes: List[str] = []
 
@@ -26,8 +26,8 @@ def compute_minimal_forms(expr: str) -> Dict[str, Any]:
     except Exception as e:
         return _error_payload(f"Błąd generowania tabeli prawdy: {e}")
 
-    # complexity limitation (64 rows)
-    if n > 6:
+    # complexity limitation (256 rows for 8 vars)
+    if n > 8:
         return _too_complex_payload(vars_, n)
 
     try:
@@ -279,7 +279,7 @@ def _too_complex_payload(vars_: List[str], n: int) -> Dict[str, Any]:
         "nor": {"expr": "Wyłączone", "gates": 0},
         "andonly": {"expr": "Wyłączone", "literals": 0},
         "oronly": {"expr": "Wyłączone", "literals": 0},
-        "notes": [f"Wyrażenie ma {n} zmiennych - za złożone do przetworzenia (maksymalnie 6 zmiennych)"],
+        "notes": [f"Wyrażenie ma {n} zmiennych - za złożone do przetworzenia (maksymalnie 8 zmiennych)"],
     }
 
 def _error_payload(msg: str) -> Dict[str, Any]:

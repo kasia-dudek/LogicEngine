@@ -194,12 +194,18 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     rule_name = "Formatowanie"
                     if "Krok 1:" in step_name:
                         rule_name = "Formatowanie"
-                    elif "Krok 2:" in step_name or "Krok 3:" in step_name:
+                    elif "Krok 2:" in step_name or "Krok 3:" in step_name or "Krok 4:" in step_name:
                         rule_name = "QM: powstanie prime implicants"
                     elif "Krok 5:" in step_name:
                         rule_name = "QM: essential PI"
-                    elif "Krok 6:" in step_name or "Petrick" in step_name:
-                        rule_name = "QM: essential PI"
+                    elif "Petrick: dystrybucja" in step_name:
+                        rule_name = "Petrick: dystrybucja"
+                    elif "Petrick: absorpcja" in step_name:
+                        rule_name = "Petrick: absorpcja"
+                    elif "Krok 6:" in step_name or "Krok 7:" in step_name:
+                        rule_name = "Formatowanie"
+                    elif "Krok 8:" in step_name:
+                        rule_name = "Formatowanie"
                     
                     # For combining steps, create detailed step
                     if "rounds" in step_data:

@@ -1,8 +1,12 @@
 # steps.py
 """Step model for simplification tracking."""
 
+from __future__ import annotations
+
 from dataclasses import dataclass, field
 from typing import Any, List, Literal, Optional, Dict
+
+__all__ = ["RuleName", "Step"]
 
 RuleName = Literal[
     "Eliminacja złożonych operatorów",
