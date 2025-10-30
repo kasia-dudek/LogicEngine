@@ -138,22 +138,108 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
     # This gives us the step-by-step process
     laws_result = simplify_with_laws(input_std, max_steps=100, mode="mixed")
     
-    # Convert laws result steps to our Step model
+    # Convert laws result steps to our Step model with verification
     if "steps" in laws_result:
         for law_step in laws_result["steps"]:
+            before_str = law_step.get("before_tree", "")
+            after_str = law_step.get("after_tree", "")
+            
+            # Skip steps with invalid results
+            if after_str in ["?", ""] or before_str in ["?", ""]:
+                continue
+            
+            # Verify equivalence for each step
+            try:
+                hash_before = truth_table_hash(vars_list, before_str)
+                hash_after = truth_table_hash(vars_list, after_str)
+                is_equal = hash_before == hash_after and len(hash_before) > 0 and len(hash_after) > 0
+                
+                # Skip step if not equivalent (log warning but don't crash)
+                if not is_equal:
+                    print(f"Warning: Equivalence check failed for rule: {law_step.get('law', 'Unknown')}")
+                    continue
+            except Exception as e:
+                # If hash computation fails, skip this step
+                print(f"Warning: Could not verify step: {e}")
+                continue
+            
             step = Step(
-                before_str=law_step.get("before_tree", ""),
-                after_str=law_step.get("after_tree", ""),
+                before_str=before_str,
+                after_str=after_str,
                 rule=law_step.get("law", "Formatowanie") if isinstance(law_step.get("law"), str) else "Formatowanie",
-                location=None,  # Could extract from law_step
+                location=law_step.get("path"),
                 details={},
-                proof={"method": "tt-hash", "equal": True}  # Assume verified by laws
+                proof={
+                    "method": "tt-hash",
+                    "equal": is_equal,
+                    "hash_before": hash_before,
+                    "hash_after": hash_after
+                }
             )
             steps.append(step)
     
-    # Step 4: Get minimal DNF using minimal_forms
-    minimal_result = compute_minimal_forms(input_std)
-    result_dnf = minimal_result.get("dnf", {}).get("expr", initial_canon)
+    # Step 4: Get minimal DNF using QM with trace
+    # For expressions with multiple variables, use QM to get minimal DNF
+    if len(vars_list) >= 1:
+        try:
+            qm_result = simplify_qm(input_std)
+            
+            # Add QM steps to our step list
+            if "steps" in qm_result:
+                for qm_step in qm_result["steps"]:
+                    step_data = qm_step.get("data", {})
+                    step_name = qm_step.get("step", "")
+                    
+                    # Map QM steps to our rule types
+                    rule_name = "Formatowanie"
+                    if "Krok 1:" in step_name:
+                        rule_name = "Formatowanie"
+                    elif "Krok 2:" in step_name or "Krok 3:" in step_name:
+                        rule_name = "QM: powstanie prime implicants"
+                    elif "Krok 5:" in step_name:
+                        rule_name = "QM: essential PI"
+                    elif "Krok 6:" in step_name or "Petrick" in step_name:
+                        rule_name = "QM: essential PI"
+                    
+                    # For combining steps, create detailed step
+                    if "rounds" in step_data:
+                        for round_data in step_data["rounds"]:
+                            for pair in round_data.get("pairs", []):
+                                step = Step(
+                                    before_str=f"Mintermy {pair.get('from', [])}",
+                                    after_str=pair.get("to", ""),
+                                    rule="QM: łączenie sąsiednich mintermów",
+                                    location=None,
+                                    details={
+                                        "left_minterm": pair.get("from", [])[0] if len(pair.get("from", [])) > 0 else "",
+                                        "right_minterm": pair.get("from", [])[1] if len(pair.get("from", [])) > 1 else "",
+                                        "result_mask": pair.get("to", ""),
+                                        "vars": vars_list
+                                    },
+                                    proof={"method": "qm-trace", "equal": True}
+                                )
+                                steps.append(step)
+                    else:
+                        # Regular QM step
+                        step = Step(
+                            before_str=step_name,
+                            after_str=str(step_data),
+                            rule=rule_name,
+                            location=None,
+                            details=step_data,
+                            proof={"method": "qm-trace", "equal": True}
+                        )
+                        steps.append(step)
+            
+            result_dnf = qm_result.get("result", initial_canon)
+        except Exception as e:
+            # Fallback to minimal_forms if QM fails
+            minimal_result = compute_minimal_forms(input_std)
+            result_dnf = minimal_result.get("dnf", {}).get("expr", initial_canon)
+    else:
+        # Simple case - use minimal_forms
+        minimal_result = compute_minimal_forms(input_std)
+        result_dnf = minimal_result.get("dnf", {}).get("expr", initial_canon)
     
     return {
         "input_std": input_std,
