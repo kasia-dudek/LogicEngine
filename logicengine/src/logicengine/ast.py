@@ -693,3 +693,28 @@ def equals(a: Any, b: Any) -> bool:
     if not isinstance(a, dict) or not isinstance(b, dict):
         return a == b
     return canonical_str(a) == canonical_str(b)
+
+
+def collect_variables(node: Any) -> List[str]:
+    """Collect all variable names from a boolean-only AST, sorted alphabetically."""
+    if not isinstance(node, dict):
+        return []
+    
+    vars_set = set()
+    
+    def walk(n: Any) -> None:
+        if not isinstance(n, dict):
+            return
+        op = n.get("op")
+        if op == "VAR":
+            name = n.get("name")
+            if name and isinstance(name, str) and name.isupper():
+                vars_set.add(name)
+        elif op in {"AND", "OR"}:
+            for arg in n.get("args", []):
+                walk(arg)
+        elif op == "NOT":
+            walk(n.get("child"))
+    
+    walk(node)
+    return sorted(vars_set)

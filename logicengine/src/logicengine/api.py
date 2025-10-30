@@ -16,6 +16,7 @@ from .tautology import is_tautology
 from .contradiction import is_contradiction
 from .laws import simplify_with_laws, apply_law_once
 from .minimal_forms import compute_minimal_forms
+from .engine import simplify_to_minimal_dnf, TooManyVariables
 
 app = FastAPI(title="Logic Engine API")
 
@@ -35,6 +36,10 @@ class ExprRequest(BaseModel):
 class LawsRequest(BaseModel):
     expr: str
     mode: str = "mixed"  # "algebraic", "axioms", "mixed"
+
+class SimplifyDNFRequest(BaseModel):
+    expr: str
+    var_limit: int = 8
 
 class ApplyLawRequest(BaseModel):
     expr: str
@@ -161,6 +166,17 @@ def minimal_forms(req: ExprRequest):
     try:
         std_expr = validate_and_standardize(req.expr)
         return compute_minimal_forms(std_expr)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/simplify_dnf")
+def simplify_dnf(req: SimplifyDNFRequest):
+    """Simplify to minimal DNF with step-by-step trace."""
+    try:
+        return simplify_to_minimal_dnf(req.expr, var_limit=req.var_limit)
+    except TooManyVariables as e:
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

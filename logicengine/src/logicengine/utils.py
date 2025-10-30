@@ -32,6 +32,61 @@ def count_literals(expr: str) -> int:
     return sum(c.isupper() for c in expr)
 
 
+def truth_table_hash(vars: List[str], expr_str: str) -> str:
+    """
+    Generate truth table hash for a given expression.
+    
+    Args:
+        vars: List of variable names (A..Z)
+        expr_str: Expression string (canonical form)
+        
+    Returns:
+        Hash string (hex of truth table bitmask)
+    """
+    from .truth_table import generate_truth_table
+    
+    try:
+        table = generate_truth_table(expr_str)
+        if not table:
+            return ""
+        
+        # Build bitmask from truth table
+        bits = []
+        for row in table:
+            bits.append("1" if row.get("result", False) else "0")
+        
+        bitmask = "".join(bits)
+        
+        # Return hex representation of the bitmask interpreted as binary
+        import hashlib
+        hash_obj = hashlib.sha1(bitmask.encode())
+        return hash_obj.hexdigest()[:16]  # 16 char hex
+    except Exception:
+        # Return empty string on error
+        return ""
+
+
+def equivalent(vars: List[str], a_str: str, b_str: str) -> bool:
+    """
+    Check if two expressions are equivalent using truth table hash.
+    
+    Args:
+        vars: List of variable names
+        a_str: First expression string
+        b_str: Second expression string
+        
+    Returns:
+        True if expressions are equivalent, False otherwise
+    """
+    hash_a = truth_table_hash(vars, a_str)
+    hash_b = truth_table_hash(vars, b_str)
+    
+    if not hash_a or not hash_b:
+        return False
+    
+    return hash_a == hash_b
+
+
 def compute_metrics(node: Any) -> Dict[str, int]:
     """
     Compute basic metrics on a normalized Boolean AST.
