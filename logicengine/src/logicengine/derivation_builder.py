@@ -37,10 +37,28 @@ def build_merge_steps(
     Build merge steps for each edge (left, right, result_mask).
     
     Each edge represents absorption: XY + X¬Y = X
+    Dedup by (result_mask, diff_var) to avoid duplicate absorptions.
     """
     steps: List[Step] = []
+    seen_pairs = set()  # (result_mask, diff_var) to dedup
     
     for left_mask, right_mask, result_mask in merge_edges:
+        # Find which variable differs
+        diff_var = None
+        for i, (l, r) in enumerate(zip(left_mask, right_mask)):
+            if l != r:
+                diff_var = vars[i]
+                break
+        
+        if diff_var is None:
+            continue  # Skip invalid edge
+        
+        # Dedup: don't create duplicate absorption for same PI and variable
+        dedup_key = (result_mask, diff_var)
+        if dedup_key in seen_pairs:
+            continue
+        seen_pairs.add(dedup_key)
+        
         # Convert masks to expressions
         left_expr = _mask_to_expr(left_mask, vars)
         right_expr = _mask_to_expr(right_mask, vars)
@@ -50,17 +68,21 @@ def build_merge_steps(
         before_str = f"{left_expr} ∨ {right_expr}"
         after_str = result_expr
         
+        # Schema: use actual variable name
+        schema = f"XY ∨ X¬Y = X"  # Generic, or could be f"{diff_var}Y ∨ {diff_var}¬Y = Y" 
+        
         step = Step(
             before_str=before_str,
             after_str=after_str,
             rule="Pochłanianie różniącego literału",
             category="user",
-            schema="XY ∨ X¬Y = X",
+            schema=schema,
             location=None,
             details={
                 "left_mask": left_mask,
                 "right_mask": right_mask,
-                "result_mask": result_mask
+                "result_mask": result_mask,
+                "diff_var": diff_var
             },
             proof={"method": "tt-hash", "equal": True}
         )
