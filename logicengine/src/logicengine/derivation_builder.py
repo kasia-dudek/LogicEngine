@@ -34,9 +34,11 @@ def build_merge_steps(
     merge_edges: List[Tuple[str, str, str]]
 ) -> List[Step]:
     """
-    Build merge steps for each edge (left, right, result_mask).
+    Build merge steps for each edge using 3 Boolean laws:
+    1) Factoring: XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)
+    2) Tautology: Y ∨ ¬Y ⇒ 1
+    3) Neutral: X ∧ 1 ⇒ X
     
-    Each edge represents absorption: XY + X¬Y = X
     Dedup by (result_mask, diff_var) to avoid duplicate absorptions.
     """
     steps: List[Step] = []
@@ -64,29 +66,44 @@ def build_merge_steps(
         right_expr = _mask_to_expr(right_mask, vars)
         result_expr = _mask_to_expr(result_mask, vars)
         
-        # Build step for absorption
-        before_str = f"{left_expr} ∨ {right_expr}"
-        after_str = result_expr
-        
-        # Schema: use actual variable name
-        schema = f"XY ∨ X¬Y = X"  # Generic, or could be f"{diff_var}Y ∨ {diff_var}¬Y = Y" 
-        
-        step = Step(
-            before_str=before_str,
-            after_str=after_str,
-            rule="Pochłanianie różniącego literału",
+        # STEP 1: Factoring
+        step1 = Step(
+            before_str=f"{left_expr} ∨ {right_expr}",
+            after_str=f"{result_expr} ∧ ({diff_var} ∨ ¬{diff_var})",
+            rule="Rozdzielność (faktoryzacja)",
             category="user",
-            schema=schema,
+            schema="XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)",
             location=None,
-            details={
-                "left_mask": left_mask,
-                "right_mask": right_mask,
-                "result_mask": result_mask,
-                "diff_var": diff_var
-            },
+            details={"step_num": 1, "diff_var": diff_var},
             proof={"method": "tt-hash", "equal": True}
         )
-        steps.append(step)
+        steps.append(step1)
+        
+        # STEP 2: Tautology
+        step2 = Step(
+            before_str=f"{result_expr} ∧ ({diff_var} ∨ ¬{diff_var})",
+            after_str=f"{result_expr} ∧ 1",
+            rule="Tautologia",
+            category="user",
+            schema="Y ∨ ¬Y ⇒ 1",
+            location=None,
+            details={"step_num": 2, "diff_var": diff_var},
+            proof={"method": "tt-hash", "equal": True}
+        )
+        steps.append(step2)
+        
+        # STEP 3: Neutral element
+        step3 = Step(
+            before_str=f"{result_expr} ∧ 1",
+            after_str=result_expr,
+            rule="Element neutralny",
+            category="user",
+            schema="X ∧ 1 ⇒ X",
+            location=None,
+            details={"step_num": 3, "diff_var": diff_var},
+            proof={"method": "tt-hash", "equal": True}
+        )
+        steps.append(step3)
     
     return steps
 
@@ -124,5 +141,9 @@ def _mask_to_expr(mask: str, vars: List[str]) -> str:
     if not literals:
         return "1"  # Empty product = true
     
-    return " ∧ ".join(literals)
+    # Add parentheses if more than one literal
+    expr = " ∧ ".join(literals)
+    if len(literals) > 1:
+        expr = f"({expr})"
+    return expr
 
