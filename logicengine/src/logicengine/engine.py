@@ -197,6 +197,15 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             merge_steps = build_merge_steps(vars_list, merge_edges)
             steps.extend(merge_steps)
             
+            # Validate continuity: prev.after_str == next.before_str
+            for i in range(len(steps) - 1):
+                prev_after = steps[i].after_str
+                next_before = steps[i + 1].before_str
+                if prev_after != next_before:
+                    print(f"Warning: Step discontinuity between steps {i+1} and {i+2}")
+                    print(f"  Step {i+1} after:  {prev_after}")
+                    print(f"  Step {i+2} before: {next_before}")
+            
             result_dnf = qm_result.get("result", initial_canon)
         except Exception as e:
             # Fallback to minimal_forms if QM fails
