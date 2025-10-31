@@ -302,29 +302,29 @@ export default function ColoredExpression({ expression, className = "", highligh
         else if (char === ')') level--;
       } else {
         // Renderuj normalnie poza highlightem
-        if (char === '(') {
-          const colorClass = colors[level % colors.length];
-          result.push(
-            <span key={i} className={`font-bold ${colorClass}`}>
-              (
-            </span>
-          );
-          level++;
-        } else if (char === ')') {
-          level--;
-          const colorClass = colors[level % colors.length];
-          result.push(
-            <span key={i} className={`font-bold ${colorClass}`}>
-              )
-            </span>
-          );
-        } else {
-          result.push(
-            <span key={i}>
-              {char}
-            </span>
-          );
-        }
+      if (char === '(') {
+        const colorClass = colors[level % colors.length];
+        result.push(
+          <span key={i} className={`font-bold ${colorClass}`}>
+            (
+          </span>
+        );
+        level++;
+      } else if (char === ')') {
+        level--;
+        const colorClass = colors[level % colors.length];
+        result.push(
+          <span key={i} className={`font-bold ${colorClass}`}>
+            )
+          </span>
+        );
+      } else {
+        result.push(
+          <span key={i}>
+            {char}
+          </span>
+        );
+      }
       }
       
       i++;
