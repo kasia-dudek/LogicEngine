@@ -137,6 +137,27 @@ R_ABS_AND = Rule(
     side_conditions=[],
 )
 
+# Factoring rules: XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)
+R_FACTOR_OR_1 = Rule(
+    id="factor_or_1",
+    name="Rozdzielność (faktoryzacja)",
+    lhs=P("OR", 
+           P("AND", VAR("X"), VAR("Y")),
+           P("AND", VAR("X"), P("NOT", VAR("Y")))),
+    rhs=P("AND", VAR("X"), P("OR", VAR("Y"), P("NOT", VAR("Y")))),
+    side_conditions=[],
+)
+
+R_FACTOR_OR_2 = Rule(
+    id="factor_or_2",
+    name="Rozdzielność (faktoryzacja)",
+    lhs=P("OR",
+           P("AND", VAR("X"), P("NOT", VAR("Y"))),
+           P("AND", VAR("X"), VAR("Y"))),
+    rhs=P("AND", VAR("X"), P("OR", P("NOT", VAR("Y")), VAR("Y"))),
+    side_conditions=[],
+)
+
 LIST_OF_RULES: List[Rule] = [
     R_IDEM_OR,
     R_IDEM_AND,
@@ -151,4 +172,6 @@ LIST_OF_RULES: List[Rule] = [
     R_DM_AND,
     R_ABS_OR,
     R_ABS_AND,
+    R_FACTOR_OR_1,
+    R_FACTOR_OR_2,
 ]

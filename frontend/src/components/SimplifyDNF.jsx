@@ -87,9 +87,16 @@ export default function SimplifyDNF({ expression, loading }) {
                 <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-blue-600 text-white font-bold text-sm">
                   {idx + 1}
                 </span>
-                <span className="font-semibold text-gray-800">
-                  {step.rule || 'Krok'}
-                </span>
+                <div className="flex-1">
+                  <div className="font-semibold text-gray-800">
+                    {step.rule || 'Krok'}
+                  </div>
+                  {step.schema && (
+                    <div className="text-xs text-gray-500 mt-0.5">
+                      {step.schema}
+                    </div>
+                  )}
+                </div>
               </div>
               
               <div className="p-4 space-y-3">
