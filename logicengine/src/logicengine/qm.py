@@ -308,12 +308,30 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
 
     # Build summary
     all_pi_masks = [b for b, _ in all_prime_implicants]
+    
+    # Build merge_edges for derivation builder (only for selected PI)
+    merge_edges = []
+    for round_data in combine_steps:
+        for pair in round_data.get("pairs", []):
+            left_mask = pair["from"][0]
+            right_mask = pair["from"][1]
+            result_mask = pair["to"]
+            # Only include if result_mask is in selected PI
+            if result_mask in min_cover:
+                merge_edges.append((left_mask, right_mask, result_mask))
+    
+    # Build pi_to_minterms map
+    pi_to_minterms = {b: ms for b, ms in all_prime_implicants}
+    
     summary = {
         "dnf_terms": len(min_cover),
         "dnf_literals": sum(count_literals(b) for b in min_cover),
         "essential": list(essential),
         "selected_pi": min_cover,
-        "all_pi": all_pi_masks
+        "all_pi": all_pi_masks,
+        "minterms_1": minterms,
+        "merge_edges": merge_edges,
+        "pi_to_minterms": pi_to_minterms
     }
 
     return {"result": simplified, "steps": steps, "expr_for_tests": simplified, "tt_equal": verification, "summary": summary}

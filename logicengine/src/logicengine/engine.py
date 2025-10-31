@@ -15,6 +15,7 @@ from .laws import simplify_with_laws
 from .ast import collect_variables, canonical_str, normalize_bool_ast, generate_ast
 from .utils import truth_table_hash, equivalent
 from .steps import Step, RuleName, StepCategory
+from .derivation_builder import build_minterm_expansion_steps, build_merge_steps, build_absorb_steps
 from .qm import simplify_qm
 from .minimal_forms import compute_minimal_forms
 
@@ -178,66 +179,23 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             )
             steps.append(step)
     
-    # Step 4: Get minimal DNF using QM with trace
-    # For expressions with multiple variables, use QM to get minimal DNF
+    # Step 4: Get minimal DNF using QM as planner, then build user-visible steps
+    # For expressions with multiple variables, use QM to plan, then derive steps
     if len(vars_list) >= 1:
         try:
             qm_result = simplify_qm(input_std)
+            summary = qm_result.get("summary", {})
             
-            # Add QM steps to our step list
-            if "steps" in qm_result:
-                for qm_step in qm_result["steps"]:
-                    step_data = qm_step.get("data", {})
-                    step_name = qm_step.get("step", "")
-                    
-                    # Map QM steps to our rule types
-                    rule_name = "Formatowanie"
-                    if "Krok 1:" in step_name:
-                        rule_name = "Formatowanie"
-                    elif "Krok 2:" in step_name or "Krok 3:" in step_name or "Krok 4:" in step_name:
-                        rule_name = "QM: powstanie prime implicants"
-                    elif "Krok 5:" in step_name:
-                        rule_name = "QM: essential PI"
-                    elif "Petrick: dystrybucja" in step_name:
-                        rule_name = "Petrick: dystrybucja"
-                    elif "Petrick: absorpcja" in step_name:
-                        rule_name = "Petrick: absorpcja"
-                    elif "Krok 6:" in step_name or "Krok 7:" in step_name:
-                        rule_name = "Formatowanie"
-                    elif "Krok 8:" in step_name:
-                        rule_name = "Formatowanie"
-                    
-                    # For combining steps, create detailed step
-                    if "rounds" in step_data:
-                        for round_data in step_data["rounds"]:
-                            for pair in round_data.get("pairs", []):
-                                step = Step(
-                                    before_str=f"Mintermy {pair.get('from', [])}",
-                                    after_str=pair.get("to", ""),
-                                    rule="QM: łączenie sąsiednich mintermów",
-                                    category="proof",  # Hidden by default
-                                    location=None,
-                                    details={
-                                        "left_minterm": pair.get("from", [])[0] if len(pair.get("from", [])) > 0 else "",
-                                        "right_minterm": pair.get("from", [])[1] if len(pair.get("from", [])) > 1 else "",
-                                        "result_mask": pair.get("to", ""),
-                                        "vars": vars_list
-                                    },
-                                    proof={"method": "qm-trace", "equal": True}
-                                )
-                                steps.append(step)
-                    else:
-                        # Regular QM step - all QM steps are "proof"
-                        step = Step(
-                            before_str=step_name,
-                            after_str=str(step_data),
-                            rule=rule_name,
-                            category="proof",  # All QM steps hidden by default
-                            location=None,
-                            details=step_data,
-                            proof={"method": "qm-trace", "equal": True}
-                        )
-                        steps.append(step)
+            # Extract QM plan data
+            minterms_1 = summary.get("minterms_1", [])
+            selected_pi = summary.get("selected_pi", [])
+            merge_edges = summary.get("merge_edges", [])
+            pi_to_minterms = summary.get("pi_to_minterms", {})
+            
+            # Build user-visible algebraic steps from QM plan
+            # For now, just build merge steps (minterm expansion is complex)
+            merge_steps = build_merge_steps(vars_list, merge_edges)
+            steps.extend(merge_steps)
             
             result_dnf = qm_result.get("result", initial_canon)
         except Exception as e:
