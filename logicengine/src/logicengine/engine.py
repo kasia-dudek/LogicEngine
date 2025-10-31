@@ -217,11 +217,17 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             
             if not laws_completed and merge_edges:
                 # Build user-visible algebraic steps from QM plan
-                # For now, just build merge steps (minterm expansion is complex)
-                # NOTE: merge_steps are generated as fragments, not full expressions
-                # This causes discontinuity when laws already did work
-                # TODO: Refactor to work on full AST for perfect continuity
-                merge_steps = build_merge_steps(vars_list, merge_edges)
+                # Get current AST from last step's after string
+                current_ast = None
+                if steps:
+                    current_expr = steps[-1].after_str
+                    current_ast = generate_ast(current_expr)
+                    current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                else:
+                    # No laws steps, use laws' normalized_ast or fall back to initial AST
+                    current_ast = laws_result.get("normalized_ast") or node
+                
+                merge_steps = build_merge_steps(current_ast, vars_list, merge_edges)
                 steps.extend(merge_steps)
             
             # Validate continuity: prev.after_str == next.before_str
