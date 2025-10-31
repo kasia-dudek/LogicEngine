@@ -220,10 +220,9 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 # For now, just build merge steps (minterm expansion is complex)
                 # NOTE: merge_steps are generated as fragments, not full expressions
                 # This causes discontinuity when laws already did work
-                # We skip merge if laws produced any steps (even if not complete)
-                if not steps:
-                    merge_steps = build_merge_steps(vars_list, merge_edges)
-                    steps.extend(merge_steps)
+                # TODO: Refactor to work on full AST for perfect continuity
+                merge_steps = build_merge_steps(vars_list, merge_edges)
+                steps.extend(merge_steps)
             
             # Validate continuity: prev.after_str == next.before_str
             for i in range(len(steps) - 1):
