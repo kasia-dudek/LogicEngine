@@ -180,7 +180,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             steps.append(step)
     
     # Step 4: Get minimal DNF using QM as planner, then build user-visible steps
-    # For expressions with multiple variables, use QM to plan, then derive steps
+    # Only add merge steps if laws didn't complete the simplification
     if len(vars_list) >= 1:
         try:
             qm_result = simplify_qm(input_std)
@@ -192,10 +192,34 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             merge_edges = summary.get("merge_edges", [])
             pi_to_minterms = summary.get("pi_to_minterms", {})
             
-            # Build user-visible algebraic steps from QM plan
-            # For now, just build merge steps (minterm expansion is complex)
-            merge_steps = build_merge_steps(vars_list, merge_edges)
-            steps.extend(merge_steps)
+            # Only add merge steps if laws didn't complete or ended with oscillation
+            # Compare using canonical representation
+            laws_result_str = laws_result.get("result", "")
+            laws_completed = False
+            
+            if laws_result_str and laws_result_str not in ["?", ""]:
+                try:
+                    laws_canon = generate_ast(laws_result_str)
+                    laws_canon = normalize_bool_ast(laws_canon, expand_imp_iff=True)
+                    laws_canon_str = canonical_str(laws_canon)
+                    
+                    qm_canon = generate_ast(qm_result.get("result", ""))
+                    qm_canon = normalize_bool_ast(qm_canon, expand_imp_iff=True)
+                    qm_canon_str = canonical_str(qm_canon)
+                    
+                    laws_completed = (laws_canon_str == qm_canon_str)
+                except Exception:
+                    laws_completed = False
+            
+            # Also check if last step was oscillation
+            if steps and steps[-1].rule == "Zatrzymano (oscylacja)":
+                laws_completed = True
+            
+            if not laws_completed and merge_edges:
+                # Build user-visible algebraic steps from QM plan
+                # For now, just build merge steps (minterm expansion is complex)
+                merge_steps = build_merge_steps(vars_list, merge_edges)
+                steps.extend(merge_steps)
             
             # Validate continuity: prev.after_str == next.before_str
             for i in range(len(steps) - 1):
