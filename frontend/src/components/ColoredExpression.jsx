@@ -52,15 +52,62 @@ export default function ColoredExpression({
   canonExpression = null,
   highlightClass = "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5" 
 }) {
-  // Use canonical expression if provided, otherwise use regular expression
-  const exprToRender = canonExpression || expression;
-  const cleanedExpression = useMemo(() => cleanExpression(exprToRender), [exprToRender]);
+  // PRIORITY: Use canonical expression if provided, otherwise use regular expression
+  // This is THE target string - we count indices and render on this EXACT string
+  const target = useMemo(() => {
+    const exprToClean = canonExpression || expression;
+    return cleanExpression(exprToClean);
+  }, [canonExpression, expression]);
   
   // Wyczyść również fragment tak samo jak wyrażenie - to zapewni spójność
   const cleanedHighlightText = useMemo(() => {
     if (!highlightText) return null;
     return cleanExpression(highlightText);
   }, [highlightText]);
+
+  // If highlightSpan is provided, it refers to canonExpression (before cleanExpression)
+  // We need to map indices from original to cleaned string
+  const mappedHighlightSpan = useMemo(() => {
+    if (!highlightSpan || highlightSpan.start === undefined || highlightSpan.end === undefined) {
+      return null;
+    }
+    
+    // If we have canonExpression, the span refers to IT, not cleaned version
+    // So we need to check if cleanExpression removed outer parentheses
+    if (!canonExpression) {
+      // No canonExpression, so span refers to expression after cleanExpression
+      return highlightSpan;
+    }
+    
+    // Check if cleanExpression removed outer parentheses from canonExpression
+    const cleanedCanon = cleanExpression(canonExpression);
+    if (cleanedCanon === canonExpression) {
+      // No outer parentheses removed, span maps 1:1
+      return highlightSpan;
+    }
+    
+    // Outer parentheses were removed
+    // If span starts right after '(' (position 1), we need to adjust
+    if (canonExpression.startsWith('(') && canonExpression.endsWith(')')) {
+      const removedChars = 2; // '(' and ')'
+      if (highlightSpan.start === 1) {
+        // Span starts immediately after '(', adjust by removing '('
+        return {
+          start: 0,
+          end: highlightSpan.end - removedChars
+        };
+      } else if (highlightSpan.start > 1) {
+        // Span is inside, adjust by removing '('
+        return {
+          start: highlightSpan.start - 1,
+          end: highlightSpan.end - removedChars
+        };
+      }
+    }
+    
+    // Fallback: return original span
+    return highlightSpan;
+  }, [highlightSpan, canonExpression]);
 
   // Oblicz highlightRange z highlightText lub highlightSpan
   // CRITICAL: indeksy muszą być liczone na dokładnie tym samym stringu, który renderujemy
@@ -69,21 +116,21 @@ export default function ColoredExpression({
     if (highlightRange) return highlightRange;
     
     // Priority 2: highlightSpan from backend (canonical indices)
-    // Jeśli backend podał span, użyj go bezpośrednio - to są indeksy w canonExpression
-    if (highlightSpan && highlightSpan.start !== undefined && highlightSpan.end !== undefined) {
+    // Use mapped span that accounts for cleanExpression transformations
+    if (mappedHighlightSpan && mappedHighlightSpan.start !== undefined && mappedHighlightSpan.end !== undefined) {
       return {
-        start: highlightSpan.start,
-        end: highlightSpan.end,
+        start: mappedHighlightSpan.start,
+        end: mappedHighlightSpan.end,
         class: highlightClass
       };
     }
     
     // Priority 3: highlightText (fallback substring matching)
-    // WAZNE: NIE usuwaj spacji - licz indeksy na cleanedExpression, który jest renderowany!
-    if (!cleanedHighlightText || !cleanedExpression) return null;
+    // WAZNE: NIE usuwaj spacji - licz indeksy na target, który jest renderowany!
+    if (!cleanedHighlightText || !target) return null;
     
-    // Używamy cleanedExpression ze spacjami - ten sam string, który trafi do renderowania
-    const targetExpression = cleanedExpression;
+    // Używamy target ze spacjami - ten sam string, który trafi do renderowania
+    const targetExpression = target;
     const targetHighlight = cleanedHighlightText;
     
     // 1. Spróbuj dokładnego dopasowania
@@ -255,7 +302,7 @@ export default function ColoredExpression({
     
     // 6. No match found - return null instead of highlighting whole expression
     return null;
-  }, [cleanedExpression, cleanedHighlightText, highlightRange, highlightSpan, highlightClass]);
+  }, [target, cleanedHighlightText, highlightRange, mappedHighlightSpan, highlightClass]);
 
   if (!expression) return null;
 
@@ -350,7 +397,7 @@ export default function ColoredExpression({
 
   return (
     <span className={`font-mono ${className}`}>
-      {renderExpression(cleanedExpression)}
+      {renderExpression(target)}
     </span>
   );
 }
