@@ -218,10 +218,21 @@ function findFragmentInExpression(fragment, expression) {
   return { start: 0, end: normExpr.length };
 }
 
-function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, className = "", strategy = "auto" }) {
+function HighlightedExpression({ 
+  beforeSubexpr, 
+  afterSubexpr, 
+  fullExpression, 
+  className = "", 
+  strategy = "auto",
+  canonExpression = null,
+  highlightSpan = null,
+  beforeSubexprCanon = null,
+  afterSubexprCanon = null
+}) {
   if (!fullExpression) return null;
 
   const target = strategy === "before" ? beforeSubexpr : strategy === "after" ? afterSubexpr : (afterSubexpr || beforeSubexpr);
+  const targetCanon = strategy === "before" ? beforeSubexprCanon : strategy === "after" ? afterSubexprCanon : (afterSubexprCanon || beforeSubexprCanon);
   
   if (!target) {
     return <ColoredExpression expression={fullExpression} className={className} />;
@@ -230,20 +241,14 @@ function HighlightedExpression({ beforeSubexpr, afterSubexpr, fullExpression, cl
   // Używamy zielonego koloru dla obu (przed i po) dla spójności
   const highlightClass = "bg-green-100 text-green-800 border-green-300";
 
-  // Zawsze używaj oryginalnego target jako highlightText
-  // ColoredExpression ma własną inteligentną logikę znajdowania, która obsługuje:
-  // - różne kolejności argumentów (komutatywność)
-  // - różne formatowanie nawiasów
-  // - najdłuższy wspólny substring jako fallback
-  // 
-  // Jeśli użyjemy foundSubstring z findFragmentInExpression, może być ucięty
-  // (np. znalazł tylko część fragmentu). Lepiej przekazać pełny target i pozwolić
-  // ColoredExpression samemu znaleźć najlepsze dopasowanie.
+  // Use canonical highlighting if available, otherwise fall back to substring matching
   return (
     <ColoredExpression 
       expression={fullExpression} 
+      canonExpression={canonExpression}
       className={className}
-      highlightText={target}
+      highlightText={targetCanon || target}
+      highlightSpan={highlightSpan}
       highlightClass={highlightClass}
     />
   );
@@ -280,6 +285,12 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
         before: data.before_subexpr || data.before_tree,
         after: data.after_subexpr || data.after_tree,
         afterTree: data.after_tree || data.after,
+        beforeCanon: data.before_canon,
+        afterCanon: data.after_canon,
+        beforeSubCanon: data.before_subexpr_canon,
+        afterSubCanon: data.after_subexpr_canon,
+        beforeSpan: data.before_highlight_span,
+        afterSpan: data.after_highlight_span,
       });
     } catch (error) {
       setPreviewData(null);
@@ -325,6 +336,12 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
         </div>
       </div>
 
+      {/* Legend */}
+      <div className="text-xs text-gray-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200 flex items-center gap-2">
+        <span className="inline-block w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></span>
+        <span>Zielony podkreśla fragment zmieniany w tym kroku (Przed) oraz nowo powstały fragment (Po).</span>
+      </div>
+
       {/* Kroki */}
       <ol className="space-y-3">
         {steps.map((s, i) => (
@@ -364,8 +381,11 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                   <HighlightedExpression
                     beforeSubexpr={s.before_subexpr}
                     fullExpression={s.before_tree}
+                    canonExpression={s.before_canon}
                     className="text-gray-800"
                     strategy="before"
+                    highlightSpan={s.before_highlight_span}
+                    beforeSubexprCanon={s.before_subexpr_canon}
                   />
                 </div>
               </div>
@@ -384,7 +404,11 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                     beforeSubexpr={s.before_subexpr}
                     afterSubexpr={s.after_subexpr}
                     fullExpression={s.after_tree}
+                    canonExpression={s.after_canon}
                     className="text-blue-700"
+                    highlightSpan={s.after_highlight_span}
+                    beforeSubexprCanon={s.before_subexpr_canon}
+                    afterSubexprCanon={s.after_subexpr_canon}
                   />
                 </div>
               </div>
@@ -417,19 +441,31 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                   <div className="absolute left-0 top-full mt-2 z-50 w-96 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
                        style={{ minWidth: '320px', maxWidth: '400px' }}>
                     <div className="text-xs font-semibold text-purple-700 mb-2">{hoveredLaw}:</div>
-                    <div className="text-xs space-y-1">
+                    <div className="text-xs space-y-2">
                       <div className="break-all">
-                        <span className="text-gray-600 font-medium">Przed:</span>
-                        <span className="ml-2">
-                          <ColoredExpression expression={previewData.before} className="text-gray-700" />
-                        </span>
+                        <span className="text-gray-600 font-medium mb-1 block">Przed:</span>
+                        <div className="bg-amber-50 px-2 py-1 rounded border">
+                          <ColoredExpression 
+                            expression={s.before_tree} 
+                            canonExpression={previewData.beforeCanon}
+                            className="text-gray-700" 
+                            highlightText={previewData.beforeSubCanon || previewData.before}
+                            highlightSpan={previewData.beforeSpan}
+                          />
+                        </div>
                       </div>
                       <div className="text-center text-gray-400">→</div>
                       <div className="break-all">
-                        <span className="text-gray-600 font-medium">Po:</span>
-                        <span className="ml-2">
-                          <ColoredExpression expression={previewData.after} className="text-green-700" />
-                        </span>
+                        <span className="text-gray-600 font-medium mb-1 block">Po:</span>
+                        <div className="bg-blue-50 px-2 py-1 rounded border">
+                          <ColoredExpression 
+                            expression={previewData.afterTree || previewData.after} 
+                            canonExpression={previewData.afterCanon}
+                            className="text-green-700" 
+                            highlightText={previewData.afterSubCanon || previewData.after}
+                            highlightSpan={previewData.afterSpan}
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>

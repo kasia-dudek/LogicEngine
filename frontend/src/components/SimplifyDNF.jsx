@@ -78,9 +78,15 @@ export default function SimplifyDNF({ expression, loading }) {
       {/* Steps */}
       {steps.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-lg font-bold text-gray-800">
-            Kroki upraszczania {steps.length > 0 && `(${steps.length} krok${steps.length !== 1 ? 'ów' : ''})`}
-          </h3>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-lg font-bold text-gray-800">
+              Kroki upraszczania {steps.length > 0 && `(${steps.length} krok${steps.length !== 1 ? 'ów' : ''})`}
+            </h3>
+            <div className="text-xs text-gray-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200 flex items-center gap-2">
+              <span className="inline-block w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></span>
+              <span>Zielony podkreśla fragment zmieniany w tym kroku (Przed) oraz nowo powstały fragment (Po).</span>
+            </div>
+          </div>
           {steps.map((step, idx) => (
             <div key={idx} className="bg-white rounded-lg border border-gray-300 shadow-sm">
               <div className="flex items-center gap-3 p-4 border-b border-gray-200 bg-gray-50">
@@ -101,19 +107,45 @@ export default function SimplifyDNF({ expression, loading }) {
               
               <div className="p-4 space-y-3">
                 {typeof step.before_str === 'string' && (
-                  <div>
+                  <div aria-label="Wyrażenie przed krokiem z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Przed:</span>
                     <div className="mt-1 bg-yellow-50 px-2 py-1 rounded border">
-                      <ColoredExpression expression={step.before_str} className="text-yellow-700" />
+                      <ColoredExpression 
+                        expression={step.before_str} 
+                        canonExpression={step.before_canon}
+                        className="text-yellow-700"
+                        highlightText={step.before_subexpr_canon || step.before_subexpr}
+                        highlightSpan={step.before_highlight_span}
+                        highlightClass="bg-green-100 text-green-800 border-green-300"
+                      />
+                    </div>
+                  </div>
+                )}
+                
+                {/* Show subexpression change if available */}
+                {(step.before_subexpr || step.after_subexpr) && (
+                  <div>
+                    <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
+                    <div className="mt-1">
+                      <ColoredExpression expression={step.before_subexpr || ''} className="text-gray-600" />
+                      <span className="mx-2">→</span>
+                      <ColoredExpression expression={step.after_subexpr || ''} className="text-green-700" />
                     </div>
                   </div>
                 )}
                 
                 {typeof step.after_str === 'string' && (
-                  <div>
+                  <div aria-label="Wyrażenie po kroku z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Po:</span>
                     <div className="mt-1 bg-blue-50 px-2 py-1 rounded border">
-                      <ColoredExpression expression={step.after_str} className="text-blue-700" />
+                      <ColoredExpression 
+                        expression={step.after_str} 
+                        canonExpression={step.after_canon}
+                        className="text-blue-700"
+                        highlightText={step.after_subexpr_canon || step.after_subexpr}
+                        highlightSpan={step.after_highlight_span}
+                        highlightClass="bg-green-100 text-green-800 border-green-300"
+                      />
                     </div>
                   </div>
                 )}

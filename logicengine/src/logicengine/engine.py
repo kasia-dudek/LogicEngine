@@ -15,7 +15,7 @@ from .laws import simplify_with_laws
 from .ast import collect_variables, canonical_str, normalize_bool_ast, generate_ast
 from .utils import truth_table_hash, equivalent
 from .steps import Step, RuleName, StepCategory
-from .derivation_builder import build_minterm_expansion_steps, build_merge_steps, build_absorb_steps
+from .derivation_builder import build_minterm_expansion_steps, build_merge_steps, build_absorb_steps, is_dnf, ensure_pair_present
 from .qm import simplify_qm
 from .minimal_forms import compute_minimal_forms
 
@@ -144,6 +144,11 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
         for law_step in laws_result["steps"]:
             before_str = law_step.get("before_tree", "")
             after_str = law_step.get("after_tree", "")
+            law_name = law_step.get("law", "")
+            
+            # Skip oscillation steps
+            if law_name == "Zatrzymano (oscylacja)":
+                continue
             
             # Skip steps with invalid results
             if after_str in ["?", ""] or before_str in ["?", ""]:
@@ -157,7 +162,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 
                 # Skip step if not equivalent (log warning but don't crash)
                 if not is_equal:
-                    print(f"Warning: Equivalence check failed for rule: {law_step.get('law', 'Unknown')}")
+                    print(f"Warning: Equivalence check failed for rule: {law_name}")
                     continue
             except Exception as e:
                 # If hash computation fails, skip this step
@@ -167,7 +172,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             step = Step(
                 before_str=before_str,
                 after_str=after_str,
-                rule=law_step.get("law", "Formatowanie") if isinstance(law_step.get("law"), str) else "Formatowanie",
+                rule=law_name if isinstance(law_name, str) else "Formatowanie",
                 location=law_step.get("path"),
                 details={},
                 proof={
@@ -175,7 +180,15 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     "equal": is_equal,
                     "hash_before": hash_before,
                     "hash_after": hash_after
-                }
+                },
+                before_subexpr=law_step.get("before_subexpr"),
+                after_subexpr=law_step.get("after_subexpr"),
+                before_canon=law_step.get("before_canon"),
+                after_canon=law_step.get("after_canon"),
+                before_subexpr_canon=law_step.get("before_subexpr_canon"),
+                after_subexpr_canon=law_step.get("after_subexpr_canon"),
+                before_highlight_span=law_step.get("before_highlight_span"),
+                after_highlight_span=law_step.get("after_highlight_span")
             )
             steps.append(step)
     
@@ -193,27 +206,51 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             pi_to_minterms = summary.get("pi_to_minterms", {})
             
             # Only add merge steps if laws didn't complete or ended with oscillation
-            # Compare using canonical representation
-            laws_result_str = laws_result.get("result", "")
+            # Compare using truth table hash (more robust than canonical string)
+            # Use last verified step's after_str instead of laws_result.get("result")
+            laws_result_str = None
+            if steps:
+                laws_result_str = steps[-1].after_str
+            else:
+                laws_result_str = laws_result.get("result", "")
+            
             laws_completed = False
             
             if laws_result_str and laws_result_str not in ["?", ""]:
                 try:
-                    laws_canon = generate_ast(laws_result_str)
-                    laws_canon = normalize_bool_ast(laws_canon, expand_imp_iff=True)
-                    laws_canon_str = canonical_str(laws_canon)
+                    laws_hash = truth_table_hash(vars_list, laws_result_str)
+                    qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
+                    laws_completed = (laws_hash == qm_hash and len(laws_hash) > 0)
                     
-                    qm_canon = generate_ast(qm_result.get("result", ""))
-                    qm_canon = normalize_bool_ast(qm_canon, expand_imp_iff=True)
-                    qm_canon_str = canonical_str(qm_canon)
-                    
-                    laws_completed = (laws_canon_str == qm_canon_str)
+                    # Check if last step is in DNF and truly minimal
+                    if laws_completed and steps:
+                        last_ast = generate_ast(steps[-1].after_str)
+                        last_ast = normalize_bool_ast(last_ast, expand_imp_iff=True)
+                        if not is_dnf(last_ast):
+                            print(f"Warning: Last step is not DNF, removing it")
+                            steps.pop()
+                            laws_completed = False  # Need to continue with QM
+                        
+                        # Even if TT hash matches and is DNF, check if we need absorption cleanup
+                        if laws_completed and steps:
+                            # Recompute last_ast after pop if it occurred
+                            last_ast_check = generate_ast(steps[-1].after_str)
+                            last_ast_check = normalize_bool_ast(last_ast_check, expand_imp_iff=True)
+                            
+                            # Check if result needs cleanup by comparing literal counts
+                            from logicengine.laws import measure
+                            last_measure = measure(last_ast_check)
+                            qm_expr_str = qm_result.get("result", "")
+                            qm_ast = generate_ast(qm_expr_str)
+                            qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+                            qm_measure = measure(qm_ast)
+                            
+                            # If laws result has more literals, it's not truly minimal
+                            if last_measure[0] > qm_measure[0]:
+                                print(f"Warning: Laws result not minimal, needs cleanup")
+                                laws_completed = False
                 except Exception:
                     laws_completed = False
-            
-            # Also check if last step was oscillation
-            if steps and steps[-1].rule == "Zatrzymano (oscylacja)":
-                laws_completed = True
             
             if not laws_completed and merge_edges:
                 # Build user-visible algebraic steps from QM plan
@@ -227,19 +264,61 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     # No laws steps, use laws' normalized_ast or fall back to initial AST
                     current_ast = laws_result.get("normalized_ast") or node
                 
-                merge_steps = build_merge_steps(current_ast, vars_list, merge_edges)
-                steps.extend(merge_steps)
+                # For each merge edge, ensure pair is present, then merge
+                working_ast = current_ast
+                for left_mask, right_mask, result_mask in merge_edges:
+                    # Try to ensure pair is present
+                    working_ast, pair_steps = ensure_pair_present(working_ast, vars_list, left_mask, right_mask)
+                    if pair_steps:
+                        steps.extend(pair_steps)
+                    
+                    # Now try to merge this pair
+                    single_edge_steps = build_merge_steps(working_ast, vars_list, [(left_mask, right_mask, result_mask)])
+                    if single_edge_steps:
+                        steps.extend(single_edge_steps)
+                        # Update working_ast for next iteration
+                        working_ast = generate_ast(single_edge_steps[-1].after_str)
+                        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                
+                # After all merges, apply absorption cleanup
+                absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
+                if absorb_steps:
+                    steps.extend(absorb_steps)
             
             # Validate continuity: prev.after_str == next.before_str
-            for i in range(len(steps) - 1):
+            # Enforce hard continuity - remove steps that break the chain
+            i = 0
+            while i < len(steps) - 1:
                 prev_after = steps[i].after_str
                 next_before = steps[i + 1].before_str
                 if prev_after != next_before:
-                    print(f"Warning: Step discontinuity between steps {i+1} and {i+2}")
+                    # Break in continuity - remove the offending step
+                    print(f"Warning: Removing step {i+2} due to discontinuity")
                     print(f"  Step {i+1} after:  {prev_after}")
                     print(f"  Step {i+2} before: {next_before}")
+                    steps.pop(i + 1)
+                    # Don't increment i, check this position again
+                else:
+                    i += 1
             
-            result_dnf = qm_result.get("result", initial_canon)
+            # Use last step's result as result_dnf if we have steps
+            # Verify it matches QM for correctness
+            if steps:
+                result_dnf = steps[-1].after_str
+                # Verify equivalence with QM
+                try:
+                    final_hash = truth_table_hash(vars_list, result_dnf)
+                    qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
+                    if final_hash != qm_hash:
+                        print(f"Warning: Laws couldn't reach minimal DNF, using QM result")
+                        print(f"  Last laws step: {result_dnf}")
+                        print(f"  QM result: {qm_result.get('result')}")
+                        # Use QM result as it's the verified minimal DNF
+                        result_dnf = qm_result.get("result", initial_canon)
+                except Exception as e:
+                    print(f"Warning: Could not verify equivalence: {e}")
+            else:
+                result_dnf = qm_result.get("result", initial_canon)
         except Exception as e:
             # Fallback to minimal_forms if QM fails
             minimal_result = compute_minimal_forms(input_std)

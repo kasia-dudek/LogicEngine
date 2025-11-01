@@ -48,4 +48,12 @@ class Step:
     location: Optional[List[int]] = None  # path in AST (e.g., indices in args)
     details: Dict[str, Any] = field(default_factory=dict)  # e.g., minterm ids, masks, PI ids
     proof: Dict[str, Any] = field(default_factory=dict)   # {'method':'tt-hash','equal':bool,'hash_before':..., 'hash_after':...}
+    before_subexpr: Optional[str] = None  # highlighted fragment before (for UI)
+    after_subexpr: Optional[str] = None   # highlighted fragment after (for UI)
+    before_canon: Optional[str] = None      # canonical full expression before
+    after_canon: Optional[str] = None       # canonical full expression after
+    before_subexpr_canon: Optional[str] = None  # canonical highlighted fragment before
+    after_subexpr_canon: Optional[str] = None   # canonical highlighted fragment after
+    before_highlight_span: Optional[Dict[str, int]] = None  # {start, end} in before_canon
+    after_highlight_span: Optional[Dict[str, int]] = None   # {start, end} in after_canon
 

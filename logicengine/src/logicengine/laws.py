@@ -45,6 +45,38 @@ def pretty(n: Any) -> str:
             return inner
     return result
 
+def find_subtree_position(subtree: Any, full_tree: Any) -> Optional[Dict[str, int]]:
+    """Find start/end position of subtree in canonical string representation of full tree.
+    Returns None if not found or error.
+    
+    Both subtree and full_tree should be normalized ASTs.
+    """
+    try:
+        # Normalize both trees to ensure consistent canonical representations
+        if isinstance(subtree, dict) and 'op' in subtree:
+            subtree = normalize_bool_ast(subtree)
+        if isinstance(full_tree, dict) and 'op' in full_tree:
+            full_tree = normalize_bool_ast(full_tree)
+        
+        full_canon = canonical_str(full_tree)
+        sub_canon = canonical_str(subtree)
+        
+        # Try exact match
+        if sub_canon in full_canon:
+            start = full_canon.find(sub_canon)
+            return {"start": start, "end": start + len(sub_canon)}
+        
+        # Try without outer parentheses
+        if sub_canon.startswith('(') and sub_canon.endswith(')'):
+            sub_no_parens = sub_canon[1:-1]
+            if sub_no_parens in full_canon:
+                start = full_canon.find(sub_no_parens)
+                return {"start": start, "end": start + len(sub_no_parens)}
+        
+        return None
+    except Exception:
+        return None
+
 def count_nodes(n: Any) -> int:
     if not isinstance(n, dict):
         return 1
@@ -423,11 +455,14 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         continue
                     if isinstance(y, dict) and y.get("op") == "AND":
                         if any(canon(a) == canon(x) for a in y.get("args", [])):
+                            # Remove y from the OR args
+                            new_args = [arg for arg in sub["args"] if arg is not y]
+                            after = new_args[0] if len(new_args) == 1 else {"op": "OR", "args": new_args}
                             out.append({
                                 "law": "Absorpcja (∨)",
                                 "path": path,
                                 "before": sub,
-                                "after": x,
+                                "after": after,
                                 "note": "X∨(X∧Y)=X",
                             })
                             break
@@ -457,11 +492,14 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         continue
                     if isinstance(y, dict) and y.get("op") == "OR":
                         if any(canon(a) == canon(x) for a in y.get("args", [])):
+                            # Remove y from the AND args
+                            new_args = [arg for arg in sub["args"] if arg is not y]
+                            after = new_args[0] if len(new_args) == 1 else {"op": "AND", "args": new_args}
                             out.append({
                                 "law": "Absorpcja (∧)",
                                 "path": path,
                                 "before": sub,
-                                "after": x,
+                                "after": after,
                                 "note": "X∧(X∨Y)=X",
                             })
                             break
@@ -567,12 +605,12 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     # Sprawdź czy jeden z termów jest podzbiorem drugiego
                     if not R1 or not R2:
                         # Jeden z termów jest podzbiorem drugiego - użyj absorpcji
-                        if not R1:  # S jest podzbiorem T
-                            # A ∧ B ∨ A = A (absorpcja)
-                            after = sub["args"][j]  # użyj większego termu
-                        else:  # T jest podzbiorem S
-                            # A ∨ A ∧ B = A (absorpcja)
-                            after = sub["args"][i]  # użyj większego termu
+                        if not R1:  # S jest podzbiorem T (S has no extra vars beyond T)
+                            # Keep S (the smaller subset term)
+                            after = sub["args"][i]
+                        else:  # T jest podzbiorem S (T has no extra vars beyond S)
+                            # Keep T (the smaller subset term)
+                            after = sub["args"][j]
                         
                         if measure(after) < measure(OR([sub["args"][i], sub["args"][j]])):
                             new_terms = [a for k, a in enumerate(sub["args"]) if k not in {i, j}]
@@ -784,32 +822,67 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
     if not matches:
         return None
     
+    # Rule priority: contradictions/neutrality > distribution > absorption > factoring > consensus > other
+    def rule_priority(rule_name: str) -> int:
+        # Highest priority: rules that eliminate contradictions or neutral elements
+        if "Kontradykcja" in rule_name or "Dopełnienie" in rule_name or "Element neutralny" in rule_name:
+            return 1
+        # Second: rules that eliminate negations
+        elif "Podwójna negacja" in rule_name:
+            return 2
+        # Third: absorption (direct simplification)
+        elif "Absorpcja" in rule_name:
+            return 3
+        # Fourth: distribution/expansion
+        elif "Dystrybutywność" in rule_name or "Rozdzielność" in rule_name:
+            return 4
+        # Fifth: De Morgan (simplifies structure)
+        elif "De Morgan" in rule_name:
+            return 5
+        # Sixth: factoring (often worsens form)
+        elif "Faktoryzacja" in rule_name:
+            return 6
+        # Seventh: consensus (buggy, filtered by TT verification)
+        elif "Konsensus" in rule_name:
+            return 7
+        else:
+            return 8
+    
     best: Optional[Dict[str, Any]] = None
     best_measure = None
+    best_priority = None
     
     for m in matches:
         after = m["after"]
         after_measure = measure(after)
+        priority = rule_priority(m.get("law", ""))
         
         if best is None:
             best = m
             best_measure = after_measure
+            best_priority = priority
             continue
-            
-        # Primary: prefer smaller measure
-        if after_measure < best_measure:
+        
+        # Primary: prefer higher priority (lower number)
+        if priority < best_priority:
             best = m
             best_measure = after_measure
-        elif after_measure == best_measure:
-            # Tie-break 1: prefer algebraic over axiom
-            if m.get("source") == "algebraic" and best.get("source") == "axiom":
+            best_priority = priority
+        elif priority == best_priority:
+            # Secondary: prefer smaller measure
+            if after_measure < best_measure:
                 best = m
                 best_measure = after_measure
-            elif m.get("source") == best.get("source"):
-                # Tie-break 2: prefer shorter string representation
-                if len(pretty(after)) < len(pretty(best["after"])):
+            elif after_measure == best_measure:
+                # Tie-break 1: prefer algebraic over axiom
+                if m.get("source") == "algebraic" and best.get("source") == "axiom":
                     best = m
                     best_measure = after_measure
+                elif m.get("source") == best.get("source"):
+                    # Tie-break 2: prefer shorter string representation
+                    if len(pretty(after)) < len(pretty(best["after"])):
+                        best = m
+                        best_measure = after_measure
     
     return best
 
@@ -875,13 +948,23 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         node_backup = copy.deepcopy(node)
         
         before_str = pretty(node)
+        
+        # Compute canonical strings and highlight spans for BEFORE state
+        before_canon = canonical_str(node_backup)
+        before_sub_canon = canonical_str(sub_before)
+        before_highlight_span = find_subtree_position(sub_before, node_backup)
+        
         node = set_by_path(node, path, sub_after)
         node = normalize_bool_ast(node)
         after_str = pretty(node)
+        
+        # Compute canonical strings and highlight spans for AFTER state
+        after_canon = canonical_str(node)
+        after_sub_canon = canonical_str(sub_after)
+        after_highlight_span = find_subtree_position(sub_after, node)
 
         # Check for oscillation - use canonical_str for structural comparison
-        after_canonical = canonical_str(node)
-        if after_canonical in seen_expressions:
+        if after_canon in seen_expressions:
             steps.append({
                 "law": "Zatrzymano (oscylacja)",
                 "note": "Wykryto oscylację - system zatrzymany",
@@ -890,6 +973,12 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
                 "after_tree": after_str,
                 "before_subexpr": pretty(sub_before),
                 "after_subexpr": pretty(sub_after),
+                "before_canon": before_canon,
+                "after_canon": after_canon,
+                "before_subexpr_canon": before_sub_canon,
+                "after_subexpr_canon": after_sub_canon,
+                "before_highlight_span": before_highlight_span,
+                "after_highlight_span": after_highlight_span,
                 "applicable_here": [],
                 "source": "system",
                 "axiom_id": None,
@@ -916,11 +1005,17 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         # A transformation is "significantly worse" if:
         # - It increases literal count (always bad)
         # - OR it increases both node count AND string length by significant amounts
+        # EXCEPTION: Distribution/Expansion (priority 1 rules) can increase literals temporarily
         is_worse = False
         if choice.get("source") != "axiom":
+            law_name = choice.get("law", "")
+            is_expansion_rule = ("Dystrybutywność" in law_name or "Rozdzielność" in law_name)
+            
             if after_full_measure[0] > before_full_measure[0]:
-                # More literals - definitely worse
-                is_worse = True
+                # More literals - normally worse
+                # But allow it for expansion rules (they may be necessary for DNF)
+                if not is_expansion_rule:
+                    is_worse = True
             elif (after_full_measure[1] > before_full_measure[1] + 2 and 
                   after_full_measure[2] > before_full_measure[2] + 3):
                 # Significantly more nodes AND longer string - probably worse
@@ -939,7 +1034,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         
         # If measure is the same or slightly worse (neutral/acceptable transformation),
         # allow it but check for oscillation to avoid infinite loops
-        if after_canonical in seen_expressions and choice.get("source") != "axiom":
+        if after_canon in seen_expressions and choice.get("source") != "axiom":
             # We've seen this result before - don't repeat
             sub_before_canon = canonical_str(sub_before)
             sub_after_canon = canonical_str(sub_after)
@@ -947,7 +1042,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             node = node_backup
             continue
 
-        seen_expressions.add(after_canonical)
+        seen_expressions.add(after_canon)
 
         applicable_here = []
         applied_law = choice["law"]
@@ -969,6 +1064,12 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             "after_tree": after_str,
             "before_subexpr": pretty(sub_before),
             "after_subexpr": pretty(sub_after),
+            "before_canon": before_canon,
+            "after_canon": after_canon,
+            "before_subexpr_canon": before_sub_canon,
+            "after_subexpr_canon": after_sub_canon,
+            "before_highlight_span": before_highlight_span,
+            "after_highlight_span": after_highlight_span,
             "applicable_here": applicable_here,
             "source": choice.get("source", "algebraic"),
             "axiom_id": choice.get("axiom_id"),
@@ -1004,10 +1105,20 @@ def apply_law_once(expr: str, path: List[List[Optional[int]]], law: str) -> Dict
 
     choice = cand[0]
     before_str = pretty(node)
+    
+    # Compute canonical strings and highlight spans
+    before_canon = canonical_str(node)
+    before_sub_canon = canonical_str(choice["before"])
+    before_highlight_span = find_subtree_position(choice["before"], node)
 
     node = set_by_path(node, path, choice["after"])
     node = normalize_bool_ast(node)
     after_str = pretty(node)
+    
+    # Compute canonical strings and highlight spans for AFTER state
+    after_canon = canonical_str(node)
+    after_sub_canon = canonical_str(choice["after"])
+    after_highlight_span = find_subtree_position(choice["after"], node)
 
     return {
         "ok": True,
@@ -1018,6 +1129,12 @@ def apply_law_once(expr: str, path: List[List[Optional[int]]], law: str) -> Dict
         "after_tree": after_str,
         "before_subexpr": pretty(choice["before"]),
         "after_subexpr": pretty(choice["after"]),
+        "before_canon": before_canon,
+        "after_canon": after_canon,
+        "before_subexpr_canon": before_sub_canon,
+        "after_subexpr_canon": after_sub_canon,
+        "before_highlight_span": before_highlight_span,
+        "after_highlight_span": after_highlight_span,
         "alternatives_here": [m["law"] for m in here],
     }
 

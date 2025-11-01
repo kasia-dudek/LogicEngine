@@ -43,8 +43,18 @@ function cleanExpression(expr) {
   }
 }
 
-export default function ColoredExpression({ expression, className = "", highlightRange = null, highlightText = null, highlightClass = "" }) {
-  const cleanedExpression = useMemo(() => cleanExpression(expression), [expression]);
+export default function ColoredExpression({ 
+  expression, 
+  className = "", 
+  highlightRange = null, 
+  highlightText = null, 
+  highlightSpan = null,
+  canonExpression = null,
+  highlightClass = "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5" 
+}) {
+  // Use canonical expression if provided, otherwise use regular expression
+  const exprToRender = canonExpression || expression;
+  const cleanedExpression = useMemo(() => cleanExpression(exprToRender), [exprToRender]);
   
   // Wyczyść również fragment tak samo jak wyrażenie - to zapewni spójność
   const cleanedHighlightText = useMemo(() => {
@@ -52,11 +62,23 @@ export default function ColoredExpression({ expression, className = "", highligh
     return cleanExpression(highlightText);
   }, [highlightText]);
 
-  // Oblicz highlightRange z highlightText
+  // Oblicz highlightRange z highlightText lub highlightSpan
   // Używamy cleanedExpression i cleanedHighlightText dla spójności
   // oba są czyszczone tak samo, więc pozycje będą się zgadzać
   const computedHighlightRange = useMemo(() => {
+    // Priority 1: explicit highlightRange
     if (highlightRange) return highlightRange;
+    
+    // Priority 2: highlightSpan from backend (canonical indices)
+    if (highlightSpan && highlightSpan.start !== undefined && highlightSpan.end !== undefined) {
+      return {
+        start: highlightSpan.start,
+        end: highlightSpan.end,
+        class: highlightClass
+      };
+    }
+    
+    // Priority 3: highlightText (fallback substring matching)
     if (!cleanedHighlightText || !cleanedExpression) return null;
     
     // Normalizuj (usuń spacje) wyczyszczone wersje
@@ -69,7 +91,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       return {
         start: index,
         end: index + normalizedHighlight.length,
-        class: highlightClass || "bg-yellow-100"
+        class: highlightClass
       };
     }
     
@@ -81,7 +103,7 @@ export default function ColoredExpression({ expression, className = "", highligh
         return {
           start: index,
           end: index + highlightWithoutParens.length,
-          class: highlightClass || "bg-yellow-100"
+          class: highlightClass
         };
       }
     }
@@ -125,7 +147,7 @@ export default function ColoredExpression({ expression, className = "", highligh
           return {
             start,
             end,
-            class: highlightClass || "bg-yellow-100"
+            class: highlightClass
           };
         }
         // Jeśli znaleziono chociaż jedną część, użyj najdłuższą
@@ -134,7 +156,7 @@ export default function ColoredExpression({ expression, className = "", highligh
           return {
             start: best.index,
             end: best.index + best.length,
-            class: highlightClass || "bg-yellow-100"
+            class: highlightClass
           };
         }
       }
@@ -157,7 +179,7 @@ export default function ColoredExpression({ expression, className = "", highligh
           return {
             start,
             end,
-            class: highlightClass || "bg-yellow-100"
+            class: highlightClass
           };
         }
         // Jeśli znaleziono chociaż jedną część, użyj najdłuższą
@@ -166,7 +188,7 @@ export default function ColoredExpression({ expression, className = "", highligh
           return {
             start: best.index,
             end: best.index + best.length,
-            class: highlightClass || "bg-yellow-100"
+            class: highlightClass
           };
         }
       }
@@ -202,7 +224,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       return {
         start: longestIndex,
         end: longestIndex + longestMatch.length,
-        class: highlightClass || "bg-yellow-100"
+        class: highlightClass
       };
     }
     
@@ -214,7 +236,7 @@ export default function ColoredExpression({ expression, className = "", highligh
         return {
           start: index,
           end: Math.min(index + normalizedHighlight.length, normalizedExpression.length),
-          class: highlightClass || "bg-yellow-100"
+          class: highlightClass
         };
       }
       
@@ -225,7 +247,7 @@ export default function ColoredExpression({ expression, className = "", highligh
         return {
           start: Math.max(0, lastIdx - normalizedHighlight.length + 1),
           end: lastIdx + 1,
-          class: highlightClass || "bg-yellow-100"
+          class: highlightClass
         };
       }
     }
@@ -238,7 +260,7 @@ export default function ColoredExpression({ expression, className = "", highligh
         return {
           start: 0,
           end: normalizedExpression.length,
-          class: highlightClass || "bg-yellow-100"
+          class: highlightClass
         };
       }
     }
@@ -249,7 +271,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       end: Math.min(normalizedHighlight.length, normalizedExpression.length),
       class: highlightClass || "bg-yellow-100"
     };
-  }, [cleanedExpression, cleanedHighlightText, highlightRange, highlightClass]);
+  }, [cleanedExpression, cleanedHighlightText, highlightRange, highlightSpan, highlightClass]);
 
   if (!expression) return null;
 
@@ -281,7 +303,7 @@ export default function ColoredExpression({ expression, className = "", highligh
       // Zakończ poprzedni highlight span jeśli wychodzimy z zakresu
       if (wasInHighlight && !inHighlight && highlightBuffer.length > 0) {
         result.push(
-          <span key={`highlight-${highlightStart}`} className={`${computedHighlightRange.class} px-1 rounded border`}>
+          <span key={`highlight-${highlightStart}`} className={computedHighlightRange.class}>
             {highlightBuffer.join('')}
           </span>
         );
@@ -333,7 +355,7 @@ export default function ColoredExpression({ expression, className = "", highligh
     // Jeśli na końcu nadal jesteśmy w highlightcie, zamknij span
     if (inHighlight && highlightBuffer.length > 0) {
       result.push(
-        <span key={`highlight-${highlightStart}`} className={`${computedHighlightRange.class} px-1 rounded border`}>
+        <span key={`highlight-${highlightStart}`} className={computedHighlightRange.class}>
           {highlightBuffer.join('')}
         </span>
       );
