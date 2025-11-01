@@ -66,47 +66,57 @@ export default function ColoredExpression({
   }, [highlightText]);
 
   // If highlightSpan is provided, it refers to canonExpression (before cleanExpression)
-  // We need to map indices from original to cleaned string
+  // We need to map indices from original to cleaned string by computing the actual offset
   const mappedHighlightSpan = useMemo(() => {
     if (!highlightSpan || highlightSpan.start === undefined || highlightSpan.end === undefined) {
       return null;
     }
     
     // If we have canonExpression, the span refers to IT, not cleaned version
-    // So we need to check if cleanExpression removed outer parentheses
     if (!canonExpression) {
       // No canonExpression, so span refers to expression after cleanExpression
       return highlightSpan;
     }
     
-    // Check if cleanExpression removed outer parentheses from canonExpression
+    // Compute how cleanExpression transformed the string
     const cleanedCanon = cleanExpression(canonExpression);
     if (cleanedCanon === canonExpression) {
-      // No outer parentheses removed, span maps 1:1
+      // No transformation, span maps 1:1
       return highlightSpan;
     }
     
-    // Outer parentheses were removed
-    // If span starts right after '(' (position 1), we need to adjust
-    if (canonExpression.startsWith('(') && canonExpression.endsWith(')')) {
-      const removedChars = 2; // '(' and ')'
-      if (highlightSpan.start === 1) {
-        // Span starts immediately after '(', adjust by removing '('
-        return {
-          start: 0,
-          end: highlightSpan.end - removedChars
-        };
-      } else if (highlightSpan.start > 1) {
-        // Span is inside, adjust by removing '('
-        return {
-          start: highlightSpan.start - 1,
-          end: highlightSpan.end - removedChars
-        };
+    // Transformation happened - need to compute offset mapping
+    // Strategy: find how many characters were removed before each position
+    const offsetMap = [];
+    let origIdx = 0;
+    let cleanIdx = 0;
+    
+    // Build map of how many chars were removed before each original index
+    while (origIdx < canonExpression.length || cleanIdx < cleanedCanon.length) {
+      if (origIdx < canonExpression.length && cleanIdx < cleanedCanon.length && 
+          canonExpression[origIdx] === cleanedCanon[cleanIdx]) {
+        // Characters match
+        offsetMap[origIdx] = origIdx - cleanIdx;
+        origIdx++;
+        cleanIdx++;
+      } else if (origIdx < canonExpression.length) {
+        // Character removed from original
+        offsetMap[origIdx] = origIdx - cleanIdx;
+        origIdx++;
+      } else {
+        // Additional character in cleaned (shouldn't happen)
+        break;
       }
     }
     
-    // Fallback: return original span
-    return highlightSpan;
+    // Map the span using offset
+    const offsetAtStart = offsetMap[highlightSpan.start] || 0;
+    const offsetAtEnd = offsetMap[Math.min(highlightSpan.end, offsetMap.length - 1)] || 0;
+    
+    return {
+      start: highlightSpan.start - offsetAtStart,
+      end: highlightSpan.end - offsetAtEnd
+    };
   }, [highlightSpan, canonExpression]);
 
   // Oblicz highlightRange z highlightText lub highlightSpan
