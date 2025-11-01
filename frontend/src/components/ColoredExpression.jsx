@@ -63,13 +63,13 @@ export default function ColoredExpression({
   }, [highlightText]);
 
   // Oblicz highlightRange z highlightText lub highlightSpan
-  // Używamy cleanedExpression i cleanedHighlightText dla spójności
-  // oba są czyszczone tak samo, więc pozycje będą się zgadzać
+  // CRITICAL: indeksy muszą być liczone na dokładnie tym samym stringu, który renderujemy
   const computedHighlightRange = useMemo(() => {
     // Priority 1: explicit highlightRange
     if (highlightRange) return highlightRange;
     
     // Priority 2: highlightSpan from backend (canonical indices)
+    // Jeśli backend podał span, użyj go bezpośrednio - to są indeksy w canonExpression
     if (highlightSpan && highlightSpan.start !== undefined && highlightSpan.end !== undefined) {
       return {
         start: highlightSpan.start,
@@ -79,26 +79,27 @@ export default function ColoredExpression({
     }
     
     // Priority 3: highlightText (fallback substring matching)
+    // WAZNE: NIE usuwaj spacji - licz indeksy na cleanedExpression, który jest renderowany!
     if (!cleanedHighlightText || !cleanedExpression) return null;
     
-    // Normalizuj (usuń spacje) wyczyszczone wersje
-    const normalizedHighlight = cleanedHighlightText.replace(/\s+/g, '').trim();
-    const normalizedExpression = cleanedExpression.replace(/\s+/g, '').trim();
+    // Używamy cleanedExpression ze spacjami - ten sam string, który trafi do renderowania
+    const targetExpression = cleanedExpression;
+    const targetHighlight = cleanedHighlightText;
     
     // 1. Spróbuj dokładnego dopasowania
-    let index = normalizedExpression.indexOf(normalizedHighlight);
+    let index = targetExpression.indexOf(targetHighlight);
     if (index !== -1) {
       return {
         start: index,
-        end: index + normalizedHighlight.length,
+        end: index + targetHighlight.length,
         class: highlightClass
       };
     }
     
     // 2. Spróbuj bez zewnętrznych nawiasów w highlightText
-    if (normalizedHighlight.startsWith('(') && normalizedHighlight.endsWith(')')) {
-      const highlightWithoutParens = normalizedHighlight.slice(1, -1);
-      index = normalizedExpression.indexOf(highlightWithoutParens);
+    if (targetHighlight.startsWith('(') && targetHighlight.endsWith(')')) {
+      const highlightWithoutParens = targetHighlight.slice(1, -1);
+      index = targetExpression.indexOf(highlightWithoutParens);
       if (index !== -1) {
         return {
           start: index,
@@ -130,12 +131,12 @@ export default function ColoredExpression({
       return parts.length > 0 ? parts : [expr];
     }
     
-    if (normalizedHighlight.includes('∧')) {
-      const highlightParts = parseParts(normalizedHighlight, '∧');
+    if (targetHighlight.includes('∧')) {
+      const highlightParts = parseParts(targetHighlight, '∧');
       if (highlightParts.length >= 2) {
         const foundParts = [];
         for (const part of highlightParts) {
-          const idx = normalizedExpression.indexOf(part);
+          const idx = targetExpression.indexOf(part);
           if (idx !== -1) {
             foundParts.push({ part, index: idx, length: part.length });
           }
@@ -162,12 +163,12 @@ export default function ColoredExpression({
       }
     }
     
-    if (normalizedHighlight.includes('∨')) {
-      const highlightParts = parseParts(normalizedHighlight, '∨');
+    if (targetHighlight.includes('∨')) {
+      const highlightParts = parseParts(targetHighlight, '∨');
       if (highlightParts.length >= 2) {
         const foundParts = [];
         for (const part of highlightParts) {
-          const idx = normalizedExpression.indexOf(part);
+          const idx = targetExpression.indexOf(part);
           if (idx !== -1) {
             foundParts.push({ part, index: idx, length: part.length });
           }
@@ -198,10 +199,10 @@ export default function ColoredExpression({
     // Szukaj substringa fragmentu w wyrażeniu
     let longestMatch = '';
     let longestIndex = -1;
-    for (let i = 0; i < normalizedExpression.length; i++) {
-      for (let len = Math.min(normalizedHighlight.length, normalizedExpression.length - i); len > longestMatch.length; len--) {
-        const substr = normalizedExpression.substring(i, i + len);
-        if (normalizedHighlight.includes(substr) && len > longestMatch.length) {
+    for (let i = 0; i < targetExpression.length; i++) {
+      for (let len = Math.min(targetHighlight.length, targetExpression.length - i); len > longestMatch.length; len--) {
+        const substr = targetExpression.substring(i, i + len);
+        if (targetHighlight.includes(substr) && len > longestMatch.length) {
           longestMatch = substr;
           longestIndex = i;
         }
@@ -209,10 +210,10 @@ export default function ColoredExpression({
     }
     
     // Również szukaj w drugą stronę - substringa wyrażenia w fragmencie
-    for (let i = 0; i < normalizedHighlight.length; i++) {
-      for (let len = Math.min(normalizedExpression.length, normalizedHighlight.length - i); len > longestMatch.length; len--) {
-        const substr = normalizedHighlight.substring(i, i + len);
-        const idx = normalizedExpression.indexOf(substr);
+    for (let i = 0; i < targetHighlight.length; i++) {
+      for (let len = Math.min(targetExpression.length, targetHighlight.length - i); len > longestMatch.length; len--) {
+        const substr = targetHighlight.substring(i, i + len);
+        const idx = targetExpression.indexOf(substr);
         if (idx !== -1 && len > longestMatch.length) {
           longestMatch = substr;
           longestIndex = idx;
@@ -228,49 +229,32 @@ export default function ColoredExpression({
       };
     }
     
-    // 5. Ostatnia deska ratunku: podświetl początek jeśli pierwszy znak się zgadza
-    if (normalizedHighlight.length > 0) {
-      const firstChar = normalizedHighlight[0];
-      index = normalizedExpression.indexOf(firstChar);
+    // 5. Soft fallback: podświetl początek jeśli pierwszy znak się zgadza
+    if (targetHighlight.length > 0) {
+      const firstChar = targetHighlight[0];
+      index = targetExpression.indexOf(firstChar);
       if (index !== -1) {
         return {
           start: index,
-          end: Math.min(index + normalizedHighlight.length, normalizedExpression.length),
+          end: Math.min(index + targetHighlight.length, targetExpression.length),
           class: highlightClass
         };
       }
       
       // Spróbuj również znaleźć ostatni znak
-      const lastChar = normalizedHighlight[normalizedHighlight.length - 1];
-      const lastIdx = normalizedExpression.lastIndexOf(lastChar);
-      if (lastIdx !== -1 && lastIdx > index) {
+      const lastChar = targetHighlight[targetHighlight.length - 1];
+      const lastIdx = targetExpression.lastIndexOf(lastChar);
+      if (lastIdx !== -1) {
         return {
-          start: Math.max(0, lastIdx - normalizedHighlight.length + 1),
+          start: Math.max(0, lastIdx - targetHighlight.length + 1),
           end: lastIdx + 1,
           class: highlightClass
         };
       }
     }
     
-    // 6. Jeśli wszystko zawiodło, podświetl całe wyrażenie jeśli fragment jest bardzo podobny
-    // (lepsze niż brak podświetlenia)
-    if (normalizedExpression.length > 0 && normalizedHighlight.length > 0) {
-      // Jeśli fragment jest krótki i jest podobny do wyrażenia, podświetl wszystko
-      if (normalizedHighlight.length <= normalizedExpression.length && normalizedExpression.includes(normalizedHighlight.substring(0, Math.min(3, normalizedHighlight.length)))) {
-        return {
-          start: 0,
-          end: normalizedExpression.length,
-          class: highlightClass
-        };
-      }
-    }
-    
-    // 7. Ostateczny fallback: podświetl początek wyrażenia
-    return {
-      start: 0,
-      end: Math.min(normalizedHighlight.length, normalizedExpression.length),
-      class: highlightClass || "bg-yellow-100"
-    };
+    // 6. No match found - return null instead of highlighting whole expression
+    return null;
   }, [cleanedExpression, cleanedHighlightText, highlightRange, highlightSpan, highlightClass]);
 
   if (!expression) return null;
