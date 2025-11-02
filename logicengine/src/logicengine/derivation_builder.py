@@ -51,24 +51,138 @@ def _is_literal(ast: Any) -> bool:
     return False
 
 
-def build_minterm_expansion_steps(
-    expr_str: str,
-    vars: List[str],
-    minterms_1: List[int]
-) -> List[Step]:
-    """
-    Build algebraic steps to expand expression into sum of minterms.
+def _term_contains(term: Any, required_lits: List[Tuple[str, bool]]) -> bool:
+    """Check if a term (product of literals) contains all required literals."""
+    # Extract literals from term
+    term_lits = []
+    if isinstance(term, dict):
+        if term.get("op") == "AND":
+            for arg in term.get("args", []):
+                lit = to_lit(arg)
+                if lit:
+                    term_lits.append(lit)
+        else:
+            # Single literal
+            lit = to_lit(term)
+            if lit:
+                term_lits.append(lit)
     
-    Strategy:
-    - Use controlled distribution: X*(...) ∨ (¬X)*(...)
-    - Remove branches leading to minterms=0 (contradiction, neutral)
-    - Result: OR of products corresponding to minterms_1
+    term_lit_set = set(term_lits)
+    required_set = set(required_lits)
+    
+    # Check if all required literals are present
+    return required_set.issubset(term_lit_set)
+
+
+def build_minterm_expansion_steps(
+    product_node: Any,
+    vars_list: List[str],
+    expand_var: str,
+    ast: Any,
+    product_path: List[Tuple[str, Optional[int]]]
+) -> Tuple[Any, List[Step]]:
+    """
+    Expand a product term by applying identity: X => X∧(v∨¬v).
+    
+    Strategy: Apply X => X∧(v∨¬v) => (X∧v) ∨ (X∧¬v)
+    
+    This expands a single product into a sum of two products.
+    For multiple variables, call this function iteratively.
+    
+    Args:
+        product_node: The product AST node to expand
+        vars_list: List of all variables
+        expand_var: Variable to expand over
+        ast: The full AST containing product_node
+        product_path: Path to product_node in ast
+    
+    Returns:
+        (updated_ast, list_of_steps)
     """
     steps: List[Step] = []
+    working_ast = ast
+    current_product = product_node
+    current_path = product_path
     
-    # For now, return empty list as this is complex
-    # TODO: Implement minterm expansion using Shannon expansion
-    return steps
+    # Convert product to normalized form for comparison
+    current_product_norm = normalize_bool_ast(current_product, expand_imp_iff=True)
+    
+    if expand_var:
+        # Create v∨¬v
+        var_node_pos = VAR(expand_var)
+        var_node_neg = NOT(VAR(expand_var))
+        var_or = OR([var_node_pos, var_node_neg])
+        
+        # Apply identity: X => X∧(v∨¬v)
+        before_str = pretty(working_ast)
+        expanded_product = AND([current_product_norm, var_or])
+        
+        # Replace product in AST
+        working_ast = set_by_path(working_ast, current_path, expanded_product)
+        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+        after_str_1 = pretty(working_ast)
+        
+        # Verify TT equivalence
+        is_equal_1 = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str_1))
+        
+        step1 = Step(
+            before_str=before_str,
+            after_str=after_str_1,
+            rule="Neutralny (∧1)",
+            category="user",
+            location=current_path,
+            proof={"method": "tt-hash", "equal": is_equal_1}
+        )
+        steps.append(step1)
+        
+        # Now distribute: X∧(v∨¬v) => (X∧v) ∨ (X∧¬v)
+        before_str_2 = pretty(working_ast)
+        
+        # Find the expanded product and distribute it
+        # After normalization, it might be in a different form
+        # We need to locate where the expanded product ended up
+        expanded_product_norm = normalize_bool_ast(expanded_product, expand_imp_iff=True)
+        distrib_path = None
+        
+        for path, sub in iter_nodes(working_ast):
+            if canon(sub) == canon(expanded_product_norm):
+                distrib_path = path
+                break
+        
+        if distrib_path is None:
+            # Can't find - return what we have
+            return (working_ast, steps)
+        
+        # Distribute
+        working_ast = _distribute_term(
+            working_ast,
+            distrib_path,
+            current_product_norm,
+            var_or
+        )
+        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+        after_str_2 = pretty(working_ast)
+        
+        # Verify TT equivalence
+        is_equal_2 = (truth_table_hash(vars_list, before_str_2) == truth_table_hash(vars_list, after_str_2))
+        
+        step2 = Step(
+            before_str=before_str_2,
+            after_str=after_str_2,
+            rule="Rozdzielność (faktoryzacja)",
+            category="user",
+            location=distrib_path,
+            proof={"method": "tt-hash", "equal": is_equal_2}
+        )
+        steps.append(step2)
+        
+        # After distribution, we have OR of products
+        # For next iteration, we would need to expand each product in the OR
+        # This is complex and not currently supported in a single call
+        # The function supports expanding by one variable at a time
+        # For multiple variables, call it iteratively from the caller
+    
+    return (working_ast, steps)
 
 
 def build_merge_steps(
@@ -118,26 +232,47 @@ def build_merge_steps(
         right_node = term_from_lits(right_lits)
         result_node = term_from_lits(result_lits)
         
-        # Find OR node containing both left and right terms
+        # Try to find the pair, with iterative uncovering if needed
         merge_path = None
         left_idx = None
         right_idx = None
+        max_uncover_iterations = 5  # Safety limit to prevent infinite loops
         
-        for path, sub in iter_nodes(working_ast):
-            if (isinstance(sub, dict) and sub.get("op") == "OR" and 
-                len(sub.get("args", [])) >= 2):
-                args = sub.get("args", [])
-                for idx, arg in enumerate(args):
-                    if canon(arg) == canon(left_node):
-                        left_idx = idx
-                    elif canon(arg) == canon(right_node):
-                        right_idx = idx
-                
-                if left_idx is not None and right_idx is not None:
-                    merge_path = path
-                    break
+        for uncover_iter in range(max_uncover_iterations):
+            # Search for OR node containing both left and right terms
+            for path, sub in iter_nodes(working_ast):
+                if (isinstance(sub, dict) and sub.get("op") == "OR" and 
+                    len(sub.get("args", [])) >= 2):
+                    # Reset indices for each OR node
+                    left_idx = None
+                    right_idx = None
+                    args = sub.get("args", [])
+                    for idx, arg in enumerate(args):
+                        if canon(arg) == canon(left_node):
+                            left_idx = idx
+                        elif canon(arg) == canon(right_node):
+                            right_idx = idx
+                    
+                    if left_idx is not None and right_idx is not None:
+                        merge_path = path
+                        break
+            
+            # If found, break out of uncover loop
+            if merge_path is not None:
+                break
+            
+            # Pair not found - try to uncover it
+            uncovered_ast, uncovered_steps = ensure_pair_present(working_ast, vars, left_mask, right_mask)
+            if uncovered_steps:
+                # Add the steps to reveal the pair
+                steps.extend(uncovered_steps)
+                working_ast = uncovered_ast
+                # Continue loop to search again
+            else:
+                # No steps generated - can't uncover, skip this merge
+                break
         
-        # If we didn't find the exact pair, skip this merge
+        # If still not found after all iterations, skip
         if merge_path is None:
             continue
         
@@ -215,20 +350,128 @@ def build_absorb_steps(
     pi_to_minterms: Dict[str, List[int]]
 ) -> List[Step]:
     """
-    Build absorption steps to remove covered minterms using consensus.
+    Build absorption steps to clean up DNF: remove duplicates and X ∨ (X∧Y) patterns.
     
-    NOTE: Currently disabled because we cannot justify these steps
-    with classical Boolean laws only. The consensus theorem requires
-    understanding of covering relationships which is QM-specific logic.
+    Uses only classical Boolean laws:
+    1. Idempotence OR: X ∨ X ⇒ X
+    2. Absorption: X ∨ (X∧Y) ⇒ X
     
-    Returning empty steps to avoid "cheating" - showing steps that
-    aren't actually justified by Boolean laws the user sees.
+    No QM knowledge - only local AST patterns.
     """
     steps: List[Step] = []
+    working_ast = ast
     
-    # DISABLED: This would just replace the expression without actual justification
-    # The consensus/covering logic is QM-specific and cannot be explained
-    # using only classical Boolean laws that the user sees.
+    # Stabilization loop: keep applying until no more changes
+    max_iterations = 50
+    changed = True
+    
+    for iteration in range(max_iterations):
+        if not changed:
+            break
+        
+        changed = False
+        
+        # Find OR nodes to apply cleanup rules
+        for path, sub in iter_nodes(working_ast):
+            if not (isinstance(sub, dict) and sub.get("op") == "OR"):
+                continue
+            
+            args = sub.get("args", [])
+            if len(args) < 2:
+                continue
+            
+            # RULE 1: Idempotence OR - remove duplicates
+            # X ∨ X ⇒ X
+            unique_args = []
+            seen_canon = set()
+            
+            for arg in args:
+                arg_canon = canon(arg)
+                if arg_canon not in seen_canon:
+                    unique_args.append(arg)
+                    seen_canon.add(arg_canon)
+                else:
+                    # Found duplicate - will generate a step
+                    changed = True
+            
+            if len(unique_args) < len(args):
+                # Duplicates found - create removal step
+                before_str = pretty(working_ast)
+                new_or_node = {"op": "OR", "args": unique_args}
+                working_ast = set_by_path(working_ast, path, new_or_node)
+                working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                after_str = pretty(working_ast)
+                
+                # Verify TT equivalence
+                is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                
+                step = Step(
+                    before_str=before_str,
+                    after_str=after_str,
+                    rule="Idempotencja (∨)",
+                    category="user",
+                    schema="X ∨ X ⇒ X",
+                    location=None,
+                    proof={"method": "tt-hash", "equal": is_equal}
+                )
+                steps.append(step)
+                break  # Restart search after each change
+            
+            # RULE 2: Absorption - X ∨ (X∧Y) ⇒ X
+            # Check all pairs
+            for i in range(len(args)):
+                for j in range(len(args)):
+                    if i == j:
+                        continue
+                    
+                    arg_i = args[i]
+                    arg_j = args[j]
+                    
+                    # Check if arg_i is a superset of arg_j
+                    # i.e., if arg_i contains all literals of arg_j
+                    lits_i = _extract_lits_from_term(arg_i)
+                    lits_j = _extract_lits_from_term(arg_j)
+                    
+                    if lits_i and lits_j:
+                        lits_i_set = set(lits_i)
+                        lits_j_set = set(lits_j)
+                        
+                        # Check if j is subset of i (i covers j)
+                        if lits_j_set.issubset(lits_i_set):
+                            # j is redundant - remove it
+                            # First check if canonical forms match (for exact duplicates handled above)
+                            if len(lits_i) == len(lits_j):
+                                continue  # Already handled by idempotence
+                            
+                            # Remove arg_j
+                            before_str = pretty(working_ast)
+                            new_args = [args[k] for k in range(len(args)) if k != j]
+                            new_or_node = {"op": "OR", "args": new_args}
+                            working_ast = set_by_path(working_ast, path, new_or_node)
+                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                            after_str = pretty(working_ast)
+                            
+                            # Verify TT equivalence
+                            is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                            
+                            step = Step(
+                                before_str=before_str,
+                                after_str=after_str,
+                                rule="Absorpcja (∨)",
+                                category="user",
+                                schema="X ∨ (X∧Y) ⇒ X",
+                                location=None,
+                                proof={"method": "tt-hash", "equal": is_equal}
+                            )
+                            steps.append(step)
+                            changed = True
+                            break  # Restart search after each change
+                
+                if changed:
+                    break
+            
+            if changed:
+                break
     
     return steps
 
@@ -273,14 +516,16 @@ def ensure_pair_present(
     """
     Ensure that the two terms (left_mask, right_mask) are present as distinct OR operands.
     
-    If they're not present, use controlled distribution to uncover them.
+    If they're not present, use identity X = X∧(v∨¬v) and distribution to uncover them.
     Returns (new_ast, steps_added).
     
-    Strategy: Find the common literals, then distribute to separate the differing variable.
-    Example: If we have (A∧B∧C) and need (A∧C) and (A∧¬C), 
-    we distribute A∧(B∧C ∨ ¬(B∧C)) to get A∧B∧C ∨ A∧¬B∧C ∨ A∧¬C.
+    Strategy: Find a common term that can be split by the differing variable.
+    Example: If we have (A∧B∧C) and need (A∧B∧¬C), we split (A∧B) by C:
+    X = (A∧B), v = C
+    X → X∧(C∨¬C) → (X∧C)∨(X∧¬C) → (A∧B∧C)∨(A∧B∧¬C)
     """
     steps: List[Step] = []
+    working_ast = ast
     
     # Convert masks to literals
     left_lits = _mask_to_lits(left_mask, vars_list)
@@ -290,8 +535,11 @@ def ensure_pair_present(
     left_node = term_from_lits(left_lits)
     right_node = term_from_lits(right_lits)
     
+    # Normalize for comparison (order matters in canon)
+    left_node = normalize_bool_ast(left_node, expand_imp_iff=True)
+    right_node = normalize_bool_ast(right_node, expand_imp_iff=True)
+    
     # Check if both nodes already exist as distinct OR operands
-    working_ast = ast
     for path, sub in iter_nodes(working_ast):
         if isinstance(sub, dict) and sub.get("op") == "OR":
             args = sub.get("args", [])
@@ -301,11 +549,242 @@ def ensure_pair_present(
                 # Both already present!
                 return (working_ast, steps)
     
-    # Not both present - need to uncover them via distribution
-    # This is complex and needs careful implementation
-    # For now, return as-is and let build_merge_steps skip
+    # Not both present - need to uncover them
+    # Strategy: Find which variable differs and split a common term by it
+    
+    # Find the differing variable
+    diff_var = None
+    for i, (l, r) in enumerate(zip(left_mask, right_mask)):
+        if l != r:
+            diff_var = vars_list[i]
+            break
+    
+    if diff_var is None:
+        return (working_ast, steps)
+    
+    # Find a term that contains the common literals and could be split
+    # Common literals = intersection of left and right literals
+    left_lit_set = set(left_lits)
+    right_lit_set = set(right_lits)
+    common_lits = left_lit_set & right_lit_set
+    
+    if not common_lits:
+        # No common literals - can't use this strategy
+        return (working_ast, steps)
+    
+    # Build common term node
+    common_node = term_from_lits(list(common_lits))
+    
+    # Search for a term in the AST that we can split
+    # Strategy: Find a term that contains the common literals AND doesn't have diff_var
+    # This will allow clean splitting without contradiction
+    split_path = None
+    split_term = None
+    
+    # Build set of literals that should NOT be in the term we split
+    diff_lit_pos = (diff_var, True)
+    diff_lit_neg = (diff_var, False)
+    forbidden_lits = {diff_lit_pos, diff_lit_neg}
+    
+    for path, sub in iter_nodes(working_ast):
+        if isinstance(sub, dict) and sub.get("op") == "OR":
+            args = sub.get("args", [])
+            for idx, arg in enumerate(args):
+                # Try exact match first
+                if canon(arg) == canon(common_node):
+                    split_path = path + [("args", idx)]
+                    split_term = arg
+                    break
+                
+                # Try superset: arg contains all common literals AND doesn't contain diff_var
+                if _term_contains(arg, common_lits):
+                    # Check if arg doesn't contain diff_var (either polarity)
+                    if not _term_contains(arg, [diff_lit_pos]) and not _term_contains(arg, [diff_lit_neg]):
+                        split_path = path + [("args", idx)]
+                        split_term = arg
+                        break
+            if split_path:
+                break
+    
+    if split_path is None:
+        # No suitable term found - need to inject common_node into the expression
+        # Find any OR node to add common_node as a term
+        # We'll use identity injection: X becomes X ∨ (Y∧(v∨¬v)) where Y is common
+        # Actually simpler: just add common_node ∧ (v∨¬v) as a new term
+        injection_path = None
+        for path, sub in iter_nodes(working_ast):
+            if isinstance(sub, dict) and sub.get("op") == "OR":
+                injection_path = path
+                break
+        
+        if injection_path is None:
+            # Can't inject - return empty
+            return (working_ast, steps)
+        
+        # Create v∨¬v
+        diff_node_pos = VAR(diff_var)
+        diff_node_neg = NOT(VAR(diff_var))
+        diff_or = OR([diff_node_pos, diff_node_neg])
+        
+        # Add common_node ∧ (v∨¬v) as a new term to the OR
+        # Navigate to the OR node to get its args
+        or_node = working_ast
+        for key, idx in injection_path:
+            if key == "args":
+                or_node = or_node["args"][idx]
+        
+        # Get existing args and add new term
+        new_term = AND([common_node, diff_or])
+        existing_args = or_node.get("args", [])
+        new_args = existing_args + [new_term]
+        
+        # Create new OR node with extended args
+        new_or_node = {"op": "OR", "args": new_args}
+        
+        before_str_1 = pretty(working_ast)
+        working_ast = set_by_path(working_ast, injection_path, new_or_node)
+        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+        after_str_1 = pretty(working_ast)
+        
+        # Verify TT equivalence
+        before_hash_1 = truth_table_hash(vars_list, before_str_1)
+        after_hash_1 = truth_table_hash(vars_list, after_str_1)
+        
+        step1 = Step(
+            before_str=before_str_1,
+            after_str=after_str_1,
+            rule="Neutralny (∧1)",
+            category="user",
+            location=injection_path,
+            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
+        )
+        steps.append(step1)
+        
+        # Now we have common_node ∧ (v∨¬v) in the AST
+        # Need to find it again and distribute
+        target_node_norm = normalize_bool_ast(AND([common_node, diff_or]), expand_imp_iff=True)
+        for path, sub in iter_nodes(working_ast):
+            if isinstance(sub, dict) and sub.get("op") == "OR":
+                args = sub.get("args", [])
+                for idx, arg in enumerate(args):
+                    if canon(arg) == canon(target_node_norm):
+                        split_path = path + [("args", idx)]
+                        break
+                if split_path:
+                    break
+    
+    if split_path is None:
+        # Still can't find - return what we have
+        return (working_ast, steps)
+    
+    # STEP 1 (or 2): Apply identity X = X∧(v∨¬v) or distribute existing X∧(v∨¬v)
+    diff_node_pos = VAR(diff_var)
+    diff_node_neg = NOT(VAR(diff_var))
+    diff_or = OR([diff_node_pos, diff_node_neg])
+    
+    # Check if this is a distribution step or identity step
+    node_to_split = working_ast
+    for key, idx in split_path:
+        if key == "args":
+            node_to_split = node_to_split["args"][idx]
+    
+    # Check if we already added step1 above (injection case)
+    step1_added = (steps and steps[-1].rule == "Neutralny (∧1)")
+    
+    is_distribution = (canon(node_to_split) == canon(AND([common_node, diff_or])))
+    
+    if not is_distribution and not step1_added:
+        # Apply identity X = X∧(v∨¬v)
+        expanded_node = AND([common_node, diff_or])
+        
+        before_str_1 = pretty(working_ast)
+        working_ast = set_by_path(working_ast, split_path, expanded_node)
+        after_str_1 = pretty(working_ast)
+        
+        # Verify TT equivalence for step 1
+        before_hash_1 = truth_table_hash(vars_list, before_str_1)
+        after_hash_1 = truth_table_hash(vars_list, after_str_1)
+        
+        step1 = Step(
+            before_str=before_str_1,
+            after_str=after_str_1,
+            rule="Neutralny (∧1)",
+            category="user",
+            location=split_path,
+            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
+        )
+        steps.append(step1)
+    
+    # STEP 2: Distribute X∧(Y∨Z) → (X∧Y)∨(X∧Z)
+    # The expanded_node is AND([common_node, diff_or])
+    # We need to find it and distribute
+    before_str_2 = pretty(working_ast)
+    working_ast = _distribute_term(working_ast, split_path, common_node, diff_or)
+    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+    after_str_2 = pretty(working_ast)
+    
+    # Verify TT equivalence for step 2
+    before_hash_2 = truth_table_hash(vars_list, before_str_2)
+    after_hash_2 = truth_table_hash(vars_list, after_str_2)
+    
+    step2 = Step(
+        before_str=before_str_2,
+        after_str=after_str_2,
+        rule="Rozdzielność (faktoryzacja)",
+        category="user",
+        location=split_path,
+        proof={"method": "tt-hash", "equal": before_hash_2 == after_hash_2}
+    )
+    steps.append(step2)
+    
+    # Now we should have the pair present
+    # Verify by checking if both left and right nodes exist
+    has_both = False
+    for path, sub in iter_nodes(working_ast):
+        if isinstance(sub, dict) and sub.get("op") == "OR":
+            args = sub.get("args", [])
+            has_left = any(canon(arg) == canon(left_node) for arg in args)
+            has_right = any(canon(arg) == canon(right_node) for arg in args)
+            if has_left and has_right:
+                has_both = True
+                break
+    
+    if not has_both:
+        # Something went wrong - return what we have
+        print(f"Warning: ensure_pair_present failed to create both terms")
     
     return (working_ast, steps)
+
+
+def _distribute_term(
+    ast: Any,
+    split_path: List[Tuple[str, Optional[int]]],
+    common_node: Any,
+    diff_or: Any
+) -> Any:
+    """Apply distribution: X∧(Y∨Z) → (X∧Y)∨(X∧Z) at the given path."""
+    # Navigate to the node
+    node = ast
+    for key, idx in split_path:
+        if key == "args":
+            node = node["args"][idx]
+    
+    # The node should be AND([common_node, diff_or])
+    # Replace it with OR([AND([common_node, diff_or's args[0]]), AND([common_node, diff_or's args[1]])])
+    
+    diff_or_args = diff_or.get("args", [])
+    if len(diff_or_args) != 2:
+        return ast
+    
+    distributed_args = [
+        AND([common_node, diff_or_args[0]]),
+        AND([common_node, diff_or_args[1]])
+    ]
+    
+    new_or_node = OR(distributed_args)
+    
+    # Replace in AST
+    return set_by_path(ast, split_path, new_or_node)
 
 
 def _mask_to_expr(mask: str, vars: List[str]) -> str:

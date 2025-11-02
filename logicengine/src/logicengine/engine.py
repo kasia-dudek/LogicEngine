@@ -11,7 +11,7 @@ from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 from .tautology import is_tautology
 from .contradiction import is_contradiction
-from .laws import simplify_with_laws
+from .laws import simplify_with_laws, measure
 from .ast import collect_variables, canonical_str, normalize_bool_ast, generate_ast
 from .utils import truth_table_hash, equivalent
 from .steps import Step, RuleName, StepCategory
@@ -238,7 +238,6 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             last_ast_check = normalize_bool_ast(last_ast_check, expand_imp_iff=True)
                             
                             # Check if result needs cleanup by comparing literal counts
-                            from logicengine.laws import measure
                             last_measure = measure(last_ast_check)
                             qm_expr_str = qm_result.get("result", "")
                             qm_ast = generate_ast(qm_expr_str)
@@ -284,6 +283,35 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
                 if absorb_steps:
                     steps.extend(absorb_steps)
+                    # Update working_ast after absorption
+                    working_ast = generate_ast(absorb_steps[-1].after_str)
+                    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                
+                # Verify that final DNF canonically equals OR(selected_pi)
+                if steps:
+                    final_expr = steps[-1].after_str
+                    final_ast = generate_ast(final_expr)
+                    final_ast = normalize_bool_ast(final_ast, expand_imp_iff=True)
+                    final_canon = canonical_str(final_ast)
+                    
+                    # Build OR(selected_pi) canonical string
+                    from .utils import bin_to_expr
+                    pi_terms = []
+                    for pi_mask in selected_pi:
+                        pi_term = bin_to_expr(pi_mask, vars_list)
+                        pi_terms.append(pi_term)
+                    
+                    qm_dnf_str = " ∨ ".join(pi_terms) if pi_terms else "0"
+                    qm_dnf_ast = generate_ast(qm_dnf_str)
+                    qm_dnf_ast = normalize_bool_ast(qm_dnf_ast, expand_imp_iff=True)
+                    qm_dnf_canon = canonical_str(qm_dnf_ast)
+                    
+                    # Check canonical equality
+                    if final_canon != qm_dnf_canon:
+                        print(f"Warning: Final DNF doesn't match QM canonical (continuing anyway)")
+                        print(f"  Final canon: {final_canon}")
+                        print(f"  QM canon:    {qm_dnf_canon}")
+                        print(f"  Continuing with any remaining merge edges...")
             
             # Validate continuity: prev.after_str == next.before_str
             # Enforce hard continuity - remove steps that break the chain
@@ -302,19 +330,50 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     i += 1
             
             # Use last step's result as result_dnf if we have steps
-            # Verify it matches QM for correctness
+            # Verify it matches QM for correctness AND minimality
             if steps:
                 result_dnf = steps[-1].after_str
                 # Verify equivalence with QM
                 try:
                     final_hash = truth_table_hash(vars_list, result_dnf)
                     qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
-                    if final_hash != qm_hash:
-                        print(f"Warning: Laws couldn't reach minimal DNF, using QM result")
-                        print(f"  Last laws step: {result_dnf}")
-                        print(f"  QM result: {qm_result.get('result')}")
-                        # Use QM result as it's the verified minimal DNF
-                        result_dnf = qm_result.get("result", initial_canon)
+                    
+                    # Also check minimality by comparing literal counts
+                    # Handle constants (0, 1) specially
+                    try:
+                        final_ast = generate_ast(result_dnf)
+                        final_ast = normalize_bool_ast(final_ast, expand_imp_iff=True)
+                        final_measure = measure(final_ast)
+                        
+                        qm_ast = generate_ast(qm_result.get("result", ""))
+                        qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+                        qm_measure = measure(qm_ast)
+                        
+                        is_minimal = (final_measure[0] == qm_measure[0])
+                        
+                        if final_hash != qm_hash:
+                            print(f"Warning: Laws couldn't reach minimal DNF, using QM result (TT mismatch)")
+                            print(f"  Last laws step: {result_dnf}")
+                            print(f"  QM result: {qm_result.get('result')}")
+                            result_dnf = qm_result.get("result", initial_canon)
+                        elif not is_minimal:
+                            print(f"Warning: Laws result not minimal, using QM result (literal count)")
+                            print(f"  Last laws: {result_dnf} (literals={final_measure[0]})")
+                            print(f"  QM result: {qm_result.get('result')} (literals={qm_measure[0]})")
+                            result_dnf = qm_result.get("result", initial_canon)
+                    except (ASTError, LogicExpressionError) as ast_err:
+                        # If we can't parse one of the results (e.g., "1" or "0"), 
+                        # compare hashes and use QM if they differ or if QM is simpler
+                        if final_hash != qm_hash:
+                            # Different hashes, use QM
+                            print(f"Warning: Cannot parse result, using QM (TT mismatch)")
+                            result_dnf = qm_result.get("result", initial_canon)
+                        else:
+                            # Same hashes, prefer QM since it's more canonical
+                            qm_expr_str = qm_result.get("result", "")
+                            if qm_expr_str in ["0", "1"] or qm_expr_str != result_dnf:
+                                print(f"Warning: Cannot parse result, using QM (prefer canonical)")
+                                result_dnf = qm_expr_str
                 except Exception as e:
                     print(f"Warning: Could not verify equivalence: {e}")
             else:

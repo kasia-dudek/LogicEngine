@@ -853,11 +853,14 @@ class QMPlan:
    - Wybór minimalnego pokrycia (Petrick)
    - Generowanie planu łączenia (merge_edges)
 
-3. Faz C: Dokończenie do minimal DNF
-   - Jeśli laws → QM: kontynuuj
-   - Budowanie kroków "Dystrybucja (odsłonięcie pary)"
-   - Trzy kroki: Faktoryzacja → Tautologia → Element neutralny
-   - Absorpcja końcowa
+3. Faz C: Fallback do minimal DNF
+   - Sprawdź czy result z laws jest minimalny (porównaj literal count z QM)
+   - Jeśli nie minimalny: użyj QM result (gwarancja minimalności)
+   - Jeśli minimalny: użyj result z laws
+   - **Gwarancje:**
+     * TT(result) == TT(input) - poprawność
+     * literals(result) == literals(QM) - minimalność
+     * prev.after_str == next.before_str - ciągłość kroków
 ```
 
 ### 14.4 Budowanie kroków z QM planu (`derivation_builder.py`)

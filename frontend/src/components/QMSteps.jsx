@@ -119,7 +119,7 @@ function CollapsibleExplanation({ title, children, color = 'blue' }) {
   );
 }
 
-function Table({ headers, rows, highlightCells = [] }) {
+function Table({ headers, rows, highlightCells = [], greenRows = [] }) {
   return (
     <div className="overflow-x-auto">
       <table className="min-w-full border border-gray-200 rounded-xl text-sm">
@@ -133,21 +133,24 @@ function Table({ headers, rows, highlightCells = [] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, i) => (
-            <tr key={i}>
-              {row.map((cell, j) => {
-                const isHighlighted = highlightCells.some(([ri, cj]) => ri === i && cj === j);
-                return (
-                  <td
-                    key={j}
-                    className={`px-3 py-2 border-b text-center ${isHighlighted ? 'bg-yellow-100 font-semibold' : ''}`}
-                  >
-                    {cell}
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
+          {rows.map((row, i) => {
+            const isGreenRow = greenRows.includes(i);
+            return (
+              <tr key={i} className={isGreenRow ? 'bg-green-100' : ''}>
+                {row.map((cell, j) => {
+                  const isHighlighted = highlightCells.some(([ri, cj]) => ri === i && cj === j);
+                  return (
+                    <td
+                      key={j}
+                      className={`px-3 py-2 border-b text-center ${isHighlighted ? 'bg-yellow-100 font-semibold' : ''}`}
+                    >
+                      {cell}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>
@@ -166,11 +169,12 @@ function TruthTable({ vars, rows }) {
           <span className="font-mono">{r.i}</span>,
           <span className="font-mono">{r.bin}</span>,
           ...r.vals.map((v, j) => <span className="font-mono" key={j}>{v}</span>),
-          <span className={`font-mono ${r.result === 1 ? 'text-green-700 font-semibold' : 'text-gray-700'}`}>{r.result}</span>,
+          <span className={`font-mono ${r.result === 1 ? 'text-green-800 font-semibold' : 'text-gray-700'}`}>{r.result}</span>,
         ]))}
         highlightCells={rows
           .map((r, i) => (r.result === 1 ? [[i, headers.length - 1]] : []))
           .flat()}
+        greenRows={rows.map((r, i) => r.result === 1 ? i : -1).filter(i => i !== -1)}
       />
 
       <InfoCallout color="green">

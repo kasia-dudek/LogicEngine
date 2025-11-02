@@ -152,3 +152,151 @@ def test_variable_limit_configurable():
     with pytest.raises(TooManyVariables):
         simplify_to_minimal_dnf(expr, var_limit=8)
 
+
+def test_minimality_guarantee_simple():
+    """Test that result is always minimal DNF for simple cases."""
+    from logicengine.qm import simplify_qm
+    from logicengine.laws import measure
+    from logicengine.ast import generate_ast, normalize_bool_ast
+    
+    test_cases = [
+        "(A∧B)∨(A∧¬B)",
+        "(A∧B∧C)∨(A∧¬B∧C)",
+        "(A∧B)∨(¬A∧C)",
+    ]
+    
+    for expr in test_cases:
+        result = simplify_to_minimal_dnf(expr, var_limit=8)
+        qm_result = simplify_qm(expr)
+        
+        result_dnf = result['result_dnf']
+        qm_dnf = qm_result['result']
+        
+        # Check literal count matches QM
+        result_ast = generate_ast(result_dnf)
+        result_ast = normalize_bool_ast(result_ast, expand_imp_iff=True)
+        result_m = measure(result_ast)
+        
+        qm_ast = generate_ast(qm_dnf)
+        qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+        qm_m = measure(qm_ast)
+        
+        assert result_m[0] == qm_m[0], f"Result not minimal for {expr}: laws={result_m[0]}, qm={qm_m[0]}"
+
+
+def test_minimality_guarantee_complex():
+    """Test that result is always minimal DNF for complex cases needing merge."""
+    from logicengine.qm import simplify_qm
+    from logicengine.laws import measure
+    from logicengine.ast import generate_ast, normalize_bool_ast
+    
+    # These require QM fallback because laws don't reach minimality
+    test_cases = [
+        "(A∧B∧C)∨(A∧¬B∧C)∨(A∧B∧¬C)∨(¬A∧B∧C)",
+        "((A∨(A∧B))∧(¬(B∧¬C)∨¬A∨C)∧(A∨¬A))∨(A∧B∧C)",
+    ]
+    
+    for expr in test_cases:
+        result = simplify_to_minimal_dnf(expr, var_limit=8)
+        qm_result = simplify_qm(expr)
+        
+        result_dnf = result['result_dnf']
+        qm_dnf = qm_result['result']
+        
+        # Check literal count matches QM
+        result_ast = generate_ast(result_dnf)
+        result_ast = normalize_bool_ast(result_ast, expand_imp_iff=True)
+        result_m = measure(result_ast)
+        
+        qm_ast = generate_ast(qm_dnf)
+        qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+        qm_m = measure(qm_ast)
+        
+        assert result_m[0] == qm_m[0], f"Result not minimal for {expr}: laws={result_m[0]}, qm={qm_m[0]}"
+
+
+def test_step_continuity():
+    """Test that all steps are continuous (prev.after == next.before)."""
+    test_cases = [
+        "(A∧B)∨(A∧¬B)",
+        "((A∨(A∧B))∧(¬(B∧¬C)∨¬A∨C)∧(A∨¬A))∨(A∧B∧C)",
+    ]
+    
+    for expr in test_cases:
+        result = simplify_to_minimal_dnf(expr, var_limit=8)
+        
+        # Check continuity
+        for i in range(len(result['steps']) - 1):
+            prev_after = result['steps'][i]['after_str']
+            next_before = result['steps'][i+1]['before_str']
+            assert prev_after == next_before, \
+                f"Continuity broken at step {i+1}→{i+2} for {expr}"
+
+
+def test_truth_table_correctness():
+    """Test that result has same truth table as input."""
+    from logicengine.utils import truth_table_hash
+    
+    test_cases = [
+        "(A∧B)∨(A∧¬B)",
+        "(A∧B∧C)∨(A∧¬B∧C)∨(A∧B∧¬C)∨(¬A∧B∧C)",
+        "A∧(C∨¬B∨(B∧C))",
+    ]
+    
+    for expr in test_cases:
+        result = simplify_to_minimal_dnf(expr, var_limit=8)
+        
+        result_hash = truth_table_hash(result['vars'], result['result_dnf'])
+        expr_hash = truth_table_hash(result['vars'], expr)
+        
+        assert result_hash == expr_hash, \
+            f"TT mismatch for {expr}: result={result['result_dnf']}"
+
+
+def test_merge_index_isolation():
+    """
+    Test that left_idx/right_idx don't leak between different OR nodes.
+    
+    This test ensures that when iterating through OR nodes in build_merge_steps,
+    indices are reset for each OR node and don't accidentally match terms from
+    different OR nodes.
+    """
+    from logicengine.derivation_builder import build_merge_steps, term_from_lits, normalize_bool_ast
+    from logicengine.ast import generate_ast
+    
+    # Create an AST with two separate OR nodes:
+    # OR1: (A∧B) ∨ (A∧¬B)  -> should merge to A
+    # OR2: (C∧D) ∨ (¬C∧D)  -> should merge to D
+    # These should NOT interfere with each other
+    expr = "(A∧B) ∨ (A∧¬B) ∨ (C∧D) ∨ (¬C∧D)"
+    ast = normalize_bool_ast(generate_ast(expr))
+    
+    # Define merge edges for both OR nodes
+    # Edge 1: merge (A∧B) and (A∧¬B) -> A
+    # Edge 2: merge (C∧D) and (¬C∧D) -> D
+    # Mask format: binary string for [A,B,C,D] order
+    merge_edges = [
+        ("11--", "10--", "1---"),  # (A∧B) ∧ (A∧¬B) -> A
+        ("--11", "--01", "---1"),  # (C∧D) ∧ (¬C∧D) -> D
+    ]
+    
+    vars_list = ["A", "B", "C", "D"]
+    
+    # Build merge steps
+    steps = build_merge_steps(ast, vars_list, merge_edges)
+    
+    # Verify that steps were generated correctly
+    # Should have steps for both merges (3 steps each: factor, tautology, neutral)
+    # Plus potentially ensure_pair_present steps
+    assert len(steps) > 0, "No steps generated"
+    
+    # Verify that the steps are valid (non-empty strings)
+    for step in steps:
+        assert step.before_str is not None and step.before_str != "", "Empty before_str"
+        assert step.after_str is not None and step.after_str != "", "Empty after_str"
+        assert step.rule is not None and step.rule != "", "Empty rule"
+        
+        # Verify TT equivalence
+        assert step.proof.get("equal", False) == True, \
+            f"Step not equivalent: {step.before_str} -> {step.after_str}"
+

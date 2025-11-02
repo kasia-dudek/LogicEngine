@@ -141,3 +141,29 @@ code {
     height: auto !important;
   }
 }
+
+/* Custom scrollbar for steps table - always visible */
+.scrollable-steps-table {
+  scrollbar-width: thin;
+  scrollbar-color: #93C5FD #E5E7EB;
+}
+
+.scrollable-steps-table::-webkit-scrollbar {
+  height: 16px;
+}
+
+.scrollable-steps-table::-webkit-scrollbar-track {
+  background: #E5E7EB;
+  border-radius: 8px;
+  border: 2px solid #D1D5DB;
+}
+
+.scrollable-steps-table::-webkit-scrollbar-thumb {
+  background: #93C5FD;
+  border-radius: 8px;
+  border: 2px solid #60A5FA;
+}
+
+.scrollable-steps-table::-webkit-scrollbar-thumb:hover {
+  background: #60A5FA;
+}

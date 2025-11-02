@@ -485,7 +485,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                         {data.truth_table.map((row, i) => {
                           const isOne = row.result === 1;
                           return (
-                            <tr key={i} className={isOne ? 'bg-green-50' : ''}>
+                            <tr key={i} className={isOne ? 'bg-green-100' : ''}>
                               {truthVars.map(v => (
                                 <td key={v} className="px-3 py-1 border-b text-center">
                                   {row[v]}
@@ -493,7 +493,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                               ))}
                               <td
                                 className={`px-3 py-1 border-b text-center font-semibold ${
-                                  isOne ? 'text-green-700' : 'text-gray-700'
+                                  isOne ? 'text-green-800' : 'text-gray-700'
                                 }`}
                               >
                                 {row.result}
@@ -550,7 +550,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                 </button>
                               </div>
 
-                              <div className="overflow-x-auto">
+                              <div className="overflow-x-auto scrollable-steps-table">
                                 <table className="min-w-full border border-blue-200 rounded-xl text-sm">
                                   <thead>
                                     <tr>
@@ -563,7 +563,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           ? 'bg-blue-100 font-bold'
                                           : 'bg-blue-50';
                                         return (
-                                          <th key={name} className={`px-2 py-1 border-b text-blue-900 ${headerCls}`}>
+                                          <th key={name} className={`px-2 py-1 border-b text-blue-900 whitespace-nowrap ${headerCls}`}>
                                             {name}
                                           </th>
                                         );
@@ -579,7 +579,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           return (
                                             <td
                                               key={idx}
-                                              className={`px-2 py-1 border-b text-center ${
+                                              className={`px-2 py-1 border-b text-center whitespace-nowrap ${
                                                 isCurrent ? 'bg-yellow-50 font-bold' : isArg ? 'bg-blue-50 font-bold' : ''
                                               }`}
                                             >

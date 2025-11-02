@@ -136,7 +136,7 @@ export default function PrintableResults({ data, input, onBack }) {
                   {data.truth_table.map((row, i) => {
                     const isOne = row.result === 1;
                     return (
-                      <tr key={i} className={isOne ? 'bg-green-50 print:bg-green-100' : ''}>
+                      <tr key={i} className={isOne ? 'bg-green-100 print:bg-green-200' : ''}>
                         {truthVars.map(v => (
                           <td key={v} className="px-3 py-2 border-b text-center">
                             {row[v]}
@@ -144,7 +144,7 @@ export default function PrintableResults({ data, input, onBack }) {
                         ))}
                         <td
                           className={`px-3 py-2 border-b text-center font-semibold ${
-                            isOne ? 'text-green-700' : 'text-gray-700'
+                            isOne ? 'text-green-800 print:text-green-900' : 'text-gray-700'
                           }`}
                         >
                           {row.result}
