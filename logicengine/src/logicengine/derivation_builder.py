@@ -396,18 +396,39 @@ def build_merge_steps(
         # STEP 3: Neutral element: X ∧ 1 ⇒ X
         before_str_3 = pretty(working_ast)
         before_canon_3 = canonical_str(working_ast)
+        
+        # Find the AND node with CONST(1) before applying the transformation
+        before_subexpr_3 = None
+        after_subexpr_3 = None
+        neutral_path = None
+        
+        for path, sub in iter_nodes(working_ast):
+            if isinstance(sub, dict) and sub.get("op") == "AND":
+                args = sub.get("args", [])
+                has_const_1 = any(isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1 for arg in args)
+                if has_const_1:
+                    before_subexpr_3 = sub
+                    neutral_path = path
+                    # Compute what it will become
+                    new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    if len(new_args) == 1:
+                        after_subexpr_3 = new_args[0]
+                    else:
+                        after_subexpr_3 = {"op": "AND", "args": new_args}
+                    break
+        
+        before_subexpr_str_3 = pretty(before_subexpr_3) if before_subexpr_3 else None
+        after_subexpr_str_3 = pretty(after_subexpr_3) if after_subexpr_3 else None
+        before_subexpr_canon_3 = canonical_str(before_subexpr_3) if before_subexpr_3 else None
+        after_subexpr_canon_3 = canonical_str(after_subexpr_3) if after_subexpr_3 else None
+        
+        before_highlight_span_3 = find_subtree_position(before_subexpr_3, working_ast) if before_subexpr_3 else None
+        
         after_ast_3 = _apply_neutral(working_ast)
         after_str_3 = pretty(after_ast_3)
         after_canon_3 = canonical_str(after_ast_3)
         
-        # Compute subexpression for highlighting - we need to find AND nodes with CONST(1)
-        # This is complex, so we'll just compute the canonical forms
-        before_subexpr_str_3 = None
-        after_subexpr_str_3 = None
-        before_subexpr_canon_3 = None
-        after_subexpr_canon_3 = None
-        before_highlight_span_3 = None
-        after_highlight_span_3 = None
+        after_highlight_span_3 = find_subtree_position(after_subexpr_3, after_ast_3) if after_subexpr_3 else None
         
         # Verify TT equivalence
         is_equal_3 = (truth_table_hash(vars, before_str_3) == truth_table_hash(vars, after_str_3))
@@ -873,6 +894,9 @@ def ensure_pair_present(
     left_term = AND([common_node, diff_node_pos])
     right_term = AND([common_node, diff_node_neg])
     distributed_result = OR([left_term, right_term])
+    
+    # Normalize distributed_result to match what will be in the AST after distribution
+    distributed_result = normalize_bool_ast(distributed_result, expand_imp_iff=True)
     
     before_subexpr_2 = expanded_node
     after_subexpr_2 = distributed_result
