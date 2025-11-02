@@ -653,7 +653,7 @@ def ensure_pair_present(
         step1 = Step(
             before_str=before_str_1,
             after_str=after_str_1,
-            rule="Neutralny (∧1)",
+            rule="Odsłonięcie pary (tożsamość)",
             category="user",
             location=injection_path,
             proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
@@ -689,7 +689,7 @@ def ensure_pair_present(
             node_to_split = node_to_split["args"][idx]
     
     # Check if we already added step1 above (injection case)
-    step1_added = (steps and steps[-1].rule == "Neutralny (∧1)")
+    step1_added = (steps and steps[-1].rule == "Odsłonięcie pary (tożsamość)")
     
     is_distribution = (canon(node_to_split) == canon(AND([common_node, diff_or])))
     
@@ -708,7 +708,7 @@ def ensure_pair_present(
         step1 = Step(
             before_str=before_str_1,
             after_str=after_str_1,
-            rule="Neutralny (∧1)",
+            rule="Odsłonięcie pary (tożsamość)",
             category="user",
             location=split_path,
             proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
@@ -730,7 +730,7 @@ def ensure_pair_present(
     step2 = Step(
         before_str=before_str_2,
         after_str=after_str_2,
-        rule="Rozdzielność (faktoryzacja)",
+        rule="Odsłonięcie pary (Dystrybucja)",
         category="user",
         location=split_path,
         proof={"method": "tt-hash", "equal": before_hash_2 == after_hash_2}
