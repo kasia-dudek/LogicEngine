@@ -119,7 +119,7 @@ export default function SimplifyDNF({ expression, loading }) {
                         className="text-yellow-700"
                         highlightText={step.before_subexpr_canon || step.before_subexpr}
                         highlightSpan={step.before_highlight_span}
-                        highlightClass="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-0.5"
+                        highlightClass="bg-red-50 text-red-800 rounded px-0.5"
                       />
                     </div>
                   </div>
@@ -132,12 +132,12 @@ export default function SimplifyDNF({ expression, loading }) {
                     <div className="mt-1 flex items-center gap-2">
                       <ColoredExpression 
                         expression={step.before_subexpr || ''} 
-                        className="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-1" 
+                        className="bg-red-50 text-red-800 rounded px-1" 
                       />
                       <span className="mx-2">→</span>
                       <ColoredExpression 
                         expression={step.after_subexpr || ''} 
-                        className="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-1" 
+                        className="bg-green-50 text-green-800 rounded px-1" 
                       />
                     </div>
                   </div>
@@ -153,7 +153,7 @@ export default function SimplifyDNF({ expression, loading }) {
                         className="text-blue-700"
                         highlightText={step.after_subexpr_canon || step.after_subexpr}
                         highlightSpan={step.after_highlight_span}
-                        highlightClass="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5"
+                        highlightClass="bg-green-50 text-green-800 rounded px-0.5"
                       />
                     </div>
                   </div>

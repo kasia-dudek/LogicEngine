@@ -240,8 +240,8 @@ function HighlightedExpression({
 
   // Use RED for "before", GREEN for "after"
   const highlightClass = strategy === "before" 
-    ? "bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-0.5"
-    : "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5";
+    ? "bg-red-50 text-red-800 rounded px-0.5"
+    : "bg-green-50 text-green-800 rounded px-0.5";
 
   // Use canonical highlighting if available, otherwise fall back to substring matching
   return (
@@ -394,9 +394,9 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
               <div className="mb-2">
                 <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
                 <div className="mt-1 flex items-center gap-2">
-                  <ColoredExpression expression={s.before_subexpr} className="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-1" />
+                  <ColoredExpression expression={s.before_subexpr} className="bg-red-50 text-red-800 rounded px-1" />
                   <span className="mx-2">→</span>
-                  <ColoredExpression expression={s.after_subexpr} className="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-1" />
+                  <ColoredExpression expression={s.after_subexpr} className="bg-green-50 text-green-800 rounded px-1" />
                 </div>
               </div>
               <div className="border-t pt-2">
