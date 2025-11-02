@@ -11,10 +11,15 @@
 - **`laws.py`**: Implementacja praw algebraicznych i główny silnik upraszczania
 - **`axioms.py`**: System aksjomatyczny z unifikacją meta-zmiennych
 - **`validation.py`**: Walidacja składniowa wyrażeń
+- **`qm.py`**: Algorytm Quine-McCluskey do minimalizacji DNF
+- **`engine.py`**: Główny silnik integrujący upraszczanie z QM
+- **`derivation_builder.py`**: Budowanie kroków przekształceń z QM plan
+- **`utils.py`**: Funkcje pomocnicze (hash tablicy prawdy, ekwiwalencja)
 
 ### 1.2 Przepływ danych
 ```
-Wyrażenie wejściowe → Parser → AST → Normalizacja → Upraszczanie → Wynik
+Wyrażenie wejściowe → Parser → AST → Normalizacja → Upraszczanie (laws) 
+→ QM Planning → DNF Completion → Minimalizacja → Wynik
 ```
 
 ---
@@ -811,17 +816,186 @@ def canonical_str_minimal(node: Any, parent_precedence: int = 0) -> str:
 
 ---
 
-## 14. WNIOSKI
+## 14. ALGORYTM QUINE-MCCLUSKEY I MINIMALIZACJA DNF
+
+### 14.1 Przegląd algorytmu
+**Algorytm Quine-McCluskey** to systematyczna metoda minimalizacji wyrażeń boolowskich do postaci Disjunctive Normal Form (DNF). W systemie LogicEngine QM działa jako "planista" w tle, dostarczając optymalny plan kroków przekształceń.
+
+### 14.2 Implementacja QM (`qm.py`)
+**Główne funkcje:**
+- `find_prime_implicants(minterms, var_count)`: Znajduje wszystkie implicanty pierwsze
+- `select_minimal_cover(pis, minterms)`: Wybiera minimalne pokrycie używając Petrick's method
+- `generate_merge_steps()`: Generuje kroki łączenia mintermów
+
+**Dataclass `QMPlan`:**
+```python
+@dataclass
+class QMPlan:
+    vars: List[str]
+    minterms_1: List[int]           # Mintermy dla wartości 1
+    selected_pi: List[str]           # Wybrane PI (maski binarne)
+    pi_to_minterms: Dict[str, List[int]]
+    merge_edges: List[Tuple[str, str, str]]  # (left, right, result)
+```
+
+### 14.3 Integracja QM z upraszczaniem algebraicznym
+**Architektura (`engine.py`):**
+
+```
+1. Faz A: Upraszczanie prawami Boole'a
+   - Zastosowanie praw algebraicznych
+   - Normalizacja do DNF
+   - Detekcja oscylacji
+
+2. Faz B: Planowanie QM (niewidoczne)
+   - Generowanie tablicy prawdy
+   - Znalezienie PI przez QM
+   - Wybór minimalnego pokrycia (Petrick)
+   - Generowanie planu łączenia (merge_edges)
+
+3. Faz C: Dokończenie do minimal DNF
+   - Jeśli laws → QM: kontynuuj
+   - Budowanie kroków "Dystrybucja (odsłonięcie pary)"
+   - Trzy kroki: Faktoryzacja → Tautologia → Element neutralny
+   - Absorpcja końcowa
+```
+
+### 14.4 Budowanie kroków z QM planu (`derivation_builder.py`)
+**Strategia:**
+
+1. **Dystrybucja (odsłonięcie pary)**: Wprowadza brakującą parę OR do AST
+   ```
+   X ∧ (Y ∨ Z) → X ∧ Y ∨ X ∧ Z  (jeśli potrzebujemy pary X∧Y, X∧Z)
+   ```
+
+2. **Trzy kroki łączenia:**
+   - **Faktoryzacja**: `(X∧Y) ∨ (X∧¬Y)` → `X ∧ (Y ∨ ¬Y)`
+   - **Tautologia**: `Y ∨ ¬Y` → `1`
+   - **Element neutralny**: `X ∧ 1` → `X`
+
+3. **Absorpcja końcowa**: Usuwanie pokrytych mintermów
+
+**Funkcja `build_merge_steps`:**
+```python
+def build_merge_steps(current_ast, vars_list, merge_edges):
+    steps = []
+    working_ast = current_ast
+    
+    for left_mask, right_mask, result_mask in merge_edges:
+        # Znajdź left_node i right_node w AST
+        # Zastosuj 3 kroki: Factoring, Tautology, Neutral
+        # Każdy krok operuje na FULL AST (ciągłość!)
+        
+    return steps
+```
+
+### 14.5 Ciągłość kroków
+**Wymóg**: Każdy krok musi operować na pełnym AST, nie na poddrzewie.
+
+**Enforcement:**
+- `steps[i-1].after_str == steps[i].before_str` (po canonicalizacji)
+- Weryfikacja hash tablicy prawdy dla każdego kroku
+- Ostrzeżenie i usunięcie kroków łamiących ciągłość
+
+### 14.6 Limit zmiennych
+**Ograniczenie**: ≤ 8 zmiennych
+- QM wykładniczy w liczbie zmiennych
+- Tablica prawdy: 2^n wierszy
+- Petrick's method: potencjalnie bardzo wiele form pokrycia
+
+**Implementacja:**
+```python
+VAR_LIMIT = 8
+
+if len(vars) > VAR_LIMIT:
+    raise TooManyVariables(f"Maximum {VAR_LIMIT} variables")
+```
+
+---
+
+## 15. INTERFEJS Użytkownika I HIGHLIGHTING
+
+### 15.1 Architektura komponentów frontendu
+- **`SimplifyDNF.jsx`**: Główny komponent upraszczania DNF
+- **`LawsPanel.jsx`**: Panel praw logicznych
+- **`ColoredExpression.jsx`**: Wyrażenia z kolorowanymi nawiasami
+
+### 15.2 Kolorowe highlighting wyrażeń
+**Cel**: Wizualna identyfikacja fragmentów przekształcanych w każdym kroku
+
+**Kolory:**
+- **RED** (`bg-red-50 text-red-800 ring-red-200`): Fragment **przed** transformacją (PRZED)
+- **GREEN** (`bg-green-50 text-green-800 ring-green-200`): Fragment **po** transformacji (PO)
+
+**Implementacja:**
+```javascript
+// SimplifyDNF.jsx
+<ColoredExpression 
+  expression={step.before_str} 
+  highlightSpan={step.before_highlight_span}
+  highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+/>
+
+<ColoredExpression 
+  expression={step.after_str} 
+  highlightSpan={step.after_highlight_span}
+  highlightClass="bg-green-50 text-green-900 ring-1 ring-green-200 rounded px-0.5"
+/>
+```
+
+### 15.3 Kanoniczne zakresy highlighting
+**Problem**: Kolejność operandów, nawiasy, spacje zmieniają pozycje w stringu
+
+**Rozwiązanie**: Backend zwraca kanoniczne stringi + indeksy
+```python
+step = Step(
+    before_canon="(A∧(B∨C))",           # Kanoniczny string
+    before_highlight_span={"start": 1, "end": 7},  # Indeksy w kanonie
+    after_canon="A∧(B∨C)",              # Po usunięciu zewnętrznych nawiasów
+    after_highlight_span={"start": 0, "end": 6}
+)
+```
+
+**Frontend** mapuje indeksy przez `cleanExpression`:
+```javascript
+// ColoredExpression.jsx
+const mappedHighlightSpan = useMemo(() => {
+  // Build offsetMap: how many chars removed before each position
+  // Map span indices using actual offsets
+  return {
+    start: span.start - offsetAtStart,
+    end: span.end - offsetAtEnd
+  };
+}, [highlightSpan, canonExpression]);
+```
+
+### 15.4 Sekcja "Podwyrażenie"
+**Wyświetlanie**: Transformowany fragment w izolacji
+```
+Podwyrażenie:
+  [CZERWONY] (A∧B)∨(A∧¬B) → [ZIELONY] A
+```
+
+---
+
+## 16. WNIOSKI
 
 Silnik upraszczania LogicEngine implementuje zaawansowany system transformacji wyrażeń logicznych, łączący:
 
 1. **Podejście algebraiczne**: Bezpośrednie zastosowanie praw boolowskich
 2. **System aksjomatyczny**: Unifikacja wzorców z meta-zmiennymi
-3. **Detekcję oscylacji**: Ochrona przed nieskończonymi pętlami
-4. **Optymalizację nawiasów**: Minimalizacja reprezentacji tekstowej
+3. **Quine-McCluskey**: Algorytm minimalizacji DNF
+4. **Detekcję oscylacji**: Ochrona przed nieskończonymi pętlami
+5. **Optymalizację nawiasów**: Minimalizacja reprezentacji tekstowej
+6. **Kolorowe highlighting**: Wizualna prezentacja kroków
 
 Algorytm zapewnia zbieżność, poprawność i efektywność, oferując kompletne narzędzie do analizy i upraszczania wyrażeń logicznych w kontekście edukacyjnym i badawczym.
 
-**Złożoność całkowita**: O(k × m × n), gdzie k ≤ 80, m = średnia liczba dopasowań, n = rozmiar wyrażenia.
+**Złożoność całkowita**: O(k × m × n + 2^v), gdzie k ≤ 80, m = średnia liczba dopasowań, n = rozmiar wyrażenia, v ≤ 8 = liczba zmiennych.
 
-**Gwarancje**: Zbieżność w skończonej liczbie kroków, zachowanie semantyki logicznej, detekcja oscylacji.
+**Gwarancje**: 
+- Zbieżność w skończonej liczbie kroków
+- Zachowanie semantyki logicznej (weryfikacja hash TT)
+- Ciągłość kroków (brak "skoków" w wyrażeniu)
+- Minimalność wyniku (QM gwarantuje optymalne pokrycie)
+- Limit zmiennych: ≤ 8 dla wydajności QM
