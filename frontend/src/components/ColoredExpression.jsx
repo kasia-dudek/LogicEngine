@@ -6,8 +6,8 @@ import React, { useMemo } from 'react';
  */
 
 // Default color classes
-const COLOR_BEFORE = "bg-red-50 text-red-800 rounded px-0.5";
-const COLOR_AFTER = "bg-green-50 text-green-800 rounded px-0.5";
+const COLOR_BEFORE = "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5";
+const COLOR_AFTER = "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5";
 
 // Funkcja do czyszczenia nawiasów - wyodrębniona żeby używać dla fragmentu też
 function cleanExpression(expr) {
