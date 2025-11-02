@@ -322,8 +322,8 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                 working_ast = generate_ast(immediate_cleanup[-1].after_str)
                                 working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                             
-                            # Since we made progress, break to check if we've reached the goal
-                            break
+                            # Continue to try other edges in this iteration
+                            continue
                     
                     if not made_progress:
                         # No progress made, break to avoid infinite loop
