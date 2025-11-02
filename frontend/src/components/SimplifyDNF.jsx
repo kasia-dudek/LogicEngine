@@ -82,9 +82,12 @@ export default function SimplifyDNF({ expression, loading }) {
             <h3 className="text-lg font-bold text-gray-800">
               Kroki upraszczania {steps.length > 0 && `(${steps.length} krok${steps.length !== 1 ? 'ów' : ''})`}
             </h3>
-            <div className="text-xs text-gray-600 bg-green-50 px-3 py-1.5 rounded-full border border-green-200 flex items-center gap-2">
-              <span className="inline-block w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></span>
-              <span>Zielony podkreśla fragment zmieniany w tym kroku (Przed) oraz nowo powstały fragment (Po).</span>
+            <div className="text-xs text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 flex items-center gap-2">
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></span>
+                <span className="inline-block w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></span>
+              </div>
+              <span><span className="text-red-700 font-semibold">Czerwony</span> = fragment zmieniany (PRZED), <span className="text-green-700 font-semibold">Zielony</span> = nowy fragment (PO)</span>
             </div>
           </div>
           {steps.map((step, idx) => (
@@ -116,7 +119,7 @@ export default function SimplifyDNF({ expression, loading }) {
                         className="text-yellow-700"
                         highlightText={step.before_subexpr_canon || step.before_subexpr}
                         highlightSpan={step.before_highlight_span}
-                        highlightClass="bg-green-100 text-green-800 border-green-300"
+                        highlightClass="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-0.5"
                       />
                     </div>
                   </div>
@@ -126,10 +129,16 @@ export default function SimplifyDNF({ expression, loading }) {
                 {(step.before_subexpr || step.after_subexpr) && (
                   <div>
                     <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
-                    <div className="mt-1">
-                      <ColoredExpression expression={step.before_subexpr || ''} className="text-gray-600" />
+                    <div className="mt-1 flex items-center gap-2">
+                      <ColoredExpression 
+                        expression={step.before_subexpr || ''} 
+                        className="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-1" 
+                      />
                       <span className="mx-2">→</span>
-                      <ColoredExpression expression={step.after_subexpr || ''} className="text-green-700" />
+                      <ColoredExpression 
+                        expression={step.after_subexpr || ''} 
+                        className="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-1" 
+                      />
                     </div>
                   </div>
                 )}
@@ -144,7 +153,7 @@ export default function SimplifyDNF({ expression, loading }) {
                         className="text-blue-700"
                         highlightText={step.after_subexpr_canon || step.after_subexpr}
                         highlightSpan={step.after_highlight_span}
-                        highlightClass="bg-green-100 text-green-800 border-green-300"
+                        highlightClass="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5"
                       />
                     </div>
                   </div>

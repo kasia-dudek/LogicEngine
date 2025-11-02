@@ -238,8 +238,10 @@ function HighlightedExpression({
     return <ColoredExpression expression={fullExpression} className={className} />;
   }
 
-  // Używamy zielonego koloru dla obu (przed i po) dla spójności
-  const highlightClass = "bg-green-100 text-green-800 border-green-300";
+  // Use RED for "before", GREEN for "after"
+  const highlightClass = strategy === "before" 
+    ? "bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-0.5"
+    : "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5";
 
   // Use canonical highlighting if available, otherwise fall back to substring matching
   return (
@@ -391,10 +393,10 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
               </div>
               <div className="mb-2">
                 <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
-                <div className="mt-1">
-                  <ColoredExpression expression={s.before_subexpr} className="text-gray-600" />
+                <div className="mt-1 flex items-center gap-2">
+                  <ColoredExpression expression={s.before_subexpr} className="bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-1" />
                   <span className="mx-2">→</span>
-                  <ColoredExpression expression={s.after_subexpr} className="text-green-700" />
+                  <ColoredExpression expression={s.after_subexpr} className="bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-1" />
                 </div>
               </div>
               <div className="border-t pt-2">
@@ -406,6 +408,7 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                     fullExpression={s.after_tree}
                     canonExpression={s.after_canon}
                     className="text-blue-700"
+                    strategy="after"
                     highlightSpan={s.after_highlight_span}
                     beforeSubexprCanon={s.before_subexpr_canon}
                     afterSubexprCanon={s.after_subexpr_canon}

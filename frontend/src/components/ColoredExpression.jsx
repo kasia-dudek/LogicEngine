@@ -4,6 +4,11 @@ import React, { useMemo } from 'react';
  * Komponent do wyświetlania wyrażeń logicznych z kolorowanymi nawiasami
  * Nawiasy są kolorowane według poziomów zagnieżdżenia
  */
+
+// Default color classes
+const COLOR_BEFORE = "bg-red-100 text-red-900 ring-1 ring-red-300 rounded px-0.5";
+const COLOR_AFTER = "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5";
+
 // Funkcja do czyszczenia nawiasów - wyodrębniona żeby używać dla fragmentu też
 function cleanExpression(expr) {
   if (!expr) return '';
@@ -41,6 +46,125 @@ function cleanExpression(expr) {
   } catch (_) {
     return String(expr);
   }
+}
+
+/**
+ * Find text range in target expression using heuristics
+ * Returns {start, end} or null if not found
+ */
+function findTextRange(targetExpression, highlightText) {
+  if (!targetExpression || !highlightText) return null;
+  
+  const cleaned = cleanExpression(highlightText);
+  
+  // 1. Try exact match
+  let index = targetExpression.indexOf(cleaned);
+  if (index !== -1) {
+    return { start: index, end: index + cleaned.length };
+  }
+  
+  // 2. Try without outer parentheses
+  if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+    const withoutParens = cleaned.slice(1, -1);
+    index = targetExpression.indexOf(withoutParens);
+    if (index !== -1) {
+      return { start: index, end: index + withoutParens.length };
+    }
+  }
+  
+  // 3. Parse AND/OR parts
+  function parseParts(expr, separator) {
+    let level = 0;
+    const parts = [];
+    let current = '';
+    for (let i = 0; i < expr.length; i++) {
+      const char = expr[i];
+      if (char === '(') level++;
+      else if (char === ')') level--;
+      else if (char === separator && level === 0) {
+        if (current.trim()) parts.push(current.trim());
+        current = '';
+        continue;
+      }
+      current += char;
+    }
+    if (current.trim()) parts.push(current.trim());
+    return parts.length > 0 ? parts : [expr];
+  }
+  
+  if (cleaned.includes('∧')) {
+    const parts = parseParts(cleaned, '∧');
+    if (parts.length >= 2) {
+      const found = [];
+      for (const part of parts) {
+        const idx = targetExpression.indexOf(part);
+        if (idx !== -1) {
+          found.push({ idx, len: part.length });
+        }
+      }
+      if (found.length >= 2 && found.length >= Math.ceil(parts.length / 2)) {
+        const start = Math.min(...found.map(f => f.idx));
+        const end = Math.max(...found.map(f => f.idx + f.len));
+        return { start, end };
+      }
+      if (found.length > 0) {
+        const best = found.reduce((a, b) => b.len > a.len ? b : a);
+        return { start: best.idx, end: best.idx + best.len };
+      }
+    }
+  }
+  
+  if (cleaned.includes('∨')) {
+    const parts = parseParts(cleaned, '∨');
+    if (parts.length >= 2) {
+      const found = [];
+      for (const part of parts) {
+        const idx = targetExpression.indexOf(part);
+        if (idx !== -1) {
+          found.push({ idx, len: part.length });
+        }
+      }
+      if (found.length >= 2 && found.length >= Math.ceil(parts.length / 2)) {
+        const start = Math.min(...found.map(f => f.idx));
+        const end = Math.max(...found.map(f => f.idx + f.len));
+        return { start, end };
+      }
+      if (found.length > 0) {
+        const best = found.reduce((a, b) => b.len > a.len ? b : a);
+        return { start: best.idx, end: best.idx + best.len };
+      }
+    }
+  }
+  
+  // 4. LCS fallback
+  let longestMatch = '';
+  let longestIndex = -1;
+  for (let i = 0; i < targetExpression.length; i++) {
+    for (let len = Math.min(cleaned.length, targetExpression.length - i); len > longestMatch.length; len--) {
+      const substr = targetExpression.substring(i, i + len);
+      if (cleaned.includes(substr) && len > longestMatch.length) {
+        longestMatch = substr;
+        longestIndex = i;
+      }
+    }
+  }
+  
+  for (let i = 0; i < cleaned.length; i++) {
+    for (let len = Math.min(targetExpression.length, cleaned.length - i); len > longestMatch.length; len--) {
+      const substr = cleaned.substring(i, i + len);
+      const idx = targetExpression.indexOf(substr);
+      if (idx !== -1 && len > longestMatch.length) {
+        longestMatch = substr;
+        longestIndex = idx;
+      }
+    }
+  }
+  
+  if (longestMatch.length > 2 && longestIndex !== -1) {
+    return { start: longestIndex, end: longestIndex + longestMatch.length };
+  }
+  
+  return null;
 }
 
 export default function ColoredExpression({ 
