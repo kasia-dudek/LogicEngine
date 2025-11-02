@@ -232,6 +232,11 @@ def build_merge_steps(
         right_node = term_from_lits(right_lits)
         result_node = term_from_lits(result_lits)
         
+        # Normalize for comparison (order matters in canon)
+        left_node = normalize_bool_ast(left_node, expand_imp_iff=True)
+        right_node = normalize_bool_ast(right_node, expand_imp_iff=True)
+        result_node = normalize_bool_ast(result_node, expand_imp_iff=True)
+        
         # Try to find the pair, with iterative uncovering if needed
         merge_path = None
         left_idx = None

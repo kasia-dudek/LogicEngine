@@ -329,11 +329,6 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         # No progress made, break to avoid infinite loop
                         break
                 
-                # Final absorption cleanup
-                absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
-                if absorb_steps:
-                    steps.extend(absorb_steps)
-                
                 # Verify that final DNF canonically equals OR(selected_pi)
                 if steps:
                     final_expr = steps[-1].after_str
