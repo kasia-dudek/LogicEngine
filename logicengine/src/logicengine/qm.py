@@ -19,6 +19,51 @@ def _pad_bin(i: int, n: int) -> str:
     return format(i, f"0{n}b")
 
 
+def _prune_redundant(cover: List[str], pi_to_minterms: Dict[str, set]) -> List[str]:
+    """
+    Remove redundant prime implicants from cover.
+    
+    A PI is redundant if all its minterms are covered by other PIs in the cover.
+    We process PIs from smallest to largest coverage to avoid removing everything.
+    
+    Args:
+        cover: List of PI masks/binary patterns
+        pi_to_minterms: Dict mapping PI mask to set of minterms it covers
+        
+    Returns:
+        Pruned cover with redundant PIs removed
+    """
+    cover_set = set(cover)
+    changed = True
+    
+    while changed:
+        changed = False
+        # Sort by coverage size (largest first) so we remove super-sets before subsets
+        sorted_cover = sorted(list(cover_set), key=lambda pi: len(pi_to_minterms.get(pi, set())), reverse=True)
+        
+        for pi in sorted_cover:
+            # Check if pi is redundant
+            others = cover_set - {pi}
+            if not others:
+                break  # Can't remove the last PI
+            
+            # Union of minterms covered by all other PIs
+            union_others = set()
+            for other_pi in others:
+                union_others.update(pi_to_minterms.get(other_pi, set()))
+            
+            # Minterms covered by this specific PI
+            minterms_pi = pi_to_minterms.get(pi, set())
+            
+            # If others cover all minterms of pi, then pi is redundant
+            if minterms_pi.issubset(union_others):
+                cover_set.remove(pi)
+                changed = True
+                break  # Restart from beginning after removing
+    
+    return list(cover_set)
+
+
 def simplify_qm(expr: str) -> Dict[str, Any]:
     """Simplify a logical expression via Quine–McCluskey and return steps for the UI."""
     steps: List[Dict[str, Any]] = []
@@ -271,7 +316,16 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
                             "selected_pis": sorted(best_combo),
                         },
                     })
-
+    
+    # Post-reduction: Remove redundant PIs
+    if min_cover:
+        # Build pi_to_minterms dict
+        pi_to_minterms = {}
+        for b, ms in all_prime_implicants:
+            pi_to_minterms[b] = set(ms)
+        
+        min_cover = _prune_redundant(min_cover, pi_to_minterms)
+    
     min_cover = sorted(set(min_cover))
     steps.append({
         "step": "Krok 6: Minimalne pokrycie (metoda Petricka)",
