@@ -112,11 +112,11 @@ export default function SimplifyDNF({ expression, loading }) {
                 {typeof step.before_str === 'string' && (
                   <div aria-label="Wyrażenie przed krokiem z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Przed:</span>
-                    <div className="mt-1 bg-yellow-50 px-2 py-1 rounded border">
+                    <div className="mt-1">
                       <ColoredExpression 
                         expression={step.before_str} 
                         canonExpression={step.before_canon}
-                        className="text-yellow-700"
+                        className="text-gray-800"
                         highlightText={step.before_subexpr_canon || step.before_subexpr}
                         highlightSpan={step.before_highlight_span}
                         highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
@@ -146,11 +146,11 @@ export default function SimplifyDNF({ expression, loading }) {
                 {typeof step.after_str === 'string' && (
                   <div aria-label="Wyrażenie po kroku z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Po:</span>
-                    <div className="mt-1 bg-blue-50 px-2 py-1 rounded border">
+                    <div className="mt-1">
                       <ColoredExpression 
                         expression={step.after_str} 
                         canonExpression={step.after_canon}
-                        className="text-blue-700"
+                        className="text-gray-800"
                         highlightText={step.after_subexpr_canon || step.after_subexpr}
                         highlightSpan={step.after_highlight_span}
                         highlightClass="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
@@ -171,26 +171,6 @@ export default function SimplifyDNF({ expression, loading }) {
                   </div>
                 )}
 
-                {/* Proof verification */}
-                {step.proof && step.proof.method && (
-                  <div className="mt-2 flex items-center gap-2 text-xs">
-                    {step.proof.equal ? (
-                      <span className="text-green-600 flex items-center gap-1">
-                        <span>✓</span> Zweryfikowano
-                      </span>
-                    ) : (
-                      <span className="text-red-600 flex items-center gap-1">
-                        <span>✗</span> Błąd weryfikacji
-                      </span>
-                    )}
-                    {step.proof.method === 'tt-hash' && (
-                      <span className="text-gray-500">(hash TT)</span>
-                    )}
-                    {step.proof.method === 'qm-trace' && (
-                      <span className="text-gray-500">(QM trace)</span>
-                    )}
-                  </div>
-                )}
               </div>
             </div>
           ))}

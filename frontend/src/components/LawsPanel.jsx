@@ -379,7 +379,7 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
             <div className="mt-2 text-sm">
               <div className="mb-2">
                 <span className="text-xs text-gray-500 font-semibold">Całe wyrażenie przed krokiem:</span>
-                <div className="mt-1 bg-amber-50 px-2 py-1 rounded border">
+                <div className="mt-1">
                   <HighlightedExpression
                     beforeSubexpr={s.before_subexpr}
                     fullExpression={s.before_tree}
@@ -401,13 +401,13 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
               </div>
               <div className="border-t pt-2">
                 <span className="text-xs text-gray-500 font-semibold">Całe wyrażenie po kroku:</span>
-                <div className="mt-1 bg-blue-50 px-2 py-1 rounded border">
+                <div className="mt-1">
                   <HighlightedExpression 
                     beforeSubexpr={s.before_subexpr}
                     afterSubexpr={s.after_subexpr}
                     fullExpression={s.after_tree}
                     canonExpression={s.after_canon}
-                    className="text-blue-700"
+                    className="text-gray-800"
                     strategy="after"
                     highlightSpan={s.after_highlight_span}
                     beforeSubexprCanon={s.before_subexpr_canon}
