@@ -8,7 +8,7 @@ from .steps import Step, RuleName
 from .ast import generate_ast, canonical_str, normalize_bool_ast, canonical_str_minimal
 from .utils import truth_table_hash
 from .laws import VAR, NOT, AND, OR, CONST, to_lit, lit_to_node, term_from_lits, canonical_lits, iter_nodes, set_by_path
-from .laws import canon, pretty
+from .laws import canon, pretty, find_subtree_position
 
 
 def is_dnf(ast: Any) -> bool:
@@ -283,9 +283,44 @@ def build_merge_steps(
         
         # STEP 1: Factoring: XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)
         before_str_1 = pretty(working_ast)
+        before_canon_1 = canonical_str(working_ast)
         after_ast_1 = _apply_factoring(working_ast, merge_path, left_idx, right_idx, 
                                         result_node, diff_var)
         after_str_1 = pretty(after_ast_1)
+        after_canon_1 = canonical_str(after_ast_1)
+        
+        # Compute subexpression for highlighting
+        # Before: the OR of left and right terms (the two being factored)
+        # After: the factored expression result_node ∧ (diff_var ∨ ¬diff_var)
+        diff_node_pos = VAR(diff_var)
+        diff_node_neg = NOT(VAR(diff_var))
+        diff_or = OR([diff_node_pos, diff_node_neg])
+        factored_node = AND([result_node, diff_or])
+        
+        or_node_before = working_ast
+        for key, idx in merge_path:
+            if key == "args":
+                or_node_before = or_node_before["args"][idx]
+        
+        # Build the pair being merged
+        args_before = or_node_before.get("args", [])
+        left_arg = args_before[left_idx] if left_idx is not None else None
+        right_arg = args_before[right_idx] if right_idx is not None else None
+        
+        if left_arg and right_arg:
+            before_subexpr = OR([left_arg, right_arg])
+            after_subexpr = factored_node
+        else:
+            before_subexpr = None
+            after_subexpr = None
+        
+        before_subexpr_str = pretty(before_subexpr) if before_subexpr else None
+        after_subexpr_str = pretty(after_subexpr) if after_subexpr else None
+        before_subexpr_canon = canonical_str(before_subexpr) if before_subexpr else None
+        after_subexpr_canon = canonical_str(after_subexpr) if after_subexpr else None
+        
+        before_highlight_span = find_subtree_position(before_subexpr, working_ast) if before_subexpr else None
+        after_highlight_span = find_subtree_position(after_subexpr, after_ast_1) if after_subexpr else None
         
         # Verify TT equivalence
         is_equal_1 = (truth_table_hash(vars, before_str_1) == truth_table_hash(vars, after_str_1))
@@ -298,15 +333,41 @@ def build_merge_steps(
             schema="XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)",
             location=None,
             details={"step_num": 1, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_1}
+            proof={"method": "tt-hash", "equal": is_equal_1},
+            before_canon=before_canon_1,
+            after_canon=after_canon_1,
+            before_subexpr=before_subexpr_str,
+            after_subexpr=after_subexpr_str,
+            before_subexpr_canon=before_subexpr_canon,
+            after_subexpr_canon=after_subexpr_canon,
+            before_highlight_span=before_highlight_span,
+            after_highlight_span=after_highlight_span
         )
         steps.append(step1)
         working_ast = after_ast_1
         
         # STEP 2: Tautology: Y ∨ ¬Y ⇒ 1
         before_str_2 = pretty(working_ast)
+        before_canon_2 = canonical_str(working_ast)
         after_ast_2 = _apply_tautology(working_ast, diff_var)
         after_str_2 = pretty(after_ast_2)
+        after_canon_2 = canonical_str(after_ast_2)
+        
+        # Compute subexpression for highlighting
+        diff_node_pos = VAR(diff_var)
+        diff_node_neg = NOT(VAR(diff_var))
+        diff_or = OR([diff_node_pos, diff_node_neg])
+        
+        before_subexpr_2 = diff_or
+        after_subexpr_2 = CONST(1)
+        
+        before_subexpr_str_2 = pretty(before_subexpr_2)
+        after_subexpr_str_2 = pretty(after_subexpr_2)
+        before_subexpr_canon_2 = canonical_str(before_subexpr_2)
+        after_subexpr_canon_2 = canonical_str(after_subexpr_2)
+        
+        before_highlight_span_2 = find_subtree_position(before_subexpr_2, working_ast)
+        after_highlight_span_2 = find_subtree_position(after_subexpr_2, after_ast_2)
         
         # Verify TT equivalence
         is_equal_2 = (truth_table_hash(vars, before_str_2) == truth_table_hash(vars, after_str_2))
@@ -319,15 +380,34 @@ def build_merge_steps(
             schema="Y ∨ ¬Y ⇒ 1",
             location=None,
             details={"step_num": 2, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_2}
+            proof={"method": "tt-hash", "equal": is_equal_2},
+            before_canon=before_canon_2,
+            after_canon=after_canon_2,
+            before_subexpr=before_subexpr_str_2,
+            after_subexpr=after_subexpr_str_2,
+            before_subexpr_canon=before_subexpr_canon_2,
+            after_subexpr_canon=after_subexpr_canon_2,
+            before_highlight_span=before_highlight_span_2,
+            after_highlight_span=after_highlight_span_2
         )
         steps.append(step2)
         working_ast = after_ast_2
         
         # STEP 3: Neutral element: X ∧ 1 ⇒ X
         before_str_3 = pretty(working_ast)
+        before_canon_3 = canonical_str(working_ast)
         after_ast_3 = _apply_neutral(working_ast)
         after_str_3 = pretty(after_ast_3)
+        after_canon_3 = canonical_str(after_ast_3)
+        
+        # Compute subexpression for highlighting - we need to find AND nodes with CONST(1)
+        # This is complex, so we'll just compute the canonical forms
+        before_subexpr_str_3 = None
+        after_subexpr_str_3 = None
+        before_subexpr_canon_3 = None
+        after_subexpr_canon_3 = None
+        before_highlight_span_3 = None
+        after_highlight_span_3 = None
         
         # Verify TT equivalence
         is_equal_3 = (truth_table_hash(vars, before_str_3) == truth_table_hash(vars, after_str_3))
@@ -340,7 +420,15 @@ def build_merge_steps(
             schema="X ∧ 1 ⇒ X",
             location=None,
             details={"step_num": 3, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_3}
+            proof={"method": "tt-hash", "equal": is_equal_3},
+            before_canon=before_canon_3,
+            after_canon=after_canon_3,
+            before_subexpr=before_subexpr_str_3,
+            after_subexpr=after_subexpr_str_3,
+            before_subexpr_canon=before_subexpr_canon_3,
+            after_subexpr_canon=after_subexpr_canon_3,
+            before_highlight_span=before_highlight_span_3,
+            after_highlight_span=after_highlight_span_3
         )
         steps.append(step3)
         working_ast = after_ast_3
@@ -647,9 +735,28 @@ def ensure_pair_present(
         new_or_node = {"op": "OR", "args": new_args}
         
         before_str_1 = pretty(working_ast)
+        before_canon_1 = canonical_str(working_ast)
+        
+        # Compute subexpression for highlighting BEFORE transformation
+        before_subexpr_1 = common_node
+        after_subexpr_1 = new_term
+        
+        before_subexpr_str_1 = pretty(before_subexpr_1)
+        after_subexpr_str_1 = pretty(after_subexpr_1)
+        before_subexpr_canon_1 = canonical_str(before_subexpr_1)
+        after_subexpr_canon_1 = canonical_str(after_subexpr_1)
+        
+        # Find position in BEFORE state
+        before_highlight_span_1 = find_subtree_position(before_subexpr_1, working_ast)
+        
+        # Apply transformation
         working_ast = set_by_path(working_ast, injection_path, new_or_node)
         working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
         after_str_1 = pretty(working_ast)
+        after_canon_1 = canonical_str(working_ast)
+        
+        # Find position in AFTER state
+        after_highlight_span_1 = find_subtree_position(after_subexpr_1, working_ast)
         
         # Verify TT equivalence
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
@@ -661,7 +768,15 @@ def ensure_pair_present(
             rule="Odsłonięcie pary (tożsamość)",
             category="user",
             location=injection_path,
-            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
+            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
+            before_canon=before_canon_1,
+            after_canon=after_canon_1,
+            before_subexpr=before_subexpr_str_1,
+            after_subexpr=after_subexpr_str_1,
+            before_subexpr_canon=before_subexpr_canon_1,
+            after_subexpr_canon=after_subexpr_canon_1,
+            before_highlight_span=before_highlight_span_1,
+            after_highlight_span=after_highlight_span_1
         )
         steps.append(step1)
         
@@ -703,8 +818,27 @@ def ensure_pair_present(
         expanded_node = AND([common_node, diff_or])
         
         before_str_1 = pretty(working_ast)
+        before_canon_1 = canonical_str(working_ast)
+        
+        # Compute subexpression for highlighting
+        before_subexpr_1 = node_to_split
+        after_subexpr_1 = expanded_node
+        
+        before_subexpr_str_1 = pretty(before_subexpr_1)
+        after_subexpr_str_1 = pretty(after_subexpr_1)
+        before_subexpr_canon_1 = canonical_str(before_subexpr_1)
+        after_subexpr_canon_1 = canonical_str(after_subexpr_1)
+        
+        # Find position in BEFORE state
+        before_highlight_span_1 = find_subtree_position(before_subexpr_1, working_ast)
+        
+        # Apply transformation
         working_ast = set_by_path(working_ast, split_path, expanded_node)
         after_str_1 = pretty(working_ast)
+        after_canon_1 = canonical_str(working_ast)
+        
+        # Find position in AFTER state
+        after_highlight_span_1 = find_subtree_position(after_subexpr_1, working_ast)
         
         # Verify TT equivalence for step 1
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
@@ -716,7 +850,15 @@ def ensure_pair_present(
             rule="Odsłonięcie pary (tożsamość)",
             category="user",
             location=split_path,
-            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1}
+            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
+            before_canon=before_canon_1,
+            after_canon=after_canon_1,
+            before_subexpr=before_subexpr_str_1,
+            after_subexpr=after_subexpr_str_1,
+            before_subexpr_canon=before_subexpr_canon_1,
+            after_subexpr_canon=after_subexpr_canon_1,
+            before_highlight_span=before_highlight_span_1,
+            after_highlight_span=after_highlight_span_1
         )
         steps.append(step1)
     
@@ -724,9 +866,33 @@ def ensure_pair_present(
     # The expanded_node is AND([common_node, diff_or])
     # We need to find it and distribute
     before_str_2 = pretty(working_ast)
+    before_canon_2 = canonical_str(working_ast)
+    
+    # Compute subexpression for highlighting
+    expanded_node = AND([common_node, diff_or])
+    left_term = AND([common_node, diff_node_pos])
+    right_term = AND([common_node, diff_node_neg])
+    distributed_result = OR([left_term, right_term])
+    
+    before_subexpr_2 = expanded_node
+    after_subexpr_2 = distributed_result
+    
+    before_subexpr_str_2 = pretty(before_subexpr_2)
+    after_subexpr_str_2 = pretty(after_subexpr_2)
+    before_subexpr_canon_2 = canonical_str(before_subexpr_2)
+    after_subexpr_canon_2 = canonical_str(after_subexpr_2)
+    
+    # Find position in BEFORE state
+    before_highlight_span_2 = find_subtree_position(before_subexpr_2, working_ast)
+    
+    # Apply transformation
     working_ast = _distribute_term(working_ast, split_path, common_node, diff_or)
     working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
     after_str_2 = pretty(working_ast)
+    after_canon_2 = canonical_str(working_ast)
+    
+    # Find position in AFTER state
+    after_highlight_span_2 = find_subtree_position(after_subexpr_2, working_ast)
     
     # Verify TT equivalence for step 2
     before_hash_2 = truth_table_hash(vars_list, before_str_2)
@@ -738,7 +904,15 @@ def ensure_pair_present(
         rule="Odsłonięcie pary (Dystrybucja)",
         category="user",
         location=split_path,
-        proof={"method": "tt-hash", "equal": before_hash_2 == after_hash_2}
+        proof={"method": "tt-hash", "equal": before_hash_2 == after_hash_2},
+        before_canon=before_canon_2,
+        after_canon=after_canon_2,
+        before_subexpr=before_subexpr_str_2,
+        after_subexpr=after_subexpr_str_2,
+        before_subexpr_canon=before_subexpr_canon_2,
+        after_subexpr_canon=after_subexpr_canon_2,
+        before_highlight_span=before_highlight_span_2,
+        after_highlight_span=after_highlight_span_2
     )
     steps.append(step2)
     
