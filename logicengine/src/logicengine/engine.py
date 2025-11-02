@@ -263,29 +263,83 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     # No laws steps, use laws' normalized_ast or fall back to initial AST
                     current_ast = laws_result.get("normalized_ast") or node
                 
-                # For each merge edge, ensure pair is present, then merge
+                # Iteratively apply merges until we reach QM's minimal DNF
                 working_ast = current_ast
-                for left_mask, right_mask, result_mask in merge_edges:
-                    # Try to ensure pair is present
-                    working_ast, pair_steps = ensure_pair_present(working_ast, vars_list, left_mask, right_mask)
-                    if pair_steps:
-                        steps.extend(pair_steps)
-                    
-                    # Now try to merge this pair
-                    single_edge_steps = build_merge_steps(working_ast, vars_list, [(left_mask, right_mask, result_mask)])
-                    if single_edge_steps:
-                        steps.extend(single_edge_steps)
-                        # Update working_ast for next iteration
-                        working_ast = generate_ast(single_edge_steps[-1].after_str)
-                        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                 
-                # After all merges, apply absorption cleanup
+                # Build target QM canonical string once
+                from .utils import bin_to_expr
+                pi_terms = []
+                for pi_mask in selected_pi:
+                    pi_term = bin_to_expr(pi_mask, vars_list)
+                    pi_terms.append(pi_term)
+                
+                qm_dnf_str = " ∨ ".join(pi_terms) if pi_terms else "0"
+                qm_dnf_ast = generate_ast(qm_dnf_str)
+                qm_dnf_ast = normalize_bool_ast(qm_dnf_ast, expand_imp_iff=True)
+                qm_dnf_canon = canonical_str(qm_dnf_ast)
+                
+                # Track which edges we've processed to avoid infinite loops
+                processed_edges = set()
+                max_iterations = len(merge_edges) * 3  # Allow multiple passes
+                iteration = 0
+                
+                while iteration < max_iterations:
+                    iteration += 1
+                    
+                    # Apply absorption cleanup periodically
+                    if iteration % 3 == 0:  # Every 3 iterations
+                        absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
+                        if absorb_steps:
+                            steps.extend(absorb_steps)
+                            # Update working_ast after absorption
+                            working_ast = generate_ast(absorb_steps[-1].after_str)
+                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                    
+                    # Check if we've reached the goal
+                    if steps:
+                        current_expr = steps[-1].after_str
+                        current_ast = generate_ast(current_expr)
+                        current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                        current_canon = canonical_str(current_ast)
+                        
+                        if current_canon == qm_dnf_canon:
+                            # Success! We've reached the minimal DNF
+                            break
+                    
+                    # Try to apply merge edges
+                    made_progress = False
+                    for left_mask, right_mask, result_mask in merge_edges:
+                        edge_key = (left_mask, right_mask, result_mask)
+                        if edge_key in processed_edges:
+                            continue
+                        
+                        # Try to ensure pair is present
+                        working_ast, pair_steps = ensure_pair_present(working_ast, vars_list, left_mask, right_mask)
+                        if pair_steps:
+                            steps.extend(pair_steps)
+                            made_progress = True
+                            # Update working_ast for merge attempt
+                            working_ast = generate_ast(steps[-1].after_str)
+                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                        
+                        # Now try to merge this pair
+                        single_edge_steps = build_merge_steps(working_ast, vars_list, [(left_mask, right_mask, result_mask)])
+                        if single_edge_steps:
+                            steps.extend(single_edge_steps)
+                            # Update working_ast for next iteration
+                            working_ast = generate_ast(single_edge_steps[-1].after_str)
+                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                            made_progress = True
+                            processed_edges.add(edge_key)
+                    
+                    if not made_progress:
+                        # No progress made, break to avoid infinite loop
+                        break
+                
+                # Final absorption cleanup
                 absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
                 if absorb_steps:
                     steps.extend(absorb_steps)
-                    # Update working_ast after absorption
-                    working_ast = generate_ast(absorb_steps[-1].after_str)
-                    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                 
                 # Verify that final DNF canonically equals OR(selected_pi)
                 if steps:
@@ -294,24 +348,11 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     final_ast = normalize_bool_ast(final_ast, expand_imp_iff=True)
                     final_canon = canonical_str(final_ast)
                     
-                    # Build OR(selected_pi) canonical string
-                    from .utils import bin_to_expr
-                    pi_terms = []
-                    for pi_mask in selected_pi:
-                        pi_term = bin_to_expr(pi_mask, vars_list)
-                        pi_terms.append(pi_term)
-                    
-                    qm_dnf_str = " ∨ ".join(pi_terms) if pi_terms else "0"
-                    qm_dnf_ast = generate_ast(qm_dnf_str)
-                    qm_dnf_ast = normalize_bool_ast(qm_dnf_ast, expand_imp_iff=True)
-                    qm_dnf_canon = canonical_str(qm_dnf_ast)
-                    
                     # Check canonical equality
                     if final_canon != qm_dnf_canon:
-                        print(f"Warning: Final DNF doesn't match QM canonical (continuing anyway)")
+                        print(f"Warning: Final DNF doesn't match QM canonical after {iteration} iterations")
                         print(f"  Final canon: {final_canon}")
                         print(f"  QM canon:    {qm_dnf_canon}")
-                        print(f"  Continuing with any remaining merge edges...")
             
             # Validate continuity: prev.after_str == next.before_str
             # Enforce hard continuity - remove steps that break the chain
