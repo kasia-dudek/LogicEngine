@@ -286,15 +286,6 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 while iteration < max_iterations:
                     iteration += 1
                     
-                    # Apply absorption cleanup periodically
-                    if iteration % 3 == 0:  # Every 3 iterations
-                        absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
-                        if absorb_steps:
-                            steps.extend(absorb_steps)
-                            # Update working_ast after absorption
-                            working_ast = generate_ast(absorb_steps[-1].after_str)
-                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                    
                     # Check if we've reached the goal
                     if steps:
                         current_expr = steps[-1].after_str
@@ -313,24 +304,26 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         if edge_key in processed_edges:
                             continue
                         
-                        # Try to ensure pair is present
-                        working_ast, pair_steps = ensure_pair_present(working_ast, vars_list, left_mask, right_mask)
-                        if pair_steps:
-                            steps.extend(pair_steps)
-                            made_progress = True
-                            # Update working_ast for merge attempt
-                            working_ast = generate_ast(steps[-1].after_str)
-                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                        
-                        # Now try to merge this pair
+                        # Strategy: build_merge_steps handles uncovering internally
+                        # After successful merge, immediately clean up
                         single_edge_steps = build_merge_steps(working_ast, vars_list, [(left_mask, right_mask, result_mask)])
                         if single_edge_steps:
                             steps.extend(single_edge_steps)
-                            # Update working_ast for next iteration
+                            # Update working_ast after merge
                             working_ast = generate_ast(single_edge_steps[-1].after_str)
                             working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                             made_progress = True
                             processed_edges.add(edge_key)
+                            
+                            # Immediately apply cleanup after successful merge
+                            immediate_cleanup = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
+                            if immediate_cleanup:
+                                steps.extend(immediate_cleanup)
+                                working_ast = generate_ast(immediate_cleanup[-1].after_str)
+                                working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                            
+                            # Since we made progress, break to check if we've reached the goal
+                            break
                     
                     if not made_progress:
                         # No progress made, break to avoid infinite loop
