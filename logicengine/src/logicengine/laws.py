@@ -414,7 +414,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
             lits_list = [to_lit(x) for x in sub.get("args", [])]
             if None not in lits_list and or_factor_is_tautology([t for t in lits_list if t]):
                 out.append({
-                                "law": "Dopełnienie (A ∨ ¬A)",
+                    "law": "Dopełnienie (A ∨ ¬A)",
                     "path": path,
                     "before": sub,
                     "after": CONST(1),

@@ -13,7 +13,7 @@ const TABS = [
   { key: 'truth', label: 'Tabela prawdy' },
   { key: 'qm', label: 'Quine-McCluskey' },
   { key: 'kmap', label: 'K-Map' },
-  { key: 'simplify_dnf', label: 'Minimalny DNF' },
+  { key: 'simplify_dnf', label: 'Prawa logiczne' },
 ];
 
 
