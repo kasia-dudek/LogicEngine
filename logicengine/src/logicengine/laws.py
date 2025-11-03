@@ -870,19 +870,19 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
             best_priority = priority
         elif priority == best_priority:
             # Secondary: prefer smaller measure
-        if after_measure < best_measure:
-            best = m
-            best_measure = after_measure
-        elif after_measure == best_measure:
-            # Tie-break 1: prefer algebraic over axiom
-            if m.get("source") == "algebraic" and best.get("source") == "axiom":
+            if after_measure < best_measure:
                 best = m
                 best_measure = after_measure
-            elif m.get("source") == best.get("source"):
-                # Tie-break 2: prefer shorter string representation
-                if len(pretty(after)) < len(pretty(best["after"])):
+            elif after_measure == best_measure:
+                # Tie-break 1: prefer algebraic over axiom
+                if m.get("source") == "algebraic" and best.get("source") == "axiom":
                     best = m
                     best_measure = after_measure
+                elif m.get("source") == best.get("source"):
+                    # Tie-break 2: prefer shorter string representation
+                    if len(pretty(after)) < len(pretty(best["after"])):
+                        best = m
+                        best_measure = after_measure
     
     return best
 
