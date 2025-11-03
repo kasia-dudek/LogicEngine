@@ -549,8 +549,10 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           ? 'bg-blue-100 font-bold'
                                           : 'bg-blue-50';
                                         return (
-                                          <th key={name} className={`px-2 py-1 border-b text-blue-900 whitespace-nowrap ${headerCls}`}>
-                                            {name}
+                                          <th key={name} className={`px-3 py-2 border-b text-blue-900 whitespace-nowrap ${headerCls}`}>
+                                            <div className="truncate max-w-xs" title={name}>
+                                              {name}
+                                            </div>
                                           </th>
                                         );
                                       })}
@@ -565,7 +567,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           return (
                                             <td
                                               key={idx}
-                                              className={`px-2 py-1 border-b text-center whitespace-nowrap ${
+                                              className={`px-3 py-2 border-b text-center whitespace-nowrap ${
                                                 isCurrent ? 'bg-yellow-50 font-bold' : isArg ? 'bg-blue-50 font-bold' : ''
                                               }`}
                                             >
