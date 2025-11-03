@@ -258,9 +258,15 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
 
             <div className="bg-green-50 rounded-xl p-4 border border-green-100">
               <div className="text-xs text-green-700 font-semibold uppercase">Uproszczone (QM)</div>
-              <div className="font-mono text-lg break-all">
+              <div className="font-mono text-lg break-all mb-2">
                 {data.qm?.result || <span className="text-gray-400">Brak</span>}
               </div>
+              {data.qm?.summary && (
+                <div className="text-xs text-gray-600">
+                  <span className="font-semibold">{data.qm.summary.dnf_terms || 0}</span> termy, {' '}
+                  <span className="font-semibold">{data.qm.summary.minterms_1?.length || 0}</span> mintermy
+                </div>
+              )}
             </div>
 
             <div className="bg-yellow-50 rounded-xl p-4 border border-yellow-100">
