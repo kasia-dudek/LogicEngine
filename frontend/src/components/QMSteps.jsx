@@ -447,33 +447,30 @@ function renderStep(step, stepIndex, hoveredStepIndex, setHoveredStepIndex, getS
       >
         <div className="space-y-3">
           <InfoCallout color="indigo">
-            <div className="font-mono text-sm">{data.opis}</div>
-          </InfoCallout>
-          {data.remaining_minterms && (
-            <div>
-              <SectionTitle>Pozostałe mintermy</SectionTitle>
-              <div className="flex flex-wrap gap-2">
-                {data.remaining_minterms.map((m, i) => (
-                  <span key={i} className="font-mono bg-gray-100 px-2 py-1 rounded border text-sm">m{m}</span>
-                ))}
-              </div>
+            <div className="text-sm space-y-2">
+              <div className="font-semibold">Dla każdego mintermu potrzebujemy wybrać co najmniej jeden PI, który go pokrywa:</div>
+              <div className="font-mono text-xs opacity-75">{data.opis.replace('Formuła Petricka: ', '')}</div>
             </div>
-          )}
-          {data.pi_choices && (
-            <div>
-              <SectionTitle>Wybory PI dla każdego mintermu</SectionTitle>
-              <div className="space-y-2">
-                {data.pi_choices.map((pis, i) => (
-                  <div key={i} className="bg-purple-50 border border-purple-200 rounded-lg p-2">
-                    <div className="text-xs text-purple-700 font-semibold mb-1">Minterm m{data.remaining_minterms[i]}:</div>
-                    <div className="flex flex-wrap gap-2">
-                      {pis.map((pi, j) => (
-                        <span key={j} className="font-mono text-sm text-purple-800">{pi}</span>
-                      ))}
+          </InfoCallout>
+          {data.remaining_minterms && data.pi_choices && (
+            <div className="space-y-2">
+              {data.pi_choices.map((pis, i) => (
+                <div key={i} className="bg-purple-50 border border-purple-200 rounded-lg p-3">
+                  <div className="flex items-start gap-2">
+                    <div className="bg-purple-200 text-purple-800 font-mono text-xs px-2 py-1 rounded border border-purple-300 font-semibold">
+                      m{data.remaining_minterms[i]}
+                    </div>
+                    <div className="flex-1">
+                      <div className="text-xs text-purple-700 mb-1">Pokrywany przez PI:</div>
+                      <div className="flex flex-wrap gap-2">
+                        {pis.map((pi, j) => (
+                          <span key={j} className="font-mono text-sm bg-white px-2 py-1 rounded border border-purple-300 text-purple-800">{pi}</span>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              ))}
             </div>
           )}
         </div>
@@ -491,7 +488,17 @@ function renderStep(step, stepIndex, hoveredStepIndex, setHoveredStepIndex, getS
         tooltipContent={isHovered ? explanation : null}
       >
         <InfoCallout color="green">
-          <div className="font-mono text-sm">{data.opis}</div>
+          <div className="text-sm">
+            <div className="font-semibold mb-2">Wybrano minimalne pokrycie:</div>
+            <div className="font-mono text-base bg-white px-3 py-2 rounded border border-green-300 inline-block">
+              {data.selected_pis.map((pi, i) => (
+                <span key={i}>
+                  {i > 0 && <span className="text-gray-400 mx-1">+</span>}
+                  {pi}
+                </span>
+              ))}
+            </div>
+          </div>
         </InfoCallout>
       </StepCard>
     );
