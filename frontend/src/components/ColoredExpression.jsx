@@ -354,7 +354,43 @@ export default function ColoredExpression({
             foundParts.push({ part, index: idx, length: part.length });
           }
         }
-        // Jeśli znaleziono większość części (co najmniej 50%), użyj je
+        // Sort by position
+        foundParts.sort((a, b) => a.index - b.index);
+        
+        // Try to find consecutive matches that form the full pattern
+        for (let i = 0; i <= foundParts.length - highlightParts.length; i++) {
+          const candidate = foundParts.slice(i, i + highlightParts.length);
+          // Check if all parts are present
+          if (candidate.length === highlightParts.length) {
+            const start = candidate[0].index;
+            const end = candidate[candidate.length - 1].index + candidate[candidate.length - 1].length;
+            // Check if there are no extra parts between them
+            const extractedText = targetExpression.substring(start, end);
+            // Check: extracted text should have exactly the same number of ∨ separators as highlight
+            const highlightOrCount = (targetHighlight.match(/∨/g) || []).length;
+            const extractedOrCount = (extractedText.match(/∨/g) || []).length;
+            
+            // If counts match and all parts are present, it's a valid match
+            if (highlightOrCount === extractedOrCount) {
+              let allPartsPresent = true;
+              for (const part of highlightParts) {
+                if (!extractedText.includes(part)) {
+                  allPartsPresent = false;
+                  break;
+                }
+              }
+              if (allPartsPresent) {
+                return {
+                  start,
+                  end,
+                  class: highlightClass
+                };
+              }
+            }
+          }
+        }
+        
+        // Fallback: if we found most parts, use them but expand conservatively
         if (foundParts.length >= 2 && foundParts.length >= Math.ceil(highlightParts.length / 2)) {
           const start = Math.min(...foundParts.map(p => p.index));
           const end = Math.max(...foundParts.map(p => p.index + p.length));
