@@ -12,7 +12,7 @@ const ConnectionVisualization = ({ pairs, round }) => {
   return (
     <div className="space-y-4">
       <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded border border-blue-200">
-        <strong>🔗 Wizualizacja połączeń:</strong> Poniżej widzisz, jak mintermy są łączone w pary. 
+        <strong>Wizualizacja połączeń:</strong> Poniżej widać, jak mintermy są łączone w pary. 
         Różniąca się pozycja jest zaznaczona na czerwono.
       </div>
       

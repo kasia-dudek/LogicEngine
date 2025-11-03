@@ -396,13 +396,19 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         print(f"Warning: Final DNF doesn't match QM canonical after {iteration} iterations")
                         print(f"  Final canon: {final_canon}")
                         print(f"  QM canon:    {qm_dnf_canon}")
+                        
+                        # Try to apply final cleanup to remove redundant terms
+                        final_cleanup = build_absorb_steps(final_ast, vars_list, selected_pi, pi_to_minterms)
+                        if final_cleanup:
+                            steps.extend(final_cleanup)
+                            print(f"Applied final cleanup: {len(final_cleanup)} steps")
             
-            # Validate continuity: prev.after_str == next.before_str
+            # Validate continuity: prev.after_canon == next.before_canon
             # Enforce hard continuity - remove steps that break the chain
             i = 0
             while i < len(steps) - 1:
-                prev_after = steps[i].after_str
-                next_before = steps[i + 1].before_str
+                prev_after = steps[i].after_canon if steps[i].after_canon else steps[i].after_str
+                next_before = steps[i + 1].before_canon if steps[i + 1].before_canon else steps[i + 1].before_str
                 if prev_after != next_before:
                     # Break in continuity - remove the offending step
                     print(f"Warning: Removing step {i+2} due to discontinuity")

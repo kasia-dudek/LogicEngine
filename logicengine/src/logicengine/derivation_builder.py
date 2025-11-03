@@ -202,8 +202,8 @@ def build_merge_steps(
     steps: List[Step] = []
     seen_pairs = set()  # (result_mask, diff_var) to dedup
     
-    # Start with current AST
-    working_ast = current_ast
+    # Start with current AST, normalize it first
+    working_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
     
     for left_mask, right_mask, result_mask in merge_edges:
         # Find which variable differs
@@ -350,6 +350,7 @@ def build_merge_steps(
         before_str_2 = pretty(working_ast)
         before_canon_2 = canonical_str(working_ast)
         after_ast_2 = _apply_tautology(working_ast, diff_var)
+        after_ast_2 = normalize_bool_ast(after_ast_2, expand_imp_iff=True)
         after_str_2 = pretty(after_ast_2)
         after_canon_2 = canonical_str(after_ast_2)
         
@@ -425,6 +426,7 @@ def build_merge_steps(
         before_highlight_span_3 = find_subtree_position(before_subexpr_3, working_ast) if before_subexpr_3 else None
         
         after_ast_3 = _apply_neutral(working_ast)
+        after_ast_3 = normalize_bool_ast(after_ast_3, expand_imp_iff=True)
         after_str_3 = pretty(after_ast_3)
         after_canon_3 = canonical_str(after_ast_3)
         
@@ -511,10 +513,12 @@ def build_absorb_steps(
             if len(unique_args) < len(args):
                 # Duplicates found - create removal step
                 before_str = pretty(working_ast)
+                before_canon_val = canonical_str(working_ast)
                 new_or_node = {"op": "OR", "args": unique_args}
                 working_ast = set_by_path(working_ast, path, new_or_node)
                 working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                 after_str = pretty(working_ast)
+                after_canon_val = canonical_str(working_ast)
                 
                 # Verify TT equivalence
                 is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -526,7 +530,9 @@ def build_absorb_steps(
                     category="user",
                     schema="X ∨ X ⇒ X",
                     location=None,
-                    proof={"method": "tt-hash", "equal": is_equal}
+                    proof={"method": "tt-hash", "equal": is_equal},
+                    before_canon=before_canon_val,
+                    after_canon=after_canon_val
                 )
                 steps.append(step)
                 break  # Restart search after each change
@@ -559,11 +565,13 @@ def build_absorb_steps(
                             
                             # Remove arg_j
                             before_str = pretty(working_ast)
+                            before_canon_val = canonical_str(working_ast)
                             new_args = [args[k] for k in range(len(args)) if k != j]
                             new_or_node = {"op": "OR", "args": new_args}
                             working_ast = set_by_path(working_ast, path, new_or_node)
                             working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                             after_str = pretty(working_ast)
+                            after_canon_val = canonical_str(working_ast)
                             
                             # Verify TT equivalence
                             is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -575,7 +583,9 @@ def build_absorb_steps(
                                 category="user",
                                 schema="X ∨ (X∧Y) ⇒ X",
                                 location=None,
-                                proof={"method": "tt-hash", "equal": is_equal}
+                                proof={"method": "tt-hash", "equal": is_equal},
+                                before_canon=before_canon_val,
+                                after_canon=after_canon_val
                             )
                             steps.append(step)
                             changed = True
