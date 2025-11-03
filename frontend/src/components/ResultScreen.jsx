@@ -257,16 +257,11 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
             </div>
 
             <div className="bg-green-50 rounded-xl p-4 border border-green-100">
-              <div className="text-xs text-green-700 font-semibold uppercase mb-2">Tabela prawdy</div>
+              <div className="text-xs text-green-700 font-semibold uppercase">Pokrycie prawdy</div>
               {data.truth_table && data.truth_table.length > 0 ? (
-                <>
-                  <div className="text-2xl font-bold text-green-700 mb-1">
-                    {Math.round((data.truth_table.filter(row => row.result === 1).length / data.truth_table.length) * 100)}%
-                  </div>
-                  <div className="text-xs text-gray-600">
-                    {data.truth_table.filter(row => row.result === 1).length} / {data.truth_table.length} wierszy = 1
-                  </div>
-                </>
+                <div className="font-mono text-lg break-all">
+                  {Math.round((data.truth_table.filter(row => row.result === 1).length / data.truth_table.length) * 100)}% ({data.truth_table.filter(row => row.result === 1).length}/{data.truth_table.length} = 1)
+                </div>
               ) : (
                 <span className="text-gray-400">Brak danych</span>
               )}
