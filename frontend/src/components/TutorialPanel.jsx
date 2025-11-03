@@ -230,9 +230,17 @@ function TutorialPanel({
                 <button
                   className="px-3 py-1 rounded bg-gray-100 text-blue-700 border border-blue-200"
                   onMouseEnter={() => {
-                    // For ASTDisplay compatibility, pass text (it will find matching subtree)
-                    // The visual highlighting in TutorialPanel is already done above with highlightBySpan
-                    onHighlight(m.focusPretty || m.before_str || '');
+                    // Pass object with text and span for proper highlighting
+                    if (m.before_span && m.before_str) {
+                      onHighlight({
+                        text: m.before_str,
+                        span: m.before_span,
+                        type: 'before'
+                      });
+                    } else {
+                      // Fallback to text only for compatibility
+                      onHighlight(m.focusPretty || m.before_str || '');
+                    }
                   }}
                   onMouseLeave={() => onHighlight(null)}
                 >

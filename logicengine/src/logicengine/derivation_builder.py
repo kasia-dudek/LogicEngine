@@ -203,13 +203,22 @@ def build_minterm_expansion_steps(
         var_or = OR([var_node_pos, var_node_neg])
         
         # Apply identity: X => X∧(v∨¬v)
-        before_str = pretty(working_ast)
+        before_str, _ = pretty_with_tokens(working_ast)
+        before_canon_1 = canonical_str(working_ast)
+        
+        # Calculate span for current_product_norm before transformation
+        before_highlight_span_1 = find_subtree_span_by_path(current_path, working_ast) if current_path else None
+        
         expanded_product = AND([current_product_norm, var_or])
         
         # Replace product in AST
         working_ast = set_by_path(working_ast, current_path, expanded_product)
         working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-        after_str_1 = pretty(working_ast)
+        after_str_1, _ = pretty_with_tokens(working_ast)
+        after_canon_1 = canonical_str(working_ast)
+        
+        # After: expanded_product is at current_path
+        after_highlight_span_1 = find_subtree_span_by_path(current_path, working_ast) if current_path else None
         
         # Verify TT equivalence
         is_equal_1 = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str_1))
@@ -220,12 +229,19 @@ def build_minterm_expansion_steps(
             rule="Neutralny (∧1)",
             category="user",
             location=current_path,
-            proof={"method": "tt-hash", "equal": is_equal_1}
+            proof={"method": "tt-hash", "equal": is_equal_1},
+            before_canon=before_canon_1,
+            after_canon=after_canon_1,
+            before_span=before_highlight_span_1,
+            after_span=after_highlight_span_1,
+            before_highlight_span=before_highlight_span_1,
+            after_highlight_span=after_highlight_span_1
         )
         steps.append(step1)
         
         # Now distribute: X∧(v∨¬v) => (X∧v) ∨ (X∧¬v)
-        before_str_2 = pretty(working_ast)
+        before_str_2, _ = pretty_with_tokens(working_ast)
+        before_canon_2 = canonical_str(working_ast)
         
         # Find the expanded product and distribute it
         # After normalization, it might be in a different form
@@ -242,6 +258,9 @@ def build_minterm_expansion_steps(
             # Can't find - return what we have
             return (working_ast, steps)
         
+        # Calculate span for expanded_product before distribution
+        before_highlight_span_2 = find_subtree_span_by_path(distrib_path, working_ast) if distrib_path else None
+        
         # Distribute
         working_ast = _distribute_term(
             working_ast,
@@ -250,13 +269,23 @@ def build_minterm_expansion_steps(
             var_or
         )
         working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-        after_str_2 = pretty(working_ast)
+        after_str_2, _ = pretty_with_tokens(working_ast)
+        after_canon_2 = canonical_str(working_ast)
+        
+        # After: distributed result is at distrib_path (replaces expanded_product)
+        after_highlight_span_2 = find_subtree_span_by_path(distrib_path, working_ast) if distrib_path else None
         
         # Verify TT equivalence
         is_equal_2 = (truth_table_hash(vars_list, before_str_2) == truth_table_hash(vars_list, after_str_2))
         
         step2 = Step(
             before_str=before_str_2,
+            before_canon=before_canon_2,
+            after_canon=after_canon_2,
+            before_span=before_highlight_span_2,
+            after_span=after_highlight_span_2,
+            before_highlight_span=before_highlight_span_2,
+            after_highlight_span=after_highlight_span_2,
             after_str=after_str_2,
             rule="Rozdzielność (faktoryzacja)",
             category="user",

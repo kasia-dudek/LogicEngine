@@ -6,7 +6,7 @@ import React from 'react';
  * Wraps middle part in <span> with given className
  */
 export function highlightBySpan(text, span, highlightClass) {
-  if (!text || !span || span.start === undefined || span.end === undefined) {
+  if (!text || !span || span.start == null || span.end == null) {
     return text;
   }
   
@@ -18,15 +18,12 @@ export function highlightBySpan(text, span, highlightClass) {
     return text;
   }
   
-  const before = text.substring(0, start);
-  const highlighted = text.substring(start, end);
-  const after = text.substring(end);
-  
+  // Use slice as per requirements
   return (
     <>
-      {before}
-      <span className={highlightClass}>{highlighted}</span>
-      {after}
+      {text.slice(0, start)}
+      <span className={highlightClass}>{text.slice(start, end)}</span>
+      {text.slice(end)}
     </>
   );
 }
