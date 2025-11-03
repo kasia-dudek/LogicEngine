@@ -116,7 +116,8 @@ export default function SimplifyDNF({ expression, loading }) {
                     <div className="mt-1">
                       {step.before_span ? (
                         // Use span-based highlighting (preferred)
-                        <div className="font-mono text-gray-800">
+                        // Note: span is relative to before_str from pretty_with_tokens()
+                        <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.before_str,
                             step.before_span,
@@ -193,7 +194,8 @@ export default function SimplifyDNF({ expression, loading }) {
                     <div className="mt-1">
                       {step.after_span ? (
                         // Use span-based highlighting (preferred)
-                        <div className="font-mono text-gray-800">
+                        // Note: span is relative to after_str from pretty_with_tokens()
+                        <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.after_str,
                             step.after_span,

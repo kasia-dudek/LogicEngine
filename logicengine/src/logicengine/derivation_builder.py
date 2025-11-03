@@ -568,16 +568,21 @@ def build_merge_steps(
                     if len(new_args) == 1:
                         after_subexpr_3 = new_args[0]
                     else:
-                        after_subexpr_3 = {"op": "AND", "args": new_args}
+                        after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
                     break
         
-        before_subexpr_str_3 = pretty(before_subexpr_3) if before_subexpr_3 else None
+        # If we didn't find an AND with CONST(1), skip this step
+        if not before_subexpr_3 or not neutral_path:
+            # Skip step 3 - no neutral element to remove
+            return steps
+        
+        before_subexpr_str_3 = pretty(before_subexpr_3)
         after_subexpr_str_3 = pretty(after_subexpr_3) if after_subexpr_3 else None
-        before_subexpr_canon_3 = canonical_str(before_subexpr_3) if before_subexpr_3 else None
+        before_subexpr_canon_3 = canonical_str(before_subexpr_3)
         after_subexpr_canon_3 = canonical_str(after_subexpr_3) if after_subexpr_3 else None
         
         # Use path-based span lookup
-        before_highlight_span_3 = find_subtree_span_by_path(neutral_path, working_ast) if (before_subexpr_3 and neutral_path) else None
+        before_highlight_span_3 = find_subtree_span_by_path(neutral_path, working_ast)
         
         after_ast_3 = _apply_neutral(working_ast)
         after_ast_3 = normalize_bool_ast(after_ast_3, expand_imp_iff=True)
@@ -585,17 +590,26 @@ def build_merge_steps(
         after_canon_3 = canonical_str(after_ast_3)
         
         # For after: if after_subexpr_3 is a single element, it might be at the same path or a parent path
-        # Try the same path first, then search if needed
-        if after_subexpr_3 and neutral_path:
+        # First try the same path (if it's still an AND with multiple args)
+        if after_subexpr_3:
             after_highlight_span_3 = find_subtree_span_by_path(neutral_path, after_ast_3)
-            # If not found, the element might have been lifted to parent - search for it
+            # If not found at same path, search for it (it might have been lifted to parent)
             if not after_highlight_span_3:
-                # Search for the node in after_ast_3
+                # Search for the node in after_ast_3 using structural comparison
                 after_subexpr_canon = canonical_str(after_subexpr_3)
                 for path, node in iter_nodes(after_ast_3):
-                    if canonical_str(node) == after_subexpr_canon:
+                    node_canon = canonical_str(node)
+                    if node_canon == after_subexpr_canon:
                         after_highlight_span_3 = find_subtree_span_by_path(path, after_ast_3)
                         break
+                # If still not found, try searching by matching the pretty string
+                if not after_highlight_span_3 and after_subexpr_str_3:
+                    after_subexpr_pretty = after_subexpr_str_3
+                    for path, node in iter_nodes(after_ast_3):
+                        node_pretty = pretty(node)
+                        if node_pretty == after_subexpr_pretty:
+                            after_highlight_span_3 = find_subtree_span_by_path(path, after_ast_3)
+                            break
         else:
             after_highlight_span_3 = None
         

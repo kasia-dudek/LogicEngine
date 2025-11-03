@@ -316,7 +316,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
         onClose={() => setToast({ message: '', type: 'success' })}
       />
 
-      <div className="max-w-4xl w-full bg-white rounded-3xl shadow-2xl p-4 border border-blue-100 animate-fade-in mx-auto">
+      <div className="max-w-5xl w-full bg-white rounded-3xl shadow-2xl p-4 border border-blue-100 animate-fade-in mx-auto">
           <button className="mb-6 text-blue-600 hover:underline text-lg font-semibold" onClick={onBack}>
             &larr; Wróć
           </button>
@@ -612,36 +612,8 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                 </button>
                               </div>
 
-                              {/* Table with scroll arrows */}
+                              {/* Table container */}
                               <div className="relative">
-                                {/* Left arrow */}
-                                {canScrollLeft && (
-                                  <button
-                                    onClick={scrollTableLeft}
-                                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                                    aria-label="Przewiń w lewo"
-                                    title="Przewiń w lewo o jedną kolumnę"
-                                  >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                                    </svg>
-                                  </button>
-                                )}
-                                
-                                {/* Right arrow */}
-                                {canScrollRight && (
-                                  <button
-                                    onClick={scrollTableRight}
-                                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
-                                    aria-label="Przewiń w prawo"
-                                    title="Przewiń w prawo o jedną kolumnę"
-                                  >
-                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                                    </svg>
-                                  </button>
-                                )}
-
                                 <div ref={tableScrollRef} className="scrollable-steps-table">
                                   <table className="min-w-full border border-blue-200 rounded-xl text-sm">
                                   <thead>
@@ -687,8 +659,46 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                 </table>
                                 </div>
                               </div>
+                              
+                              {/* Scroll arrows below table */}
+                              {(canScrollLeft || canScrollRight) && (
+                                <div className="flex justify-center gap-4 mt-3">
+                                  <button
+                                    onClick={scrollTableLeft}
+                                    disabled={!canScrollLeft}
+                                    className={`rounded-full w-8 h-8 flex items-center justify-center transition-all shadow-sm border ${
+                                      canScrollLeft
+                                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 border-gray-300 cursor-pointer'
+                                        : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed opacity-50'
+                                    }`}
+                                    aria-label="Przewiń w lewo"
+                                    title="Przewiń w lewo"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                  </button>
+                                  
+                                  <button
+                                    onClick={scrollTableRight}
+                                    disabled={!canScrollRight}
+                                    className={`rounded-full w-8 h-8 flex items-center justify-center transition-all shadow-sm border ${
+                                      canScrollRight
+                                        ? 'bg-gray-100 hover:bg-gray-200 text-gray-600 hover:text-gray-800 border-gray-300 cursor-pointer'
+                                        : 'bg-gray-50 text-gray-300 border-gray-200 cursor-not-allowed opacity-50'
+                                    }`}
+                                    aria-label="Przewiń w prawo"
+                                    title="Przewiń w prawo"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </button>
+                                </div>
+                              )}
+                              
                               <div className="mt-2 text-xs text-gray-500">
-                                Podświetlona kolumna to aktualnie obliczany krok. Kolumny niebieskie to argumenty tego kroku. Użyj strzałek po bokach tabeli, aby przewijać kolumny.
+                                Podświetlona kolumna to aktualnie obliczany krok. Kolumny niebieskie to argumenty tego kroku.
                               </div>
                             </div>
                           );

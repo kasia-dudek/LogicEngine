@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ColoredExpression from './ColoredExpression';
+import { highlightBySpan } from './highlightBySpan';
 
 /** Małe helpery UI */
 function MetricBadge({ label, before, after }) {
@@ -198,27 +199,40 @@ function TutorialPanel({
               <div>
                 <div className="text-sm">
                   <span className="font-semibold">Fragment:</span>{' '}
-                  <span className="font-mono">{m.focusPretty}</span>
+                  {m.before_span && m.before_str ? (
+                    <span className="font-mono whitespace-pre">
+                      {highlightBySpan(
+                        m.before_str,
+                        m.before_span,
+                        "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                      )}
+                    </span>
+                  ) : (
+                    <span className="font-mono">{m.focusPretty}</span>
+                  )}
                 </div>
                 <div className="text-sm">
                   <span className="font-semibold">Podgląd po zastosowaniu:</span>{' '}
-                  <span className="font-mono">{m.previewExpr}</span>
+                  {m.after_span && m.after_str ? (
+                    <span className="font-mono whitespace-pre">
+                      {highlightBySpan(
+                        m.after_str,
+                        m.after_span,
+                        "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                      )}
+                    </span>
+                  ) : (
+                    <span className="font-mono">{m.previewExpr}</span>
+                  )}
                 </div>
               </div>
               <div className="flex gap-2">
                 <button
                   className="px-3 py-1 rounded bg-gray-100 text-blue-700 border border-blue-200"
                   onMouseEnter={() => {
-                    // Use span-based highlighting if available, otherwise fallback to text
-                    if (m.before_span && m.before_str) {
-                      onHighlight({
-                        text: m.before_str,
-                        span: m.before_span,
-                        type: 'before'
-                      });
-                    } else {
-                      onHighlight(m.focusPretty);
-                    }
+                    // For ASTDisplay compatibility, pass text (it will find matching subtree)
+                    // The visual highlighting in TutorialPanel is already done above with highlightBySpan
+                    onHighlight(m.focusPretty || m.before_str || '');
                   }}
                   onMouseLeave={() => onHighlight(null)}
                 >

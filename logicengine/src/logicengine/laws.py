@@ -123,18 +123,25 @@ def _pretty_with_tokens_internal(node: Any, path: Optional[List[Tuple[str, Optio
         symbol = "∧" if op == "AND" else "∨"
         parts = []
         pos = current_pos + 1  # Start after opening '('
+        # Use same format as canonical_str: no spaces around symbol
+        separator = symbol  # No spaces, just the symbol
+        
         for i, arg in enumerate(args):
             if i > 0:
-                # Add separator: " symbol "
-                separator = f" {symbol} "
+                # Add separator before argument (except first)
                 pos += len(separator)
             arg_text, pos = _pretty_with_tokens_internal(arg, path + [("args", i)], tokens, pos)
             parts.append(arg_text)
         
-        # Close with ')'
-        inner = f" {symbol} ".join(parts)
+        # Build result using same separator format as canonical_str (no spaces)
+        inner = separator.join(parts)
         result = f"({inner})"
         result_end = pos + 1  # +1 for closing ')'
+        
+        # Verify result length matches our position calculation
+        if len(result) != (result_end - current_pos):
+            # Recalculate if there's a mismatch (shouldn't happen, but safety check)
+            result_end = current_pos + len(result)
         
         # Record token for this AND/OR node
         tokens.append({
