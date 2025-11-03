@@ -261,28 +261,18 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             new_laws_hash = truth_table_hash(vars_list, steps[-1].after_str)
                             qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
                             if new_laws_hash == qm_hash:
-                                # Check if it's minimal by comparing PI sets
-                                try:
-                                    current_qm_result = simplify_qm(steps[-1].after_str)
-                                    current_pi_set = set(current_qm_result.get("summary", {}).get("selected_pi", []))
-                                    target_pi_set = set(selected_pi)
-                                    
-                                    # If current DNF contains all target PIs (or equivalent set), it's acceptable
-                                    if current_pi_set == target_pi_set or current_pi_set.issuperset(target_pi_set):
-                                        laws_completed = True
-                                        print(f"Laws result is minimal DNF after removing oscillation (PI sets match)")
-                                except Exception:
-                                    # Fall back to literal count comparison if QM check fails
-                                    last_measure = measure(last_ast_check)
-                                    qm_expr_str = qm_result.get("result", "")
-                                    qm_ast = generate_ast(qm_expr_str)
-                                    qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
-                                    qm_measure = measure(qm_ast)
-                                    
-                                    # If same or fewer literals, it's acceptable
-                                    if last_measure[0] <= qm_measure[0]:
-                                        laws_completed = True
-                                        print(f"Laws result is minimal DNF after removing oscillation (literals: {last_measure[0]})")
+                                # Check literal count - this is the primary minimality criterion
+                                last_measure = measure(last_ast_check)
+                                qm_expr_str = qm_result.get("result", "")
+                                qm_ast = generate_ast(qm_expr_str)
+                                qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+                                qm_measure = measure(qm_ast)
+                                
+                                # Only accept if same or fewer literals
+                                if last_measure[0] <= qm_measure[0]:
+                                    laws_completed = True
+                                    print(f"Laws result is minimal DNF after removing oscillation (literals: {last_measure[0]})")
+                                # Don't accept if more literals, even if PI sets match
                 except Exception:
                     laws_completed = False
             
