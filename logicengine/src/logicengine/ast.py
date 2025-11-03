@@ -750,24 +750,10 @@ def pretty_with_spans(node: Any) -> Tuple[str, Dict[str, Tuple[int, int]]]:
                     yield from iter_nodes(ch, path + [("child", None)])
     
     # Generate text using canonical_str (already NFC normalized)
+    # IMPORTANT: Do NOT remove outer parentheses - we need exact match with canonical_str
+    # that is used in before_canon/after_canon
     text = canonical_str(node)
     text = unicodedata.normalize('NFC', text)
-    
-    # Remove outer parentheses if needed (match pretty() behavior)
-    if text.startswith('(') and text.endswith(')'):
-        inner = text[1:-1]
-        balance = 0
-        can_remove = True
-        for char in inner:
-            if char == '(':
-                balance += 1
-            elif char == ')':
-                balance -= 1
-                if balance < 0:
-                    can_remove = False
-                    break
-        if can_remove and balance == 0:
-            text = inner
     
     # Build spans_map by iterating over nodes and finding their positions
     spans_map: Dict[str, Tuple[int, int]] = {}

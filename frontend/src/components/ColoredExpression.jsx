@@ -248,12 +248,16 @@ export default function ColoredExpression({
     // Priority 1: explicit highlightRange
     if (highlightRange) return highlightRange;
     
-    // Priority 2: highlightSpan from backend (canonical indices)
-    // Use mapped span that accounts for cleanExpression transformations
+    // Priority 2: highlightSpan from backend (relative to expression/before_str/after_str)
+    // The span is already relative to expression (after pretty() but before cleanExpression)
+    // We just need to map it through cleanExpression if it transforms the string
     if (mappedHighlightSpan && mappedHighlightSpan.start !== undefined && mappedHighlightSpan.end !== undefined) {
+      // Ensure start/end are within bounds
+      const start = Math.max(0, Math.min(mappedHighlightSpan.start, target.length));
+      const end = Math.max(start, Math.min(mappedHighlightSpan.end, target.length));
       return {
-        start: mappedHighlightSpan.start,
-        end: mappedHighlightSpan.end,
+        start,
+        end,
         class: highlightClass
       };
     }

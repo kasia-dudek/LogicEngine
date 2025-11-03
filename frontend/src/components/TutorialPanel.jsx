@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import ColoredExpression from './ColoredExpression';
 
 /** Małe helpery UI */
 function MetricBadge({ label, before, after }) {
@@ -207,7 +208,18 @@ function TutorialPanel({
               <div className="flex gap-2">
                 <button
                   className="px-3 py-1 rounded bg-gray-100 text-blue-700 border border-blue-200"
-                  onMouseEnter={() => onHighlight(m.focusPretty)}
+                  onMouseEnter={() => {
+                    // Use span-based highlighting if available, otherwise fallback to text
+                    if (m.before_span && m.before_str) {
+                      onHighlight({
+                        text: m.before_str,
+                        span: m.before_span,
+                        type: 'before'
+                      });
+                    } else {
+                      onHighlight(m.focusPretty);
+                    }
+                  }}
                   onMouseLeave={() => onHighlight(null)}
                 >
                   Podświetl

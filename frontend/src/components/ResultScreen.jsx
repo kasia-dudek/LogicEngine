@@ -1,5 +1,5 @@
 // ResultScreen.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QMSteps from './QMSteps';
 import KMapDisplay from './KMapDisplay';
 import ASTDisplay from './ASTDisplay';
@@ -29,6 +29,9 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const [showTruthTableLegend, setShowTruthTableLegend] = useState(false);
   const [showDnfLegend, setShowDnfLegend] = useState(false);
   const [showCnfLegend, setShowCnfLegend] = useState(false);
+  const tableScrollRef = useRef(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
 
   const resetHighlighting = () => {
     setHighlightExpr(null);
@@ -38,6 +41,78 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   useEffect(() => {
     resetHighlighting();
   }, [input]);
+
+  // Auto-scroll table to the right when step changes (to show new column)
+  // Scroll first, then check position to update arrow buttons
+  useEffect(() => {
+    if (tableScrollRef.current && tab === 'truth') {
+      const container = tableScrollRef.current;
+      let checkTimeout;
+      
+      // First, scroll to maximum right to show the newest column
+      const scrollTimeout = setTimeout(() => {
+        container.scrollLeft = container.scrollWidth;
+        
+        // After scrolling, wait a bit and then check position to update arrow buttons
+        checkTimeout = setTimeout(() => {
+          if (tableScrollRef.current) {
+            const container = tableScrollRef.current;
+            setCanScrollLeft(container.scrollLeft > 0);
+            setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 1);
+          }
+        }, 50);
+      }, 100);
+      
+      return () => {
+        clearTimeout(scrollTimeout);
+        if (checkTimeout) clearTimeout(checkTimeout);
+      };
+    }
+  }, [slideStep, tab]);
+
+  // Check scroll position and update arrow buttons (for manual scrolling)
+  useEffect(() => {
+    const checkScrollPosition = () => {
+      if (tableScrollRef.current && tab === 'truth') {
+        const container = tableScrollRef.current;
+        setCanScrollLeft(container.scrollLeft > 0);
+        setCanScrollRight(container.scrollLeft < container.scrollWidth - container.clientWidth - 1);
+      }
+    };
+
+    const container = tableScrollRef.current;
+    if (container) {
+      container.addEventListener('scroll', checkScrollPosition);
+      // Check initially with delay to let auto-scroll finish first
+      const timeoutId = setTimeout(checkScrollPosition, 200);
+      const timeoutId2 = setTimeout(checkScrollPosition, 400);
+      
+      window.addEventListener('resize', checkScrollPosition);
+
+      return () => {
+        clearTimeout(timeoutId);
+        clearTimeout(timeoutId2);
+        container.removeEventListener('scroll', checkScrollPosition);
+        window.removeEventListener('resize', checkScrollPosition);
+      };
+    }
+  }, [slideStep, data, tab]);
+
+  const scrollTableLeft = () => {
+    if (tableScrollRef.current) {
+      const container = tableScrollRef.current;
+      // Scroll by larger amount to reveal more columns
+      container.scrollBy({ left: -300, behavior: 'smooth' });
+    }
+  };
+
+  const scrollTableRight = () => {
+    if (tableScrollRef.current) {
+      const container = tableScrollRef.current;
+      // Scroll by larger amount to reveal more columns
+      container.scrollBy({ left: 300, behavior: 'smooth' });
+    }
+  };
 
   /* Fetch full analysis from backend API */
   useEffect(() => {
@@ -537,8 +612,38 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                 </button>
                               </div>
 
-                              <div className="overflow-x-auto scrollable-steps-table">
-                                <table className="min-w-full border border-blue-200 rounded-xl text-sm">
+                              {/* Table with scroll arrows */}
+                              <div className="relative">
+                                {/* Left arrow */}
+                                {canScrollLeft && (
+                                  <button
+                                    onClick={scrollTableLeft}
+                                    className="absolute left-0 top-1/2 -translate-y-1/2 z-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+                                    aria-label="Przewiń w lewo"
+                                    title="Przewiń w lewo o jedną kolumnę"
+                                  >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                                    </svg>
+                                  </button>
+                                )}
+                                
+                                {/* Right arrow */}
+                                {canScrollRight && (
+                                  <button
+                                    onClick={scrollTableRight}
+                                    className="absolute right-0 top-1/2 -translate-y-1/2 z-10 bg-blue-600 hover:bg-blue-700 text-white rounded-full w-10 h-10 flex items-center justify-center shadow-lg transition-all hover:scale-110"
+                                    aria-label="Przewiń w prawo"
+                                    title="Przewiń w prawo o jedną kolumnę"
+                                  >
+                                    <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                                    </svg>
+                                  </button>
+                                )}
+
+                                <div ref={tableScrollRef} className="scrollable-steps-table">
+                                  <table className="min-w-full border border-blue-200 rounded-xl text-sm">
                                   <thead>
                                     <tr>
                                       {shownColNames.map((name, idx) => {
@@ -580,9 +685,10 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                     ))}
                                   </tbody>
                                 </table>
+                                </div>
                               </div>
                               <div className="mt-2 text-xs text-gray-500">
-                                Podświetlona kolumna to aktualnie obliczany krok. Kolumny niebieskie to argumenty tego kroku.
+                                Podświetlona kolumna to aktualnie obliczany krok. Kolumny niebieskie to argumenty tego kroku. Użyj strzałek po bokach tabeli, aby przewijać kolumny.
                               </div>
                             </div>
                           );

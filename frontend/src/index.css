@@ -144,26 +144,58 @@ code {
 
 /* Custom scrollbar for steps table - always visible */
 .scrollable-steps-table {
-  scrollbar-width: thin;
-  scrollbar-color: #93C5FD #E5E7EB;
+  overflow-x: scroll !important; /* Force scrollbar to always be visible */
+  scrollbar-width: thin !important;
+  scrollbar-color: #93C5FD #E5E7EB !important;
+  /* Force scrollbar space reservation */
+  scrollbar-gutter: stable;
+  /* Prevent hiding scrollbar on macOS */
+  -webkit-overflow-scrolling: touch;
+  /* Ensure scrollbar area is always present */
+  padding-bottom: 2px;
 }
 
+/* WebKit browsers (Chrome, Safari, Edge) */
 .scrollable-steps-table::-webkit-scrollbar {
-  height: 16px;
+  height: 16px !important;
+  display: block !important;
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  background-color: #E5E7EB !important;
+}
+
+.scrollable-steps-table::-webkit-scrollbar:horizontal {
+  height: 16px !important;
 }
 
 .scrollable-steps-table::-webkit-scrollbar-track {
-  background: #E5E7EB;
-  border-radius: 8px;
-  border: 2px solid #D1D5DB;
+  background: #E5E7EB !important;
+  border-radius: 8px !important;
+  border: 2px solid #D1D5DB !important;
+  -webkit-box-shadow: inset 0 0 6px rgba(0,0,0,0.1) !important;
+  box-shadow: inset 0 0 6px rgba(0,0,0,0.1) !important;
+  margin: 2px 0 !important;
 }
 
 .scrollable-steps-table::-webkit-scrollbar-thumb {
-  background: #93C5FD;
-  border-radius: 8px;
-  border: 2px solid #60A5FA;
+  background: #93C5FD !important;
+  border-radius: 8px !important;
+  border: 2px solid #60A5FA !important;
+  min-width: 20px !important;
+  -webkit-box-shadow: none !important;
+  box-shadow: none !important;
 }
 
 .scrollable-steps-table::-webkit-scrollbar-thumb:hover {
-  background: #60A5FA;
+  background: #60A5FA !important;
+}
+
+.scrollable-steps-table::-webkit-scrollbar-thumb:active {
+  background: #3B82F6 !important;
+}
+
+/* Firefox */
+.scrollable-steps-table {
+  scrollbar-width: thin !important;
+  scrollbar-color: #93C5FD #E5E7EB !important;
 }

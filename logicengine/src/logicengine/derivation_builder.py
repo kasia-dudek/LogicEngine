@@ -5,10 +5,10 @@ from __future__ import annotations
 
 from typing import Any, List, Tuple, Dict, Optional
 from .steps import Step, RuleName
-from .ast import generate_ast, canonical_str, normalize_bool_ast, canonical_str_minimal
+from .ast import generate_ast, canonical_str, normalize_bool_ast, canonical_str_minimal, pretty_with_spans
 from .utils import truth_table_hash
 from .laws import VAR, NOT, AND, OR, CONST, to_lit, lit_to_node, term_from_lits, canonical_lits, iter_nodes, set_by_path
-from .laws import canon, pretty, find_subtree_position
+from .laws import canon, pretty, pretty_with_tokens, find_subtree_span_by_path
 
 
 def is_dnf(ast: Any) -> bool:
@@ -49,6 +49,95 @@ def _is_literal(ast: Any) -> bool:
         child = ast.get("child")
         return isinstance(child, dict) and child.get("op") == "VAR"
     return False
+
+
+def _find_spans_for_subtree(subtree: Any, full_tree: Any, path: Optional[List] = None) -> Tuple[List[Tuple[int, int]], str]:
+    """
+    Find code-point spans for a subtree within full_tree using pretty_with_spans.
+    
+    Args:
+        subtree: The AST node to find
+        full_tree: The full AST tree
+        path: Optional path to the subtree (for faster lookup)
+    
+    Returns:
+        Tuple of (spans, text) where:
+        - spans: List of (start_cp, end_cp) tuples in code-point indices
+        - text: The generated text from pretty_with_spans (for consistency)
+    """
+    if subtree is None or full_tree is None:
+        return ([], "")
+    
+    # Normalize both to ensure consistency
+    subtree = normalize_bool_ast(subtree, expand_imp_iff=True)
+    full_tree = normalize_bool_ast(full_tree, expand_imp_iff=True)
+    
+    # Get spans map from pretty_with_spans
+    text, spans_map = pretty_with_spans(full_tree)
+    
+    # Find the node_id for subtree
+    # If path provided, use it; otherwise search spans_map
+    spans = []
+    if path is not None:
+        node_id = str(path)
+        if node_id in spans_map:
+            spans = [spans_map[node_id]]
+    else:
+        # Search all nodes in full_tree to find matching subtree
+        for test_path, test_node in iter_nodes(full_tree):
+            # Normalize for comparison
+            test_node = normalize_bool_ast(test_node, expand_imp_iff=True)
+            if canon(test_node) == canon(subtree):
+                test_node_id = str(test_path) if test_path else 'root'
+                if test_node_id in spans_map:
+                    spans = [spans_map[test_node_id]]
+                    break
+    
+    if spans:
+        return (spans, text)
+    
+    # Fallback: try canonical string matching
+    subtext, _ = pretty_with_spans(subtree)
+    
+    # Try exact match
+    pos = text.find(subtext)
+    if pos != -1:
+        return ([(pos, pos + len(subtext))], text)
+    
+    # Try without outer parentheses
+    if subtext.startswith('(') and subtext.endswith(')'):
+        subtext_no_parens = subtext[1:-1]
+        pos = text.find(subtext_no_parens)
+        if pos != -1:
+            return ([(pos, pos + len(subtext_no_parens))], text)
+    
+    return ([], text)
+
+
+def _extract_focus_text(text: str, spans_cp: List[Tuple[int, int]]) -> List[str]:
+    """
+    Extract text fragments from text using code-point spans.
+    
+    Args:
+        text: The full text (already NFC normalized)
+        spans_cp: List of (start_cp, end_cp) in code-point indices
+    
+    Returns:
+        List of extracted text fragments
+    """
+    if not spans_cp or not text:
+        return []
+    
+    # Convert to list of code-points
+    cps = list(text)
+    
+    results = []
+    for start, end in spans_cp:
+        if 0 <= start < end <= len(cps):
+            fragment = ''.join(cps[start:end])
+            results.append(fragment)
+    
+    return results
 
 
 def _term_contains(term: Any, required_lits: List[Tuple[str, bool]]) -> bool:
@@ -282,11 +371,14 @@ def build_merge_steps(
             continue
         
         # STEP 1: Factoring: XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)
-        before_str_1 = pretty(working_ast)
+        # Generate pretty strings with tokens for accurate span calculation
+        before_str_1, _ = pretty_with_tokens(working_ast)
         before_canon_1 = canonical_str(working_ast)
+        
         after_ast_1 = _apply_factoring(working_ast, merge_path, left_idx, right_idx, 
                                         result_node, diff_var)
-        after_str_1 = pretty(after_ast_1)
+        after_ast_1 = normalize_bool_ast(after_ast_1, expand_imp_iff=True)
+        after_str_1, _ = pretty_with_tokens(after_ast_1)
         after_canon_1 = canonical_str(after_ast_1)
         
         # Compute subexpression for highlighting
@@ -319,39 +411,81 @@ def build_merge_steps(
         before_subexpr_canon = canonical_str(before_subexpr) if before_subexpr else None
         after_subexpr_canon = canonical_str(after_subexpr) if after_subexpr else None
         
-        before_highlight_span = find_subtree_position(before_subexpr, working_ast) if before_subexpr else None
-        after_highlight_span = find_subtree_position(after_subexpr, after_ast_1) if after_subexpr else None
+        # Calculate spans using path-based lookup
+        # For before: the OR node is at merge_path, so use that path directly
+        before_highlight_span = find_subtree_span_by_path(merge_path, working_ast) if before_subexpr else None
+        
+        # For after: need to find the path to factored_node in after_ast_1
+        # The factored node should be at merge_path in after_ast_1 (same location as OR was)
+        after_highlight_span = find_subtree_span_by_path(merge_path, after_ast_1) if after_subexpr else None
+        
+        # Compute code-point spans using pretty_with_spans
+        before_spans_cp = []
+        after_spans_cp = []
+        before_text = None
+        after_text = None
+        
+        # For Rozdzielność: Before has TWO separate spans (left_arg and right_arg)
+        if left_arg is not None:
+            spans_left, text_left = _find_spans_for_subtree(left_arg, working_ast)
+            before_spans_cp.extend(spans_left)
+            before_text = text_left
+        if right_arg is not None:
+            spans_right, text_right = _find_spans_for_subtree(right_arg, working_ast)
+            before_spans_cp.extend(spans_right)
+            if not before_text:
+                before_text = text_right
+        
+        # After has ONE span (the factored result)
+        if after_subexpr is not None:
+            spans_after, text_after = _find_spans_for_subtree(after_subexpr, after_ast_1)
+            after_spans_cp.extend(spans_after)
+            after_text = text_after
+        
+        # Extract focus texts using the text from pretty_with_spans, not canonical_str
+        # This ensures spans indices match the text
+        before_focus_texts = _extract_focus_text(before_text, before_spans_cp) if before_text else []
+        after_focus_texts = _extract_focus_text(after_text, after_spans_cp) if after_text else []
         
         # Verify TT equivalence
         is_equal_1 = (truth_table_hash(vars, before_str_1) == truth_table_hash(vars, after_str_1))
         
-        step1 = Step(
-            before_str=before_str_1,
-            after_str=after_str_1,
-            rule="Rozdzielność (faktoryzacja)",
-            category="user",
-            schema="XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)",
-            location=None,
-            details={"step_num": 1, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_1},
-            before_canon=before_canon_1,
-            after_canon=after_canon_1,
-            before_subexpr=before_subexpr_str,
-            after_subexpr=after_subexpr_str,
-            before_subexpr_canon=before_subexpr_canon,
-            after_subexpr_canon=after_subexpr_canon,
-            before_highlight_span=before_highlight_span,
-            after_highlight_span=after_highlight_span
-        )
+        # Create step with spans relative to before_str/after_str
+        step1_dict = {
+            "before_str": before_str_1,
+            "after_str": after_str_1,
+            "rule": "Rozdzielność (faktoryzacja)",
+            "category": "user",
+            "schema": "XY ∨ X¬Y ⇒ X(Y ∨ ¬Y)",
+            "location": None,
+            "details": {"step_num": 1, "diff_var": diff_var},
+            "proof": {"method": "tt-hash", "equal": is_equal_1},
+            "before_canon": before_canon_1,
+            "after_canon": after_canon_1,
+            "before_subexpr": before_subexpr_str,
+            "after_subexpr": after_subexpr_str,
+            "before_subexpr_canon": before_subexpr_canon,
+            "after_subexpr_canon": after_subexpr_canon,
+            "before_span": before_highlight_span,  # Span relative to before_str
+            "after_span": after_highlight_span,    # Span relative to after_str
+            "before_highlight_span": before_highlight_span,  # Keep for backward compatibility
+            "after_highlight_span": after_highlight_span,     # Keep for backward compatibility
+            "before_highlight_spans_cp": before_spans_cp if before_spans_cp else None,
+            "after_highlight_spans_cp": after_spans_cp if after_spans_cp else None,
+            "before_focus_texts": before_focus_texts if before_focus_texts else None,
+            "after_focus_texts": after_focus_texts if after_focus_texts else None
+        }
+        step1 = Step(**step1_dict)
         steps.append(step1)
-        working_ast = after_ast_1
+        working_ast = normalize_bool_ast(after_ast_1, expand_imp_iff=True)
         
         # STEP 2: Tautology: Y ∨ ¬Y ⇒ 1
-        before_str_2 = pretty(working_ast)
+        before_str_2, _ = pretty_with_tokens(working_ast)
         before_canon_2 = canonical_str(working_ast)
+        
         after_ast_2 = _apply_tautology(working_ast, diff_var)
         after_ast_2 = normalize_bool_ast(after_ast_2, expand_imp_iff=True)
-        after_str_2 = pretty(after_ast_2)
+        after_str_2, _ = pretty_with_tokens(after_ast_2)
         after_canon_2 = canonical_str(after_ast_2)
         
         # Compute subexpression for highlighting
@@ -367,35 +501,54 @@ def build_merge_steps(
         before_subexpr_canon_2 = canonical_str(before_subexpr_2)
         after_subexpr_canon_2 = canonical_str(after_subexpr_2)
         
-        before_highlight_span_2 = find_subtree_position(before_subexpr_2, working_ast)
-        after_highlight_span_2 = find_subtree_position(after_subexpr_2, after_ast_2)
+        # Find path to diff_or in working_ast (it's inside the factored node from step 1)
+        # The factored node is at merge_path, and diff_or is its second child (args[1])
+        # So path is merge_path + [("args", 1)]
+        diff_or_path = merge_path + [("args", 1)]
+        before_highlight_span_2 = find_subtree_span_by_path(diff_or_path, working_ast)
+        
+        # For after: CONST(1) replaces diff_or at the same path
+        after_highlight_span_2 = find_subtree_span_by_path(diff_or_path, after_ast_2)
+        
+        # Compute code-point spans for Tautology (single span before and after)
+        before_spans_cp_2, before_text_2 = _find_spans_for_subtree(before_subexpr_2, working_ast) if before_subexpr_2 else ([], "")
+        after_spans_cp_2, after_text_2 = _find_spans_for_subtree(after_subexpr_2, after_ast_2) if after_subexpr_2 else ([], "")
+        before_focus_texts_2 = _extract_focus_text(before_text_2, before_spans_cp_2) if before_text_2 else []
+        after_focus_texts_2 = _extract_focus_text(after_text_2, after_spans_cp_2) if after_text_2 else []
         
         # Verify TT equivalence
         is_equal_2 = (truth_table_hash(vars, before_str_2) == truth_table_hash(vars, after_str_2))
         
-        step2 = Step(
-            before_str=before_str_2,
-            after_str=after_str_2,
-            rule="Tautologia",
-            category="user",
-            schema="Y ∨ ¬Y ⇒ 1",
-            location=None,
-            details={"step_num": 2, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_2},
-            before_canon=before_canon_2,
-            after_canon=after_canon_2,
-            before_subexpr=before_subexpr_str_2,
-            after_subexpr=after_subexpr_str_2,
-            before_subexpr_canon=before_subexpr_canon_2,
-            after_subexpr_canon=after_subexpr_canon_2,
-            before_highlight_span=before_highlight_span_2,
-            after_highlight_span=after_highlight_span_2
-        )
+        step2_dict = {
+            "before_str": before_str_2,
+            "after_str": after_str_2,
+            "rule": "Tautologia",
+            "category": "user",
+            "schema": "Y ∨ ¬Y ⇒ 1",
+            "location": None,
+            "details": {"step_num": 2, "diff_var": diff_var},
+            "proof": {"method": "tt-hash", "equal": is_equal_2},
+            "before_canon": before_canon_2,
+            "after_canon": after_canon_2,
+            "before_subexpr": before_subexpr_str_2,
+            "after_subexpr": after_subexpr_str_2,
+            "before_subexpr_canon": before_subexpr_canon_2,
+            "after_subexpr_canon": after_subexpr_canon_2,
+            "before_span": before_highlight_span_2,
+            "after_span": after_highlight_span_2,
+            "before_highlight_span": before_highlight_span_2,
+            "after_highlight_span": after_highlight_span_2,
+            "before_highlight_spans_cp": before_spans_cp_2 if before_spans_cp_2 else None,
+            "after_highlight_spans_cp": after_spans_cp_2 if after_spans_cp_2 else None,
+            "before_focus_texts": before_focus_texts_2 if before_focus_texts_2 else None,
+            "after_focus_texts": after_focus_texts_2 if after_focus_texts_2 else None
+        }
+        step2 = Step(**step2_dict)
         steps.append(step2)
         working_ast = after_ast_2
         
         # STEP 3: Neutral element: X ∧ 1 ⇒ X
-        before_str_3 = pretty(working_ast)
+        before_str_3, _ = pretty_with_tokens(working_ast)
         before_canon_3 = canonical_str(working_ast)
         
         # Find the AND node with CONST(1) before applying the transformation
@@ -423,36 +576,63 @@ def build_merge_steps(
         before_subexpr_canon_3 = canonical_str(before_subexpr_3) if before_subexpr_3 else None
         after_subexpr_canon_3 = canonical_str(after_subexpr_3) if after_subexpr_3 else None
         
-        before_highlight_span_3 = find_subtree_position(before_subexpr_3, working_ast) if before_subexpr_3 else None
+        # Use path-based span lookup
+        before_highlight_span_3 = find_subtree_span_by_path(neutral_path, working_ast) if (before_subexpr_3 and neutral_path) else None
         
         after_ast_3 = _apply_neutral(working_ast)
         after_ast_3 = normalize_bool_ast(after_ast_3, expand_imp_iff=True)
-        after_str_3 = pretty(after_ast_3)
+        after_str_3, _ = pretty_with_tokens(after_ast_3)
         after_canon_3 = canonical_str(after_ast_3)
         
-        after_highlight_span_3 = find_subtree_position(after_subexpr_3, after_ast_3) if after_subexpr_3 else None
+        # For after: if after_subexpr_3 is a single element, it might be at the same path or a parent path
+        # Try the same path first, then search if needed
+        if after_subexpr_3 and neutral_path:
+            after_highlight_span_3 = find_subtree_span_by_path(neutral_path, after_ast_3)
+            # If not found, the element might have been lifted to parent - search for it
+            if not after_highlight_span_3:
+                # Search for the node in after_ast_3
+                after_subexpr_canon = canonical_str(after_subexpr_3)
+                for path, node in iter_nodes(after_ast_3):
+                    if canonical_str(node) == after_subexpr_canon:
+                        after_highlight_span_3 = find_subtree_span_by_path(path, after_ast_3)
+                        break
+        else:
+            after_highlight_span_3 = None
+        
+        # Compute code-point spans for Neutral element (single span before and after)
+        before_spans_cp_3, before_text_3 = _find_spans_for_subtree(before_subexpr_3, working_ast) if before_subexpr_3 else ([], "")
+        after_spans_cp_3, after_text_3 = _find_spans_for_subtree(after_subexpr_3, after_ast_3) if after_subexpr_3 else ([], "")
+        before_focus_texts_3 = _extract_focus_text(before_text_3, before_spans_cp_3) if before_text_3 else []
+        after_focus_texts_3 = _extract_focus_text(after_text_3, after_spans_cp_3) if after_text_3 else []
         
         # Verify TT equivalence
         is_equal_3 = (truth_table_hash(vars, before_str_3) == truth_table_hash(vars, after_str_3))
         
-        step3 = Step(
-            before_str=before_str_3,
-            after_str=after_str_3,
-            rule="Element neutralny",
-            category="user",
-            schema="X ∧ 1 ⇒ X",
-            location=None,
-            details={"step_num": 3, "diff_var": diff_var},
-            proof={"method": "tt-hash", "equal": is_equal_3},
-            before_canon=before_canon_3,
-            after_canon=after_canon_3,
-            before_subexpr=before_subexpr_str_3,
-            after_subexpr=after_subexpr_str_3,
-            before_subexpr_canon=before_subexpr_canon_3,
-            after_subexpr_canon=after_subexpr_canon_3,
-            before_highlight_span=before_highlight_span_3,
-            after_highlight_span=after_highlight_span_3
-        )
+        step3_dict = {
+            "before_str": before_str_3,
+            "after_str": after_str_3,
+            "rule": "Element neutralny",
+            "category": "user",
+            "schema": "X ∧ 1 ⇒ X",
+            "location": None,
+            "details": {"step_num": 3, "diff_var": diff_var},
+            "proof": {"method": "tt-hash", "equal": is_equal_3},
+            "before_canon": before_canon_3,
+            "after_canon": after_canon_3,
+            "before_subexpr": before_subexpr_str_3,
+            "after_subexpr": after_subexpr_str_3,
+            "before_subexpr_canon": before_subexpr_canon_3,
+            "after_subexpr_canon": after_subexpr_canon_3,
+            "before_span": before_highlight_span_3,
+            "after_span": after_highlight_span_3,
+            "before_highlight_span": before_highlight_span_3,
+            "after_highlight_span": after_highlight_span_3,
+            "before_highlight_spans_cp": before_spans_cp_3 if before_spans_cp_3 else None,
+            "after_highlight_spans_cp": after_spans_cp_3 if after_spans_cp_3 else None,
+            "before_focus_texts": before_focus_texts_3 if before_focus_texts_3 else None,
+            "after_focus_texts": after_focus_texts_3 if after_focus_texts_3 else None
+        }
+        step3 = Step(**step3_dict)
         steps.append(step3)
         working_ast = after_ast_3
     
@@ -512,13 +692,20 @@ def build_absorb_steps(
             
             if len(unique_args) < len(args):
                 # Duplicates found - create removal step
-                before_str = pretty(working_ast)
+                before_str, _ = pretty_with_tokens(working_ast)
                 before_canon_val = canonical_str(working_ast)
+                
+                # Calculate span for the OR node being modified
+                before_span = find_subtree_span_by_path(path, working_ast) if path else None
+                
                 new_or_node = {"op": "OR", "args": unique_args}
                 working_ast = set_by_path(working_ast, path, new_or_node)
                 working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                after_str = pretty(working_ast)
+                after_str, _ = pretty_with_tokens(working_ast)
                 after_canon_val = canonical_str(working_ast)
+                
+                # After span - same path (OR node is still there, just with fewer args)
+                after_span = find_subtree_span_by_path(path, working_ast) if path else None
                 
                 # Verify TT equivalence
                 is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -532,7 +719,9 @@ def build_absorb_steps(
                     location=None,
                     proof={"method": "tt-hash", "equal": is_equal},
                     before_canon=before_canon_val,
-                    after_canon=after_canon_val
+                    after_canon=after_canon_val,
+                    before_span=before_span,
+                    after_span=after_span
                 )
                 steps.append(step)
                 break  # Restart search after each change
@@ -564,14 +753,21 @@ def build_absorb_steps(
                                 continue  # Already handled by idempotence
                             
                             # Remove arg_j
-                            before_str = pretty(working_ast)
+                            before_str, _ = pretty_with_tokens(working_ast)
                             before_canon_val = canonical_str(working_ast)
+                            
+                            # Calculate span for the OR node being modified
+                            before_span = find_subtree_span_by_path(path, working_ast) if path else None
+                            
                             new_args = [args[k] for k in range(len(args)) if k != j]
                             new_or_node = {"op": "OR", "args": new_args}
                             working_ast = set_by_path(working_ast, path, new_or_node)
                             working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                            after_str = pretty(working_ast)
+                            after_str, _ = pretty_with_tokens(working_ast)
                             after_canon_val = canonical_str(working_ast)
+                            
+                            # After span - same path
+                            after_span = find_subtree_span_by_path(path, working_ast) if path else None
                             
                             # Verify TT equivalence
                             is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -585,7 +781,9 @@ def build_absorb_steps(
                                 location=None,
                                 proof={"method": "tt-hash", "equal": is_equal},
                                 before_canon=before_canon_val,
-                                after_canon=after_canon_val
+                                after_canon=after_canon_val,
+                                before_span=before_span,
+                                after_span=after_span
                             )
                             steps.append(step)
                             changed = True
@@ -765,7 +963,8 @@ def ensure_pair_present(
         # Create new OR node with extended args
         new_or_node = {"op": "OR", "args": new_args}
         
-        before_str_1 = pretty(working_ast)
+        # Generate pretty strings with tokens
+        before_str_1, _ = pretty_with_tokens(working_ast)
         before_canon_1 = canonical_str(working_ast)
         
         # Compute subexpression for highlighting BEFORE transformation
@@ -777,38 +976,62 @@ def ensure_pair_present(
         before_subexpr_canon_1 = canonical_str(before_subexpr_1)
         after_subexpr_canon_1 = canonical_str(after_subexpr_1)
         
-        # Find position in BEFORE state
-        before_highlight_span_1 = find_subtree_position(before_subexpr_1, working_ast)
+        # Find position in BEFORE state using path-based lookup
+        # common_node might not be directly in working_ast, so we need to find its path
+        # Search for it first
+        common_node_path = None
+        common_node_canon = canonical_str(common_node)
+        for path, node in iter_nodes(working_ast):
+            if canonical_str(node) == common_node_canon:
+                common_node_path = path
+                break
+        
+        before_highlight_span_1 = find_subtree_span_by_path(common_node_path, working_ast) if common_node_path else None
         
         # Apply transformation
         working_ast = set_by_path(working_ast, injection_path, new_or_node)
         working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-        after_str_1 = pretty(working_ast)
+        after_str_1, _ = pretty_with_tokens(working_ast)
         after_canon_1 = canonical_str(working_ast)
         
-        # Find position in AFTER state
-        after_highlight_span_1 = find_subtree_position(after_subexpr_1, working_ast)
+        # Find position in AFTER state - new_term is at the end of injection_path's args
+        # Find the path to the new term in the OR node
+        or_node_after = working_ast
+        for key, idx in injection_path:
+            if key == "args":
+                or_node_after = or_node_after["args"][idx]
+        
+        # The new term is the last argument in the OR
+        or_args_after = or_node_after.get("args", [])
+        if or_args_after:
+            new_term_path = injection_path + [("args", len(or_args_after) - 1)]
+            after_highlight_span_1 = find_subtree_span_by_path(new_term_path, working_ast)
+        else:
+            after_highlight_span_1 = None
         
         # Verify TT equivalence
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
         after_hash_1 = truth_table_hash(vars_list, after_str_1)
         
-        step1 = Step(
-            before_str=before_str_1,
-            after_str=after_str_1,
-            rule="Odsłonięcie pary (tożsamość)",
-            category="user",
-            location=injection_path,
-            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
-            before_canon=before_canon_1,
-            after_canon=after_canon_1,
-            before_subexpr=before_subexpr_str_1,
-            after_subexpr=after_subexpr_str_1,
-            before_subexpr_canon=before_subexpr_canon_1,
-            after_subexpr_canon=after_subexpr_canon_1,
-            before_highlight_span=before_highlight_span_1,
-            after_highlight_span=after_highlight_span_1
-        )
+        step1_dict = {
+            "before_str": before_str_1,
+            "after_str": after_str_1,
+            "rule": "Odsłonięcie pary (tożsamość)",
+            "category": "user",
+            "location": injection_path,
+            "proof": {"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
+            "before_canon": before_canon_1,
+            "after_canon": after_canon_1,
+            "before_subexpr": before_subexpr_str_1,
+            "after_subexpr": after_subexpr_str_1,
+            "before_subexpr_canon": before_subexpr_canon_1,
+            "after_subexpr_canon": after_subexpr_canon_1,
+            "before_span": before_highlight_span_1,
+            "after_span": after_highlight_span_1,
+            "before_highlight_span": before_highlight_span_1,
+            "after_highlight_span": after_highlight_span_1
+        }
+        step1 = Step(**step1_dict)
         steps.append(step1)
         
         # Now we have common_node ∧ (v∨¬v) in the AST
@@ -848,7 +1071,8 @@ def ensure_pair_present(
         # Apply identity X = X∧(v∨¬v)
         expanded_node = AND([common_node, diff_or])
         
-        before_str_1 = pretty(working_ast)
+        # Generate pretty strings with tokens
+        before_str_1, _ = pretty_with_tokens(working_ast)
         before_canon_1 = canonical_str(working_ast)
         
         # Compute subexpression for highlighting
@@ -860,43 +1084,47 @@ def ensure_pair_present(
         before_subexpr_canon_1 = canonical_str(before_subexpr_1)
         after_subexpr_canon_1 = canonical_str(after_subexpr_1)
         
-        # Find position in BEFORE state
-        before_highlight_span_1 = find_subtree_position(before_subexpr_1, working_ast)
+        # Find position in BEFORE state using path-based lookup
+        before_highlight_span_1 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
         
         # Apply transformation
         working_ast = set_by_path(working_ast, split_path, expanded_node)
-        after_str_1 = pretty(working_ast)
+        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+        after_str_1, _ = pretty_with_tokens(working_ast)
         after_canon_1 = canonical_str(working_ast)
         
-        # Find position in AFTER state
-        after_highlight_span_1 = find_subtree_position(after_subexpr_1, working_ast)
+        # Find position in AFTER state - expanded_node is at split_path
+        after_highlight_span_1 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
         
         # Verify TT equivalence for step 1
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
         after_hash_1 = truth_table_hash(vars_list, after_str_1)
         
-        step1 = Step(
-            before_str=before_str_1,
-            after_str=after_str_1,
-            rule="Odsłonięcie pary (tożsamość)",
-            category="user",
-            location=split_path,
-            proof={"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
-            before_canon=before_canon_1,
-            after_canon=after_canon_1,
-            before_subexpr=before_subexpr_str_1,
-            after_subexpr=after_subexpr_str_1,
-            before_subexpr_canon=before_subexpr_canon_1,
-            after_subexpr_canon=after_subexpr_canon_1,
-            before_highlight_span=before_highlight_span_1,
-            after_highlight_span=after_highlight_span_1
-        )
+        step1_dict = {
+            "before_str": before_str_1,
+            "after_str": after_str_1,
+            "rule": "Odsłonięcie pary (tożsamość)",
+            "category": "user",
+            "location": split_path,
+            "proof": {"method": "tt-hash", "equal": before_hash_1 == after_hash_1},
+            "before_canon": before_canon_1,
+            "after_canon": after_canon_1,
+            "before_subexpr": before_subexpr_str_1,
+            "after_subexpr": after_subexpr_str_1,
+            "before_subexpr_canon": before_subexpr_canon_1,
+            "after_subexpr_canon": after_subexpr_canon_1,
+            "before_span": before_highlight_span_1,
+            "after_span": after_highlight_span_1,
+            "before_highlight_span": before_highlight_span_1,
+            "after_highlight_span": after_highlight_span_1
+        }
+        step1 = Step(**step1_dict)
         steps.append(step1)
     
     # STEP 2: Distribute X∧(Y∨Z) → (X∧Y)∨(X∧Z)
     # The expanded_node is AND([common_node, diff_or])
     # We need to find it and distribute
-    before_str_2 = pretty(working_ast)
+    before_str_2, _ = pretty_with_tokens(working_ast)
     before_canon_2 = canonical_str(working_ast)
     
     # Compute subexpression for highlighting
@@ -917,38 +1145,41 @@ def ensure_pair_present(
     before_subexpr_canon_2 = canonical_str(before_subexpr_2)
     after_subexpr_canon_2 = canonical_str(after_subexpr_2)
     
-    # Find position in BEFORE state
-    before_highlight_span_2 = find_subtree_position(before_subexpr_2, working_ast)
+    # Find position in BEFORE state using path-based lookup
+    before_highlight_span_2 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
     
     # Apply transformation
     working_ast = _distribute_term(working_ast, split_path, common_node, diff_or)
     working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-    after_str_2 = pretty(working_ast)
+    after_str_2, _ = pretty_with_tokens(working_ast)
     after_canon_2 = canonical_str(working_ast)
     
-    # Find position in AFTER state
-    after_highlight_span_2 = find_subtree_position(after_subexpr_2, working_ast)
+    # Find position in AFTER state - distributed_result is at split_path (replaces expanded_node)
+    after_highlight_span_2 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
     
     # Verify TT equivalence for step 2
     before_hash_2 = truth_table_hash(vars_list, before_str_2)
     after_hash_2 = truth_table_hash(vars_list, after_str_2)
     
-    step2 = Step(
-        before_str=before_str_2,
-        after_str=after_str_2,
-        rule="Odsłonięcie pary (Dystrybucja)",
-        category="user",
-        location=split_path,
-        proof={"method": "tt-hash", "equal": before_hash_2 == after_hash_2},
-        before_canon=before_canon_2,
-        after_canon=after_canon_2,
-        before_subexpr=before_subexpr_str_2,
-        after_subexpr=after_subexpr_str_2,
-        before_subexpr_canon=before_subexpr_canon_2,
-        after_subexpr_canon=after_subexpr_canon_2,
-        before_highlight_span=before_highlight_span_2,
-        after_highlight_span=after_highlight_span_2
-    )
+    step2_dict = {
+        "before_str": before_str_2,
+        "after_str": after_str_2,
+        "rule": "Odsłonięcie pary (Dystrybucja)",
+        "category": "user",
+        "location": split_path,
+        "proof": {"method": "tt-hash", "equal": before_hash_2 == after_hash_2},
+        "before_canon": before_canon_2,
+        "after_canon": after_canon_2,
+        "before_subexpr": before_subexpr_str_2,
+        "after_subexpr": after_subexpr_str_2,
+        "before_subexpr_canon": before_subexpr_canon_2,
+        "after_subexpr_canon": after_subexpr_canon_2,
+        "before_span": before_highlight_span_2,
+        "after_span": after_highlight_span_2,
+        "before_highlight_span": before_highlight_span_2,
+        "after_highlight_span": after_highlight_span_2
+    }
+    step2 = Step(**step2_dict)
     steps.append(step2)
     
     # Now we should have the pair present

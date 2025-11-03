@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ColoredExpression from './ColoredExpression';
+import { highlightBySpan } from './highlightBySpan';
 
 export default function SimplifyDNF({ expression, loading }) {
   const [data, setData] = useState(null);
@@ -113,15 +114,27 @@ export default function SimplifyDNF({ expression, loading }) {
                   <div aria-label="Wyrażenie przed krokiem z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Przed:</span>
                     <div className="mt-1">
-                      <ColoredExpression 
-                        expression={step.before_str} 
-                        canonExpression={step.before_canon}
-                        className="text-gray-800"
-                        highlightText={step.before_subexpr_canon || step.before_subexpr}
-                        highlightSpan={step.before_span || step.before_highlight_span}
-                        highlightSpansCp={step.before_highlight_spans_cp}
-                        highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
-                      />
+                      {step.before_span ? (
+                        // Use span-based highlighting (preferred)
+                        <div className="font-mono text-gray-800">
+                          {highlightBySpan(
+                            step.before_str,
+                            step.before_span,
+                            "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                          )}
+                        </div>
+                      ) : (
+                        // Fallback to ColoredExpression with highlightText
+                        <ColoredExpression 
+                          expression={step.before_str} 
+                          canonExpression={step.before_canon}
+                          className="text-gray-800"
+                          highlightText={step.before_subexpr_canon || step.before_subexpr}
+                          highlightSpan={step.before_highlight_span}
+                          highlightSpansCp={step.before_highlight_spans_cp}
+                          highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                        />
+                      )}
                     </div>
                   </div>
                 )}
@@ -178,15 +191,27 @@ export default function SimplifyDNF({ expression, loading }) {
                   <div aria-label="Wyrażenie po kroku z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Po:</span>
                     <div className="mt-1">
-                      <ColoredExpression 
-                        expression={step.after_str} 
-                        canonExpression={step.after_canon}
-                        className="text-gray-800"
-                        highlightText={step.after_subexpr_canon || step.after_subexpr}
-                        highlightSpan={step.after_span || step.after_highlight_span}
-                        highlightSpansCp={step.after_highlight_spans_cp}
-                        highlightClass="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
-                      />
+                      {step.after_span ? (
+                        // Use span-based highlighting (preferred)
+                        <div className="font-mono text-gray-800">
+                          {highlightBySpan(
+                            step.after_str,
+                            step.after_span,
+                            "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                          )}
+                        </div>
+                      ) : (
+                        // Fallback to ColoredExpression with highlightText
+                        <ColoredExpression 
+                          expression={step.after_str} 
+                          canonExpression={step.after_canon}
+                          className="text-gray-800"
+                          highlightText={step.after_subexpr_canon || step.after_subexpr}
+                          highlightSpan={step.after_highlight_span}
+                          highlightSpansCp={step.after_highlight_spans_cp}
+                          highlightClass="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                        />
+                      )}
                     </div>
                   </div>
                 )}
