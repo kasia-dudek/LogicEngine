@@ -222,6 +222,29 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
                     laws_completed = (laws_hash == qm_hash and len(laws_hash) > 0)
                     
+                    # Additional check: if no steps but TT hashes match, verify canonical equality
+                    # This catches cases where laws didn't find any simplifications but TT is equivalent
+                    if laws_completed and not steps:
+                        # Build QM canonical string
+                        from .utils import bin_to_expr
+                        pi_terms = []
+                        for pi_mask in selected_pi:
+                            pi_term = bin_to_expr(pi_mask, vars_list)
+                            pi_terms.append(pi_term)
+                        qm_dnf_str = " ∨ ".join(pi_terms) if pi_terms else "0"
+                        qm_dnf_ast = generate_ast(qm_dnf_str)
+                        qm_dnf_ast = normalize_bool_ast(qm_dnf_ast, expand_imp_iff=True)
+                        qm_dnf_canon = canonical_str(qm_dnf_ast)
+                        
+                        # Compare with laws result canonical
+                        laws_ast = generate_ast(laws_result_str)
+                        laws_ast = normalize_bool_ast(laws_ast, expand_imp_iff=True)
+                        laws_canon = canonical_str(laws_ast)
+                        
+                        if laws_canon != qm_dnf_canon:
+                            print(f"Warning: TT hashes match but canonical forms differ, proceeding with QM merge")
+                            laws_completed = False
+                    
                     # Check if last step is in DNF and truly minimal
                     if laws_completed and steps:
                         last_ast = generate_ast(steps[-1].after_str)
