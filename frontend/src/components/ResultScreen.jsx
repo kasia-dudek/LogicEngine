@@ -6,7 +6,6 @@ import ASTDisplay from './ASTDisplay';
 import LogicGatesDisplay from './LogicGatesDisplay';
 import Toast from './Toast';
 import ExportResults from './ExportResults';
-import LawsPanel from './LawsPanel';
 import SimplifyDNF from './SimplifyDNF';
 import { getAstStepsNoVars, evalAst, getStepArgs } from '../utils/astHelpers';
 
@@ -14,7 +13,6 @@ const TABS = [
   { key: 'truth', label: 'Tabela prawdy' },
   { key: 'qm', label: 'Quine-McCluskey' },
   { key: 'kmap', label: 'K-Map' },
-  { key: 'laws', label: 'Prawa logiczne' },
   { key: 'simplify_dnf', label: 'Minimalny DNF' },
 ];
 
@@ -28,14 +26,12 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const [toast, setToast] = useState({ message: '', type: 'success' });
   const [slideStep, setSlideStep] = useState(0);
   const [highlightExpr, setHighlightExpr] = useState(null);
-  const [pickedLawStep, setPickedLawStep] = useState(null);
   const [showTruthTableLegend, setShowTruthTableLegend] = useState(false);
   const [showDnfLegend, setShowDnfLegend] = useState(false);
   const [showCnfLegend, setShowCnfLegend] = useState(false);
 
   const resetHighlighting = () => {
     setHighlightExpr(null);
-    setPickedLawStep(null);
   };
 
   useEffect(() => {
@@ -119,7 +115,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
           ]);
 
           // Second batch - more complex operations
-          const [kmapRes, qmRes, lawsRes, minimalFormsRes] = await Promise.allSettled([
+          const [kmapRes, qmRes, minimalFormsRes] = await Promise.allSettled([
             fetchWithTimeout(`${apiUrl}/kmap`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
@@ -135,17 +131,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ expr: input }),
-            }).then(async r => {
-              if (!r.ok) {
-                const errorData = await r.json();
-                throw new Error(errorData.detail || `HTTP ${r.status}`);
-              }
-              return r.json();
-            }),
-            fetchWithTimeout(`${apiUrl}/laws`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ expr: input, mode: 'mixed' }),
             }).then(async r => {
               if (!r.ok) {
                 const errorData = await r.json();
@@ -189,7 +174,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
           const contrResult = getResult(contrRes);
           const kmapResult = getResult(kmapRes);
           const qmResult = getResult(qmRes);
-          const lawsResult = getResult(lawsRes);
           const minimalFormsResult = getResult(minimalFormsRes);
 
           const res = {
@@ -210,8 +194,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
             taut_error: tautResult.error,
             is_contradiction: contrResult.data?.is_contradiction || false,
             contr_error: contrResult.error,
-            laws: lawsResult.data || null,
-            laws_error: lawsResult.error,
             minimal_forms: minimalFormsResult.data || null,
             minimal_forms_error: minimalFormsResult.error,
           };
@@ -624,24 +606,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                 vars={kmapData.vars}
                 minterms={kmapData.minterms}
                 error={data.kmap_error}
-              />
-            )}
-
-            {tab === 'laws' && (
-              <LawsPanel
-                data={data}
-                onPickStep={(index) => {
-                  setPickedLawStep(index);
-                  if (data?.laws?.steps?.[index]) {
-                    const step = data.laws.steps[index];
-                    setHighlightExpr(step.before_subexpr);
-                  }
-                }}
-                onApplyLaw={(newLawsData) => {
-                  setData(prev => ({ ...prev, laws: newLawsData }));
-                  setToast({ message: 'Zastosowano alternatywne prawo - kroki zaktualizowane', type: 'success' });
-                }}
-                pickedIndex={pickedLawStep}
               />
             )}
 
