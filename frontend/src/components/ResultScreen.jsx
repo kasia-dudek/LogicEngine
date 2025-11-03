@@ -32,6 +32,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
 
   const resetHighlighting = () => {
     setHighlightExpr(null);
+    setSlideStep(0);
   };
 
   useEffect(() => {
