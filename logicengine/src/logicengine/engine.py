@@ -347,6 +347,13 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                 working_ast = generate_ast(immediate_cleanup[-1].after_str)
                                 working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                             
+                            # Check if we've reached the goal after cleanup
+                            if steps:
+                                current_canon_check = canonical_str(working_ast)
+                                if current_canon_check == qm_dnf_canon:
+                                    # Success! We've reached the minimal DNF
+                                    break
+                            
                             # Continue to try other edges in this iteration
                             continue
                     
