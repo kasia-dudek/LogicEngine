@@ -433,7 +433,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         new_args.append(CONST(0))
                         replaced = True
                     else:
-                        new_args.append(a)
+                new_args.append(a)
                 else:
                     new_args.append(a)
             if replaced:
@@ -582,7 +582,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     for consensus in consensus_candidates:
                         for idx, term_lits in enumerate(terms):
                             if set(consensus).issubset(set(term_lits)):
-                                to_remove.add(idx)
+                                    to_remove.add(idx)
                     
                     if to_remove:
                         new = [a for k, a in enumerate(sub["args"]) if k not in to_remove]
@@ -812,7 +812,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                         break
                         else:
                             continue
-                        break
+                    break
 
     return out
 
@@ -862,7 +862,7 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
             best_measure = after_measure
             best_priority = priority
             continue
-        
+            
         # Primary: prefer higher priority (lower number)
         if priority < best_priority:
             best = m
@@ -870,19 +870,19 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
             best_priority = priority
         elif priority == best_priority:
             # Secondary: prefer smaller measure
-            if after_measure < best_measure:
+        if after_measure < best_measure:
+            best = m
+            best_measure = after_measure
+        elif after_measure == best_measure:
+            # Tie-break 1: prefer algebraic over axiom
+            if m.get("source") == "algebraic" and best.get("source") == "axiom":
                 best = m
                 best_measure = after_measure
-            elif after_measure == best_measure:
-                # Tie-break 1: prefer algebraic over axiom
-                if m.get("source") == "algebraic" and best.get("source") == "axiom":
+            elif m.get("source") == best.get("source"):
+                # Tie-break 2: prefer shorter string representation
+                if len(pretty(after)) < len(pretty(best["after"])):
                     best = m
                     best_measure = after_measure
-                elif m.get("source") == best.get("source"):
-                    # Tie-break 2: prefer shorter string representation
-                    if len(pretty(after)) < len(pretty(best["after"])):
-                        best = m
-                        best_measure = after_measure
     
     return best
 
@@ -946,7 +946,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
 
         # Save node before modification so we can restore it if we skip this step
         node_backup = copy.deepcopy(node)
-        
+
         before_str = pretty(node)
         
         # Compute canonical strings and highlight spans for BEFORE state
@@ -957,7 +957,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         node = set_by_path(node, path, sub_after)
         node = normalize_bool_ast(node)
         after_str = pretty(node)
-        
+
         # Compute canonical strings and highlight spans for AFTER state
         after_canon = canonical_str(node)
         after_sub_canon = canonical_str(sub_after)

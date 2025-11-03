@@ -29,7 +29,6 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
   const [showTruthTableLegend, setShowTruthTableLegend] = useState(false);
   const [showDnfLegend, setShowDnfLegend] = useState(false);
   const [showCnfLegend, setShowCnfLegend] = useState(false);
-  const [showAllSteps, setShowAllSteps] = useState(false);
 
   const resetHighlighting = () => {
     setHighlightExpr(null);
@@ -507,72 +506,33 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                               : data.truth_table.map(row => evalAst(col.node, row))
                           );
 
+                          const shownColNames = [
+                            ...truthVars,
+                            ...steps.slice(0, Math.min(slideStep + 1, steps.length)).map(s => s.expr),
+                          ];
+                          const shownColValues = allColValues.slice(0, truthVars.length + Math.min(slideStep + 1, steps.length));
                           const currentStep = steps[slideStep] || null;
                           const argNames = currentStep ? getStepArgs(currentStep) : [];
-                          
-                          // Determine which columns to show
-                          let shownColNames, shownColValues;
-                          if (showAllSteps) {
-                            // Show all previous steps (original behavior)
-                            shownColNames = [
-                              ...truthVars,
-                              ...steps.slice(0, Math.min(slideStep + 1, steps.length)).map(s => s.expr),
-                            ];
-                            shownColValues = allColValues.slice(0, truthVars.length + Math.min(slideStep + 1, steps.length));
-                          } else {
-                            // Show only: vars + args of current step + current step
-                            shownColNames = [...truthVars];
-                            shownColValues = allColValues.slice(0, truthVars.length);
-                            
-                            // Find indices of argument columns
-                            const argIndices = argNames.map(argName => {
-                              const idx = shownColNames.findIndex(name => name === argName);
-                              if (idx === -1) {
-                                // Arg not found yet, add it
-                                const stepIdx = allColNodes.findIndex(col => col.expr === argName);
-                                if (stepIdx !== -1) {
-                                  shownColNames.push(argName);
-                                  shownColValues.push(allColValues[stepIdx]);
-                                  return shownColNames.length - 1;
-                                }
-                              }
-                              return idx;
-                            }).filter(idx => idx !== -1);
-                            
-                            // Add current step
-                            if (currentStep) {
-                              shownColNames.push(currentStep.expr);
-                              shownColValues.push(allColValues[truthVars.length + slideStep]);
-                            }
-                          }
 
                           return (
                             <div>
-                              <div className="flex gap-2 mb-2 items-center justify-between">
-                                <div className="flex gap-2 items-center">
-                                  <button
-                                    className="px-3 py-1 rounded bg-blue-100 text-blue-700 font-bold disabled:opacity-50"
-                                    onClick={() => setSlideStep(s => Math.max(0, s - 1))}
-                                    disabled={slideStep === 0}
-                                  >
-                                    Wstecz
-                                  </button>
-                                  <span className="text-sm">
-                                    Krok {steps.length ? Math.min(slideStep + 1, steps.length) : 0} z {steps.length}
-                                  </span>
-                                  <button
-                                    className="px-3 py-1 rounded bg-blue-100 text-blue-700 font-bold disabled:opacity-50"
-                                    onClick={() => setSlideStep(s => Math.min(steps.length - 1, s + 1))}
-                                    disabled={steps.length === 0 || slideStep === steps.length - 1}
-                                  >
-                                    Dalej
-                                  </button>
-                                </div>
+                              <div className="flex gap-2 mb-2 items-center">
                                 <button
-                                  className="px-3 py-1 rounded bg-gray-100 text-gray-700 text-xs hover:bg-gray-200"
-                                  onClick={() => setShowAllSteps(!showAllSteps)}
+                                  className="px-3 py-1 rounded bg-blue-100 text-blue-700 font-bold disabled:opacity-50"
+                                  onClick={() => setSlideStep(s => Math.max(0, s - 1))}
+                                  disabled={slideStep === 0}
                                 >
-                                  {showAllSteps ? 'Pokaż tylko aktualny' : 'Pokaż wszystkie'}
+                                  Wstecz
+                                </button>
+                                <span className="text-sm">
+                                  Krok {steps.length ? Math.min(slideStep + 1, steps.length) : 0} z {steps.length}
+                                </span>
+                                <button
+                                  className="px-3 py-1 rounded bg-blue-100 text-blue-700 font-bold disabled:opacity-50"
+                                  onClick={() => setSlideStep(s => Math.min(steps.length - 1, s + 1))}
+                                  disabled={steps.length === 0 || slideStep === steps.length - 1}
+                                >
+                                  Dalej
                                 </button>
                               </div>
 
@@ -589,8 +549,8 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           ? 'bg-blue-100 font-bold'
                                           : 'bg-blue-50';
                                         return (
-                                          <th key={name} className={`px-3 py-2 border-b text-blue-900 whitespace-nowrap ${headerCls}`}>
-                                            <div className="truncate max-w-xs" title={name}>
+                                          <th key={name} className={`px-3 py-2 border-b text-blue-900 ${headerCls}`}>
+                                            <div className="truncate max-w-xs font-mono text-xs" title={name}>
                                               {name}
                                             </div>
                                           </th>

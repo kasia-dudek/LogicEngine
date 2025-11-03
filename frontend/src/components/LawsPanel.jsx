@@ -468,7 +468,7 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                             highlightText={previewData.afterSubCanon || previewData.after}
                             highlightSpan={previewData.afterSpan}
                           />
-                        </div>
+                    </div>
                       </div>
                     </div>
                   </div>

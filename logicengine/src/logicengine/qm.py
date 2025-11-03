@@ -325,7 +325,7 @@ def simplify_qm(expr: str) -> Dict[str, Any]:
             pi_to_minterms[b] = set(ms)
         
         min_cover = _prune_redundant(min_cover, pi_to_minterms)
-    
+
     min_cover = sorted(set(min_cover))
     steps.append({
         "step": "Krok 6: Minimalne pokrycie (metoda Petricka)",

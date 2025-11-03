@@ -566,9 +566,9 @@ function KMapTable({ kmap, rowLabels, colLabels, groups, highlightMap, result, s
         </div>
       )}
       {!anyWrap && groups.length > 0 && (
-        <div className="text-xs text-gray-500 max-w-lg text-center">
+      <div className="text-xs text-gray-500 max-w-lg text-center">
           Kropki w komórce pokazują przynależność do dodatkowych grup. Kliknij chip grupy, aby ją odizolować.
-        </div>
+      </div>
       )}
     </>
   );
