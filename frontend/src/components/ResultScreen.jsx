@@ -260,7 +260,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
               <div className="text-xs text-green-700 font-semibold uppercase">Pokrycie prawdy</div>
               {data.truth_table && data.truth_table.length > 0 ? (
                 <div className="font-mono text-lg break-all">
-                  {Math.round((data.truth_table.filter(row => row.result === 1).length / data.truth_table.length) * 100)}% ({data.truth_table.filter(row => row.result === 1).length}/{data.truth_table.length} = 1)
+                  {Math.round((data.truth_table.filter(row => row.result === 1).length / data.truth_table.length) * 100)}% ({data.truth_table.filter(row => row.result === 1).length} z {data.truth_table.length})
                 </div>
               ) : (
                 <span className="text-gray-400">Brak danych</span>
