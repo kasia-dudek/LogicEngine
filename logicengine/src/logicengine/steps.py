@@ -54,6 +54,10 @@ class Step:
     after_canon: Optional[str] = None       # canonical full expression after
     before_subexpr_canon: Optional[str] = None  # canonical highlighted fragment before
     after_subexpr_canon: Optional[str] = None   # canonical highlighted fragment after
-    before_highlight_span: Optional[Dict[str, int]] = None  # {start, end} in before_canon
-    after_highlight_span: Optional[Dict[str, int]] = None   # {start, end} in after_canon
+    before_highlight_span: Optional[Dict[str, int]] = None  # {start, end} in before_canon (UTF-16)
+    after_highlight_span: Optional[Dict[str, int]] = None   # {start, end} in after_canon (UTF-16)
+    before_highlight_span_cp: Optional[Dict[str, int]] = None  # {start, end} in before_canon (code-points)
+    after_highlight_span_cp: Optional[Dict[str, int]] = None   # {start, end} in after_canon (code-points)
+    before_focus_text: Optional[str] = None  # extracted text from before_canon[start:end] (code-points)
+    after_focus_text: Optional[str] = None   # extracted text from after_canon[start:end] (code-points)
 

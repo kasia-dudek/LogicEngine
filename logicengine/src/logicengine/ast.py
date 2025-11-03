@@ -2,11 +2,13 @@
 """AST generation and normalization for logical expressions."""
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .parser import LogicParser, LogicExpressionError
 
 logger = logging.getLogger(__name__)
+
+Path = List[Tuple[str, Optional[int]]]  # ('args', i) or ('child', None)
 
 
 class ASTError(Exception):
@@ -718,3 +720,84 @@ def collect_variables(node: Any) -> List[str]:
     
     walk(node)
     return sorted(vars_set)
+
+
+def pretty_with_spans(node: Any) -> Tuple[str, Dict[str, Tuple[int, int]]]:
+    """
+    Generate canonical string with code-point spans for each AST node.
+    
+    Returns:
+        text: Normalized string (NFC) with canonical representation
+        spans_map: Dict mapping node_id (path) -> (start_cp, end_cp) in code-point indices
+    
+    All strings are normalized to NFC (important for ¬ and special characters).
+    Node IDs are based on AST paths (e.g., [('args', 0), ('args', 1)]).
+    """
+    import unicodedata
+    
+    def iter_nodes(node: Any, path: Optional[Path] = None):
+        if path is None:
+            path = []
+        yield path, node
+        if isinstance(node, dict):
+            op = node.get("op")
+            if op in {"AND", "OR"}:
+                for i, a in enumerate(node.get("args", [])):
+                    yield from iter_nodes(a, path + [("args", i)])
+            elif op == "NOT":
+                ch = node.get("child")
+                if ch is not None:
+                    yield from iter_nodes(ch, path + [("child", None)])
+    
+    # Generate text using canonical_str (already NFC normalized)
+    text = canonical_str(node)
+    text = unicodedata.normalize('NFC', text)
+    
+    # Remove outer parentheses if needed (match pretty() behavior)
+    if text.startswith('(') and text.endswith(')'):
+        inner = text[1:-1]
+        balance = 0
+        can_remove = True
+        for char in inner:
+            if char == '(':
+                balance += 1
+            elif char == ')':
+                balance -= 1
+                if balance < 0:
+                    can_remove = False
+                    break
+        if can_remove and balance == 0:
+            text = inner
+    
+    # Build spans_map by iterating over nodes and finding their positions
+    spans_map: Dict[str, Tuple[int, int]] = {}
+    
+    # Iterate through all nodes in the AST
+    for path, subnode in iter_nodes(node):
+        if not isinstance(subnode, dict) or subnode.get('op') in {'VAR', 'CONST'}:
+            continue  # Skip leaf nodes
+        
+        # Create node_id from path
+        if path:
+            node_id = str(path)
+        else:
+            node_id = 'root'
+        
+        # Find position using canonical string matching
+        subnode_text = canonical_str(subnode)
+        subnode_text = unicodedata.normalize('NFC', subnode_text)
+        
+        # Try exact match
+        pos = text.find(subnode_text)
+        if pos != -1:
+            spans_map[node_id] = (pos, pos + len(subnode_text))
+            continue
+        
+        # Try without outer parentheses
+        if subnode_text.startswith('(') and subnode_text.endswith(')'):
+            subnode_no_parens = subnode_text[1:-1]
+            pos = text.find(subnode_no_parens)
+            if pos != -1:
+                spans_map[node_id] = (pos, pos + len(subnode_no_parens))
+    
+    return text, spans_map
