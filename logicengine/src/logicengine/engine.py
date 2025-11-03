@@ -248,6 +248,30 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             if last_measure[0] > qm_measure[0]:
                                 print(f"Warning: Laws result not minimal, needs cleanup")
                                 laws_completed = False
+                    
+                    # If we removed an oscillation step, re-check the new last step
+                    if not laws_completed and steps:
+                        # Check the new last step after removing oscillation
+                        last_ast_check = generate_ast(steps[-1].after_str)
+                        last_ast_check = normalize_bool_ast(last_ast_check, expand_imp_iff=True)
+                        
+                        # Check if it's DNF
+                        if is_dnf(last_ast_check):
+                            # Recheck TT hash
+                            new_laws_hash = truth_table_hash(vars_list, steps[-1].after_str)
+                            qm_hash = truth_table_hash(vars_list, qm_result.get("result", ""))
+                            if new_laws_hash == qm_hash:
+                                # Check if it's minimal by literal count
+                                last_measure = measure(last_ast_check)
+                                qm_expr_str = qm_result.get("result", "")
+                                qm_ast = generate_ast(qm_expr_str)
+                                qm_ast = normalize_bool_ast(qm_ast, expand_imp_iff=True)
+                                qm_measure = measure(qm_ast)
+                                
+                                # If same or fewer literals, it's acceptable
+                                if last_measure[0] <= qm_measure[0]:
+                                    laws_completed = True
+                                    print(f"Laws result is minimal DNF after removing oscillation (literals: {last_measure[0]})")
                 except Exception:
                     laws_completed = False
             
