@@ -895,7 +895,8 @@ def ensure_pair_present(
     right_term = AND([common_node, diff_node_neg])
     distributed_result = OR([left_term, right_term])
     
-    # Normalize distributed_result to match what will be in the AST after distribution
+    # Normalize both to match what will be in the AST
+    expanded_node = normalize_bool_ast(expanded_node, expand_imp_iff=True)
     distributed_result = normalize_bool_ast(distributed_result, expand_imp_iff=True)
     
     before_subexpr_2 = expanded_node
