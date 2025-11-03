@@ -173,6 +173,7 @@ export default function ColoredExpression({
   highlightRange = null, 
   highlightText = null, 
   highlightSpan = null,
+  highlightSpansCp = null,
   canonExpression = null,
   highlightClass = "bg-green-100 text-green-900 ring-1 ring-green-300 rounded px-0.5" 
 }) {
@@ -189,23 +190,21 @@ export default function ColoredExpression({
     return cleanExpression(highlightText);
   }, [highlightText]);
 
-  // If highlightSpan is provided, it refers to canonExpression (before cleanExpression)
-  // We need to map indices from original to cleaned string by computing the actual offset
+  // If highlightSpan is provided, it refers to the expression string (after pretty() but before cleanExpression)
+  // We need to map indices from expression to cleaned string by computing the actual offset
   const mappedHighlightSpan = useMemo(() => {
     if (!highlightSpan || highlightSpan.start === undefined || highlightSpan.end === undefined) {
       return null;
     }
     
-    // If we have canonExpression, the span refers to IT, not cleaned version
-    if (!canonExpression) {
-      // No canonExpression, so span refers to expression after cleanExpression
-      return highlightSpan;
-    }
+    // NEW: If span is provided, it's relative to expression (before_str/after_str from backend)
+    // which is already pretty-printed but may be cleaned further by cleanExpression()
+    // Map from expression to cleaned(target)
+    const sourceExpr = expression || '';
+    const cleanedSource = cleanExpression(sourceExpr);
     
-    // Compute how cleanExpression transformed the string
-    const cleanedCanon = cleanExpression(canonExpression);
-    if (cleanedCanon === canonExpression) {
-      // No transformation, span maps 1:1
+    if (cleanedSource === sourceExpr) {
+      // No transformation by cleanExpression, span maps 1:1
       return highlightSpan;
     }
     
@@ -216,14 +215,14 @@ export default function ColoredExpression({
     let cleanIdx = 0;
     
     // Build map of how many chars were removed before each original index
-    while (origIdx < canonExpression.length || cleanIdx < cleanedCanon.length) {
-      if (origIdx < canonExpression.length && cleanIdx < cleanedCanon.length && 
-          canonExpression[origIdx] === cleanedCanon[cleanIdx]) {
+    while (origIdx < sourceExpr.length || cleanIdx < cleanedSource.length) {
+      if (origIdx < sourceExpr.length && cleanIdx < cleanedSource.length && 
+          sourceExpr[origIdx] === cleanedSource[cleanIdx]) {
         // Characters match
         offsetMap[origIdx] = origIdx - cleanIdx;
         origIdx++;
         cleanIdx++;
-      } else if (origIdx < canonExpression.length) {
+      } else if (origIdx < sourceExpr.length) {
         // Character removed from original
         offsetMap[origIdx] = origIdx - cleanIdx;
         origIdx++;
@@ -238,10 +237,10 @@ export default function ColoredExpression({
     const offsetAtEnd = offsetMap[Math.min(highlightSpan.end, offsetMap.length - 1)] || 0;
     
     return {
-      start: highlightSpan.start - offsetAtStart,
-      end: highlightSpan.end - offsetAtEnd
+      start: Math.max(0, highlightSpan.start - offsetAtStart),
+      end: Math.max(0, highlightSpan.end - offsetAtEnd)
     };
-  }, [highlightSpan, canonExpression]);
+  }, [highlightSpan, expression]);
 
   // Oblicz highlightRange z highlightText lub highlightSpan
   // CRITICAL: indeksy muszą być liczone na dokładnie tym samym stringu, który renderujemy
@@ -474,6 +473,30 @@ export default function ColoredExpression({
     return null;
   }, [target, cleanedHighlightText, highlightRange, mappedHighlightSpan, highlightClass]);
 
+  // Handle multiple spans from backend
+  const highlightSpansList = useMemo(() => {
+    if (!highlightSpansCp || !Array.isArray(highlightSpansCp) || highlightSpansCp.length === 0) {
+      return null;
+    }
+    // Sort by start, merge overlapping spans
+    const sorted = [...highlightSpansCp].sort((a, b) => a[0] - b[0]);
+    const merged = [];
+    for (const span of sorted) {
+      if (merged.length === 0) {
+        merged.push(span);
+      } else {
+        const last = merged[merged.length - 1];
+        if (span[0] <= last[1]) {
+          // Overlapping or adjacent, merge
+          last[1] = Math.max(last[1], span[1]);
+        } else {
+          merged.push(span);
+        }
+      }
+    }
+    return merged;
+  }, [highlightSpansCp]);
+
   if (!expression) return null;
 
   // Kolory dla różnych poziomów zagnieżdżenia
@@ -488,6 +511,16 @@ export default function ColoredExpression({
     'text-red-600',     // poziom 7
   ];
 
+  const isInHighlight = (position) => {
+    if (computedHighlightRange) {
+      return position >= computedHighlightRange.start && position < computedHighlightRange.end;
+    }
+    if (highlightSpansList) {
+      return highlightSpansList.some(span => position >= span[0] && position < span[1]);
+    }
+    return false;
+  };
+
   const renderExpression = (expr) => {
     const result = [];
     let level = 0;
@@ -499,14 +532,15 @@ export default function ColoredExpression({
     while (i < expr.length) {
       const char = expr[i];
       const wasInHighlight = inHighlight;
-      inHighlight = computedHighlightRange && i >= computedHighlightRange.start && i < computedHighlightRange.end;
+      inHighlight = isInHighlight(i);
       
       // Zakończ poprzedni highlight span jeśli wychodzimy z zakresu
       if (wasInHighlight && !inHighlight && highlightBuffer.length > 0) {
+        const className = computedHighlightRange?.class || highlightClass;
         result.push(
-          <span key={`highlight-${highlightStart}`} className={computedHighlightRange.class}>
+          <mark key={`highlight-${highlightStart}`} className={className}>
             {highlightBuffer.join('')}
-          </span>
+          </mark>
         );
         highlightBuffer = [];
         highlightStart = -1;
@@ -555,10 +589,11 @@ export default function ColoredExpression({
     
     // Jeśli na końcu nadal jesteśmy w highlightcie, zamknij span
     if (inHighlight && highlightBuffer.length > 0) {
+      const className = computedHighlightRange?.class || highlightClass;
       result.push(
-        <span key={`highlight-${highlightStart}`} className={computedHighlightRange.class}>
+        <mark key={`highlight-${highlightStart}`} className={className}>
           {highlightBuffer.join('')}
-        </span>
+        </mark>
       );
     }
 

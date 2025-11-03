@@ -8,15 +8,17 @@ from pydantic import BaseModel
 
 from .parser import LogicExpressionError, validate_and_standardize
 from .truth_table import generate_truth_table, TruthTableError
-from .ast import generate_ast, ASTError
+from .ast import generate_ast, ASTError, normalize_bool_ast
 from .onp import to_onp, ONPError
 from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 from .tautology import is_tautology
 from .contradiction import is_contradiction
-from .laws import simplify_with_laws, apply_law_once
+from .laws import simplify_with_laws, apply_law_once, pretty_with_tokens, find_subtree_span_by_path, pretty
 from .minimal_forms import compute_minimal_forms
 from .engine import simplify_to_minimal_dnf, TooManyVariables
+from .rules import LIST_OF_RULES, Rule
+from .rewriter import find_matches, apply_match
 
 app = FastAPI(title="Logic Engine API")
 
@@ -56,6 +58,21 @@ class ApplyLawRequest(BaseModel):
             else:
                 result.append((item[0] if isinstance(item, (list, tuple)) and len(item) > 0 else "", None))
         return result
+
+
+class RulesListRequest(BaseModel):
+    pass  # Empty for now
+
+
+class RulesMatchesRequest(BaseModel):
+    expr: str
+    ruleId: str
+
+
+class RulesApplyRequest(BaseModel):
+    expr: str
+    ruleId: str
+    matchId: str
 
 # ---------- endpoints ----------
 
@@ -177,6 +194,221 @@ def simplify_dnf(req: SimplifyDNFRequest):
         return simplify_to_minimal_dnf(req.expr, var_limit=req.var_limit)
     except TooManyVariables as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+def _convert_path_to_tuple_path(path: List[int], node: Any) -> List[Tuple[str, Optional[int]]]:
+    """
+    Convert path from List[int] format (used by rewriter) to List[Tuple[str, Optional[int]]] format.
+    
+    The List[int] format from rewriter._walk():
+    - For NOT nodes: path_prefix + [0] means child
+    - For AND/OR nodes: path_prefix + [i] means args[i]
+    """
+    result: List[Tuple[str, Optional[int]]] = []
+    current = node
+    
+    for idx in path:
+        if isinstance(current, dict):
+            op = current.get("op")
+            if op == "NOT":
+                # In rewriter, NOT child is always at index 0
+                result.append(("child", None))
+                current = current.get("child")
+            elif op in {"AND", "OR"}:
+                # In rewriter, AND/OR args are indexed directly
+                result.append(("args", idx))
+                args = current.get("args", [])
+                if idx < len(args):
+                    current = args[idx]
+                else:
+                    # Invalid path - break early
+                    break
+            else:
+                # Unknown operator - cannot proceed
+                break
+        else:
+            # Leaf node - cannot proceed
+            break
+    
+    return result
+
+
+@app.post("/rules/list")
+def rules_list(req: RulesListRequest):
+    """Return list of available rules."""
+    try:
+        rules = [
+            {
+                "id": rule.id,
+                "name": rule.name,
+            }
+            for rule in LIST_OF_RULES
+        ]
+        return {"rules": rules}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rules/matches")
+def rules_matches(req: RulesMatchesRequest):
+    """Find matches for a specific rule in an expression."""
+    try:
+        std_expr = validate_and_standardize(req.expr)
+        
+        # Find rule by ID
+        rule = None
+        for r in LIST_OF_RULES:
+            if r.id == req.ruleId:
+                rule = r
+                break
+        
+        if not rule:
+            raise HTTPException(status_code=404, detail=f"Rule '{req.ruleId}' not found")
+        
+        # Generate AST and normalize
+        legacy_ast = generate_ast(std_expr)
+        node = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
+        
+        # Find matches using rewriter
+        matches = find_matches(rule, node)
+        
+        # Generate pretty string with tokens for span calculation
+        before_str, before_spans_map = pretty_with_tokens(node)
+        
+        # Convert matches to response format with spans
+        result_matches = []
+        for match in matches:
+            # Convert path format
+            tuple_path = _convert_path_to_tuple_path(match.path, node)
+            
+            # Get focus expression (the matched subtree)
+            focus_expr = match.focus_expr
+            focus_pretty = pretty(focus_expr)
+            
+            # Get preview expression (after applying rule)
+            preview_ast = match.preview_ast
+            preview_pretty = pretty(preview_ast)
+            
+            # Calculate before_span for focus_expr
+            before_span = find_subtree_span_by_path(tuple_path, node)
+            
+            # For after_span, we need to calculate from preview_ast
+            # The transformed subtree is at the same path
+            after_str, after_spans_map = pretty_with_tokens(preview_ast)
+            after_span = find_subtree_span_by_path(tuple_path, preview_ast)
+            
+            result_matches.append({
+                "matchId": match.match_id,
+                "focusPretty": focus_pretty,
+                "previewExpr": preview_pretty,
+                "before_span": before_span,
+                "after_span": after_span,
+                "path": [[key, idx] for key, idx in tuple_path],  # Convert to JSON-serializable format
+            })
+        
+        return {
+            "matches": result_matches,
+            "before_str": before_str,
+            "after_str": None,  # Not applicable for matches endpoint
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/rules/apply")
+def rules_apply(req: RulesApplyRequest):
+    """Apply a specific rule match to an expression."""
+    try:
+        std_expr = validate_and_standardize(req.expr)
+        
+        # Find rule by ID
+        rule = None
+        for r in LIST_OF_RULES:
+            if r.id == req.ruleId:
+                rule = r
+                break
+        
+        if not rule:
+            raise HTTPException(status_code=404, detail=f"Rule '{req.ruleId}' not found")
+        
+        # Generate AST and normalize
+        legacy_ast = generate_ast(std_expr)
+        node = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
+        
+        # Find matches
+        matches = find_matches(rule, node)
+        
+        # Find the specific match
+        target_match = None
+        for m in matches:
+            if m.match_id == req.matchId:
+                target_match = m
+                break
+        
+        if not target_match:
+            raise HTTPException(status_code=404, detail=f"Match '{req.matchId}' not found")
+        
+        # Calculate spans BEFORE applying
+        before_str, before_spans_map = pretty_with_tokens(node)
+        tuple_path = _convert_path_to_tuple_path(target_match.path, node)
+        before_span = find_subtree_span_by_path(tuple_path, node)
+        
+        # Apply the match
+        after_ast = apply_match(rule, node, target_match)
+        
+        # Calculate spans AFTER applying
+        after_str, after_spans_map = pretty_with_tokens(after_ast)
+        # The transformed subtree is at the same path
+        after_span = find_subtree_span_by_path(tuple_path, after_ast)
+        
+        # Calculate metrics (for compatibility with frontend)
+        from .laws import count_nodes, count_literals
+        
+        def count_operators(n: Any) -> int:
+            if not isinstance(n, dict):
+                return 0
+            op = n.get("op")
+            if op in {"AND", "OR", "NOT"}:
+                return 1 + (sum(count_operators(a) for a in n.get("args", [])) if op in {"AND", "OR"} else count_operators(n.get("child")))
+            return 0
+        
+        def neg_depth_sum(n: Any, depth: int = 0) -> int:
+            if not isinstance(n, dict):
+                return 0
+            op = n.get("op")
+            if op == "NOT":
+                return depth + neg_depth_sum(n.get("child"), depth + 1)
+            elif op in {"AND", "OR"}:
+                return sum(neg_depth_sum(a, depth) for a in n.get("args", []))
+            return 0
+        
+        metrics_before = {
+            "operators": count_operators(node),
+            "literals": count_literals(node),
+            "neg_depth_sum": neg_depth_sum(node),
+        }
+        
+        metrics_after = {
+            "operators": count_operators(after_ast),
+            "literals": count_literals(after_ast),
+            "neg_depth_sum": neg_depth_sum(after_ast),
+        }
+        
+        return {
+            "exprAfter": after_str,
+            "metricsBefore": metrics_before,
+            "metricsAfter": metrics_after,
+            "before_span": before_span,
+            "after_span": after_span,
+            "before_str": before_str,
+            "after_str": after_str,
+        }
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 

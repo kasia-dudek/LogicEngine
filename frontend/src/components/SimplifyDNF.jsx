@@ -118,7 +118,8 @@ export default function SimplifyDNF({ expression, loading }) {
                         canonExpression={step.before_canon}
                         className="text-gray-800"
                         highlightText={step.before_subexpr_canon || step.before_subexpr}
-                        highlightSpan={step.before_highlight_span}
+                        highlightSpan={step.before_span || step.before_highlight_span}
+                        highlightSpansCp={step.before_highlight_spans_cp}
                         highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
                       />
                     </div>
@@ -126,19 +127,49 @@ export default function SimplifyDNF({ expression, loading }) {
                 )}
                 
                 {/* Show subexpression change if available */}
-                {(step.before_subexpr || step.after_subexpr) && (
+                {(step.before_focus_texts || step.after_focus_texts || step.before_subexpr || step.after_subexpr) && (
                   <div>
                     <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
                     <div className="mt-1 flex items-center gap-2">
-                      <ColoredExpression 
-                        expression={step.before_subexpr || ''} 
-                        className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" 
-                      />
+                      {/* Use before_focus_texts if available, otherwise fallback to before_subexpr */}
+                      {step.before_focus_texts && Array.isArray(step.before_focus_texts) && step.before_focus_texts.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          {step.before_focus_texts.map((text, idx) => (
+                            <React.Fragment key={idx}>
+                              <ColoredExpression 
+                                expression={text} 
+                                className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" 
+                              />
+                              {idx < step.before_focus_texts.length - 1 && <span>∨</span>}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : (
+                        <ColoredExpression 
+                          expression={step.before_subexpr || ''} 
+                          className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" 
+                        />
+                      )}
                       <span className="mx-2">→</span>
-                      <ColoredExpression 
-                        expression={step.after_subexpr || ''} 
-                        className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" 
-                      />
+                      {/* Use after_focus_texts if available, otherwise fallback to after_subexpr */}
+                      {step.after_focus_texts && Array.isArray(step.after_focus_texts) && step.after_focus_texts.length > 0 ? (
+                        <div className="flex items-center gap-1">
+                          {step.after_focus_texts.map((text, idx) => (
+                            <React.Fragment key={idx}>
+                              <ColoredExpression 
+                                expression={text} 
+                                className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" 
+                              />
+                              {idx < step.after_focus_texts.length - 1 && <span>∨</span>}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : (
+                        <ColoredExpression 
+                          expression={step.after_subexpr || ''} 
+                          className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" 
+                        />
+                      )}
                     </div>
                   </div>
                 )}
@@ -152,7 +183,8 @@ export default function SimplifyDNF({ expression, loading }) {
                         canonExpression={step.after_canon}
                         className="text-gray-800"
                         highlightText={step.after_subexpr_canon || step.after_subexpr}
-                        highlightSpan={step.after_highlight_span}
+                        highlightSpan={step.after_span || step.after_highlight_span}
+                        highlightSpansCp={step.after_highlight_spans_cp}
                         highlightClass="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
                       />
                     </div>

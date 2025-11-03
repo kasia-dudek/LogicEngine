@@ -45,32 +45,290 @@ def pretty(n: Any) -> str:
             return inner
     return result
 
-def find_subtree_position(subtree: Any, full_tree: Any) -> Optional[Dict[str, int]]:
-    """Find start/end position of subtree in canonical string representation of full tree.
-    Returns None if not found or error.
+
+def _pretty_with_tokens_internal(node: Any, path: Optional[List[Tuple[str, Optional[int]]]] = None, tokens: Optional[List[Dict[str, Any]]] = None, current_pos: int = 0) -> Tuple[str, int]:
+    """
+    Internal recursive function for pretty_tokens.
+    Builds the string and records token positions with node paths.
     
-    Both subtree and full_tree should be normalized ASTs.
+    Returns:
+        (text, next_pos) where next_pos is the position after the generated text.
+    """
+    if tokens is None:
+        tokens = []
+    
+    if path is None:
+        path = []
+    
+    if not isinstance(node, dict):
+        # Leaf node (string literal)
+        text = str(node)
+        tokens.append({
+            "node_id": str(path) if path else "root",
+            "path": path.copy(),
+            "text": text,
+            "start": current_pos,
+            "end": current_pos + len(text),
+            "length": len(text)
+        })
+        return text, current_pos + len(text)
+    
+    op = node.get("op")
+    
+    if op == "VAR":
+        name = node.get("name", "?")
+        tokens.append({
+            "node_id": str(path) if path else "root",
+            "path": path.copy(),
+            "text": name,
+            "start": current_pos,
+            "end": current_pos + len(name),
+            "length": len(name)
+        })
+        return name, current_pos + len(name)
+    
+    if op == "CONST":
+        value = str(node.get("value", "?"))
+        tokens.append({
+            "node_id": str(path) if path else "root",
+            "path": path.copy(),
+            "text": value,
+            "start": current_pos,
+            "end": current_pos + len(value),
+            "length": len(value)
+        })
+        return value, current_pos + len(value)
+    
+    if op == "NOT":
+        child = node.get("child")
+        child_text, child_end = _pretty_with_tokens_internal(child, path + [("child", None)], tokens, current_pos + 1) if child is not None else ("?", current_pos + 1)
+        result = f"¬{child_text}"
+        result_end = current_pos + len(result)
+        # Record token for this NOT node
+        tokens.append({
+            "node_id": str(path) if path else "root",
+            "path": path.copy(),
+            "text": result,
+            "start": current_pos,
+            "end": result_end,
+            "length": len(result)
+        })
+        return result, result_end
+    
+    if op in {"AND", "OR"}:
+        args = node.get("args", [])
+        if not args:
+            return "?", current_pos
+        
+        symbol = "∧" if op == "AND" else "∨"
+        parts = []
+        pos = current_pos + 1  # Start after opening '('
+        for i, arg in enumerate(args):
+            if i > 0:
+                # Add separator: " symbol "
+                separator = f" {symbol} "
+                pos += len(separator)
+            arg_text, pos = _pretty_with_tokens_internal(arg, path + [("args", i)], tokens, pos)
+            parts.append(arg_text)
+        
+        # Close with ')'
+        inner = f" {symbol} ".join(parts)
+        result = f"({inner})"
+        result_end = pos + 1  # +1 for closing ')'
+        
+        # Record token for this AND/OR node
+        tokens.append({
+            "node_id": str(path) if path else "root",
+            "path": path.copy(),
+            "text": result,
+            "start": current_pos,
+            "end": result_end,
+            "length": len(result)
+        })
+        return result, result_end
+    
+    # Fallback for other operators
+    text = canonical_str(node)
+    tokens.append({
+        "node_id": str(path) if path else "root",
+        "path": path.copy(),
+        "text": text,
+        "start": current_pos,
+        "end": current_pos + len(text),
+        "length": len(text)
+    })
+    return text, current_pos + len(text)
+
+
+def pretty_with_tokens(node: Any) -> Tuple[str, Dict[str, Tuple[int, int]]]:
+    """
+    Generate pretty string with token map (node_id -> (start, end)).
+    
+    Returns:
+        (text, spans_map) where:
+        - text: The pretty-printed string (with outer parentheses removed if applicable)
+        - spans_map: Dict mapping node_id (stringified path) -> (start, end) tuple
+    
+    This uses the SAME normalization and pretty-printing logic as pretty(),
+    ensuring consistency.
+    """
+    # Normalize node first
+    if isinstance(node, dict) and 'op' in node:
+        node = normalize_bool_ast(node)
+    
+    # Build tokens from canonical representation
+    tokens = []
+    text, _ = _pretty_with_tokens_internal(node, None, tokens, 0)
+    
+    # Apply outer parentheses removal (same logic as pretty())
+    original_text = text
+    if text.startswith('(') and text.endswith(')'):
+        inner = text[1:-1]
+        balance = 0
+        can_remove = True
+        for char in inner:
+            if char == '(':
+                balance += 1
+            elif char == ')':
+                balance -= 1
+            if balance < 0:
+                can_remove = False
+                break
+        if can_remove and balance == 0:
+            text = inner
+    
+    # If we removed outer parentheses, adjust all token positions
+    if text != original_text:
+        offset = 1  # Removed one '(' at start
+        adjusted_tokens = []
+        for token in tokens:
+            # Only adjust if token starts at or after the removed '('
+            if token["start"] >= offset:
+                adjusted_tokens.append({
+                    **token,
+                    "start": token["start"] - offset,
+                    "end": token["end"] - offset
+                })
+            elif token["end"] > offset:
+                # Token spans the removed '(' - adjust partially
+                adjusted_tokens.append({
+                    **token,
+                    "start": max(0, token["start"] - offset),
+                    "end": token["end"] - offset,
+                    "text": token["text"][offset:] if token["text"].startswith('(') else token["text"]
+                })
+            # Tokens before the removed '(' are not included
+        tokens = adjusted_tokens
+    
+    # Build spans_map from tokens (one span per node_id)
+    spans_map = {}
+    for token in tokens:
+        node_id = token["node_id"]
+        if node_id not in spans_map:
+            spans_map[node_id] = (token["start"], token["end"])
+        else:
+            # Extend span if token overlaps or is adjacent
+            existing_start, existing_end = spans_map[node_id]
+            spans_map[node_id] = (
+                min(existing_start, token["start"]),
+                max(existing_end, token["end"])
+            )
+    
+    return text, spans_map
+
+
+def find_subtree_span_by_path(subtree_path: Path, full_tree: Any) -> Optional[Dict[str, int]]:
+    """
+    Find start/end position of subtree in pretty-printed string of full tree.
+    Uses token-based mapping for accurate positioning.
+    
+    Args:
+        subtree_path: Path to the subtree (list of (key, idx) tuples)
+        full_tree: The full AST tree (normalized)
+    
+    Returns:
+        {"start": int, "end": int} or None if not found
     """
     try:
-        # Normalize both trees to ensure consistent canonical representations
+        # Normalize tree
+        if isinstance(full_tree, dict) and 'op' in full_tree:
+            full_tree = normalize_bool_ast(full_tree)
+        
+        # Generate pretty string with tokens
+        display_str, spans_map = pretty_with_tokens(full_tree)
+        
+        # Look up subtree path in spans_map
+        node_id = str(subtree_path) if subtree_path else "root"
+        
+        if node_id in spans_map:
+            start, end = spans_map[node_id]
+            return {"start": start, "end": end}
+        
+        # If exact path not found, try to find by walking the tree
+        # and matching the subtree structurally
+        from .ast import iter_nodes, get_by_path
+        
+        # Try to get subtree by path
+        try:
+            subtree = get_by_path(full_tree, subtree_path)
+            # Find all nodes with matching canonical representation
+            subtree_canon = canonical_str(subtree) if subtree is not None else None
+            if subtree_canon:
+                for path, node in iter_nodes(full_tree):
+                    if canonical_str(node) == subtree_canon:
+                        test_node_id = str(path) if path else "root"
+                        if test_node_id in spans_map:
+                            start, end = spans_map[test_node_id]
+                            return {"start": start, "end": end}
+        except (KeyError, IndexError, TypeError):
+            pass
+        
+        return None
+    except Exception:
+        return None
+
+
+def find_subtree_position(subtree: Any, full_tree: Any) -> Optional[Dict[str, int]]:
+    """
+    Find start/end position of subtree in pretty-printed string of full tree.
+    
+    DEPRECATED: Use find_subtree_span_by_path() or find_subtree_span() for AST-based positioning.
+    This function is kept for backward compatibility but uses improved logic.
+    
+    Returns None if not found or error.
+    """
+    try:
+        # Normalize both trees
         if isinstance(subtree, dict) and 'op' in subtree:
             subtree = normalize_bool_ast(subtree)
         if isinstance(full_tree, dict) and 'op' in full_tree:
             full_tree = normalize_bool_ast(full_tree)
         
-        full_canon = canonical_str(full_tree)
-        sub_canon = canonical_str(subtree)
+        # Use token-based approach
+        display_str, spans_map = pretty_with_tokens(full_tree)
         
-        # Try exact match
-        if sub_canon in full_canon:
-            start = full_canon.find(sub_canon)
+        # Find subtree by searching all nodes
+        from .ast import iter_nodes
+        subtree_canon = canonical_str(subtree)
+        
+        for path, node in iter_nodes(full_tree):
+            if canonical_str(node) == subtree_canon:
+                node_id = str(path) if path else "root"
+                if node_id in spans_map:
+                    start, end = spans_map[node_id]
+                    return {"start": start, "end": end}
+        
+        # Fallback: try substring matching (less reliable)
+        sub_canon = canonical_str(subtree)
+        if sub_canon in display_str:
+            start = display_str.find(sub_canon)
             return {"start": start, "end": start + len(sub_canon)}
         
         # Try without outer parentheses
         if sub_canon.startswith('(') and sub_canon.endswith(')'):
             sub_no_parens = sub_canon[1:-1]
-            if sub_no_parens in full_canon:
-                start = full_canon.find(sub_no_parens)
+            if sub_no_parens in display_str:
+                start = display_str.find(sub_no_parens)
                 return {"start": start, "end": start + len(sub_no_parens)}
         
         return None
@@ -947,21 +1205,26 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         # Save node before modification so we can restore it if we skip this step
         node_backup = copy.deepcopy(node)
 
-        before_str = pretty(node)
+        # Generate pretty strings for display
+        before_str, before_spans_map = pretty_with_tokens(node_backup)
         
         # Compute canonical strings and highlight spans for BEFORE state
         before_canon = canonical_str(node_backup)
         before_sub_canon = canonical_str(sub_before)
-        before_highlight_span = find_subtree_position(sub_before, node_backup)
+        # Use path-based span lookup for accurate positioning
+        before_highlight_span = find_subtree_span_by_path(path, node_backup)
         
         node = set_by_path(node, path, sub_after)
         node = normalize_bool_ast(node)
-        after_str = pretty(node)
+        
+        # Generate pretty string for AFTER state
+        after_str, after_spans_map = pretty_with_tokens(node)
 
         # Compute canonical strings and highlight spans for AFTER state
         after_canon = canonical_str(node)
         after_sub_canon = canonical_str(sub_after)
-        after_highlight_span = find_subtree_position(sub_after, node)
+        # For after, the subtree is at the same path (we replaced it)
+        after_highlight_span = find_subtree_span_by_path(path, node)
 
         # Check for oscillation - use canonical_str for structural comparison
         if after_canon in seen_expressions:
@@ -971,12 +1234,16 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
                 "path": path,
                 "before_tree": before_str,
                 "after_tree": after_str,
+                "before_str": before_str,
+                "after_str": after_str,
                 "before_subexpr": pretty(sub_before),
                 "after_subexpr": pretty(sub_after),
                 "before_canon": before_canon,
                 "after_canon": after_canon,
                 "before_subexpr_canon": before_sub_canon,
                 "after_subexpr_canon": after_sub_canon,
+                "before_span": before_highlight_span,
+                "after_span": after_highlight_span,
                 "before_highlight_span": before_highlight_span,
                 "after_highlight_span": after_highlight_span,
                 "applicable_here": [],
@@ -1062,14 +1329,18 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             "path": path,
             "before_tree": before_str,
             "after_tree": after_str,
+            "before_str": before_str,  # Explicit field for frontend
+            "after_str": after_str,    # Explicit field for frontend
             "before_subexpr": pretty(sub_before),
             "after_subexpr": pretty(sub_after),
             "before_canon": before_canon,
             "after_canon": after_canon,
             "before_subexpr_canon": before_sub_canon,
             "after_subexpr_canon": after_sub_canon,
-            "before_highlight_span": before_highlight_span,
-            "after_highlight_span": after_highlight_span,
+            "before_span": before_highlight_span,  # Span relative to before_str
+            "after_span": after_highlight_span,    # Span relative to after_str
+            "before_highlight_span": before_highlight_span,  # Keep for backward compatibility
+            "after_highlight_span": after_highlight_span,     # Keep for backward compatibility
             "applicable_here": applicable_here,
             "source": choice.get("source", "algebraic"),
             "axiom_id": choice.get("axiom_id"),
@@ -1104,21 +1375,27 @@ def apply_law_once(expr: str, path: List[List[Optional[int]]], law: str) -> Dict
         return {"ok": False, "error": "Podane prawo nie pasuje w tym miejscu.", "available": [m["law"] for m in here]}
 
     choice = cand[0]
-    before_str = pretty(node)
+    
+    # Generate pretty strings for display with token mapping
+    before_str, before_spans_map = pretty_with_tokens(node)
     
     # Compute canonical strings and highlight spans
     before_canon = canonical_str(node)
     before_sub_canon = canonical_str(choice["before"])
-    before_highlight_span = find_subtree_position(choice["before"], node)
+    # Use path-based span lookup for accurate positioning
+    before_highlight_span = find_subtree_span_by_path(path, node)
 
     node = set_by_path(node, path, choice["after"])
     node = normalize_bool_ast(node)
-    after_str = pretty(node)
+    
+    # Generate pretty string for AFTER state
+    after_str, after_spans_map = pretty_with_tokens(node)
     
     # Compute canonical strings and highlight spans for AFTER state
     after_canon = canonical_str(node)
     after_sub_canon = canonical_str(choice["after"])
-    after_highlight_span = find_subtree_position(choice["after"], node)
+    # For after, the subtree is at the same path (we replaced it)
+    after_highlight_span = find_subtree_span_by_path(path, node)
 
     return {
         "ok": True,
@@ -1127,12 +1404,16 @@ def apply_law_once(expr: str, path: List[List[Optional[int]]], law: str) -> Dict
         "path": path,
         "before_tree": before_str,
         "after_tree": after_str,
+        "before_str": before_str,
+        "after_str": after_str,
         "before_subexpr": pretty(choice["before"]),
         "after_subexpr": pretty(choice["after"]),
         "before_canon": before_canon,
         "after_canon": after_canon,
         "before_subexpr_canon": before_sub_canon,
         "after_subexpr_canon": after_sub_canon,
+        "before_span": before_highlight_span,
+        "after_span": after_highlight_span,
         "before_highlight_span": before_highlight_span,
         "after_highlight_span": after_highlight_span,
         "alternatives_here": [m["law"] for m in here],
