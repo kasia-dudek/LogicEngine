@@ -77,12 +77,19 @@ export function computeStepValues(ast, truthTable) {
 export function getStepArgs(step) {
   if (!step.node) return [];
   if (typeof step.node === 'string') return [step.node];
-  if (step.node.node === '¬') return getStepArgs({ node: step.node.child });
+  
+  // For binary operators, return direct left and right subexpressions
   if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(step.node.node)) {
-    return [
-      ...getStepArgs({ node: step.node.left }),
-      ...getStepArgs({ node: step.node.right })
-    ];
+    const leftExpr = getAstExpr(step.node.left);
+    const rightExpr = getAstExpr(step.node.right);
+    return [leftExpr, rightExpr];
   }
+  
+  // For negation, return the negated expression
+  if (step.node.node === '¬') {
+    const childExpr = getAstExpr(step.node.child);
+    return [childExpr];
+  }
+  
   return [];
 }
