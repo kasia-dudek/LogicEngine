@@ -436,6 +436,67 @@ function renderStep(step, stepIndex, hoveredStepIndex, setHoveredStepIndex, getS
     );
   }
 
+  if (step.step.includes('Petrick: dystrybucja')) {
+    return (
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
+        <div className="space-y-3">
+          <InfoCallout color="indigo">
+            <div className="font-mono text-sm">{data.opis}</div>
+          </InfoCallout>
+          {data.remaining_minterms && (
+            <div>
+              <SectionTitle>Pozostałe mintermy</SectionTitle>
+              <div className="flex flex-wrap gap-2">
+                {data.remaining_minterms.map((m, i) => (
+                  <span key={i} className="font-mono bg-gray-100 px-2 py-1 rounded border text-sm">m{m}</span>
+                ))}
+              </div>
+            </div>
+          )}
+          {data.pi_choices && (
+            <div>
+              <SectionTitle>Wybory PI dla każdego mintermu</SectionTitle>
+              <div className="space-y-2">
+                {data.pi_choices.map((pis, i) => (
+                  <div key={i} className="bg-purple-50 border border-purple-200 rounded-lg p-2">
+                    <div className="text-xs text-purple-700 font-semibold mb-1">Minterm m{data.remaining_minterms[i]}:</div>
+                    <div className="flex flex-wrap gap-2">
+                      {pis.map((pi, j) => (
+                        <span key={j} className="font-mono text-sm text-purple-800">{pi}</span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </StepCard>
+    );
+  }
+
+  if (step.step.includes('Petrick: absorpcja')) {
+    return (
+      <StepCard 
+        title={step.step} 
+        showInfo={true}
+        onInfoHover={() => setHoveredStepIndex(stepIndex)}
+        onInfoLeave={() => setHoveredStepIndex(null)}
+        tooltipContent={isHovered ? explanation : null}
+      >
+        <InfoCallout color="green">
+          <div className="font-mono text-sm">{data.opis}</div>
+        </InfoCallout>
+      </StepCard>
+    );
+  }
+
   if (step.step.includes('Minimalne pokrycie')) {
     return (
       <StepCard 
@@ -533,6 +594,14 @@ export default function QMSteps({ steps, error }) {
     
     if (stepName.includes('Implikanty istotne') || stepName.includes('Zasada implikanty')) {
       return "Implikanty istotne to te, które są jedynym pokryciem pewnego mintermu. Muszą być uwzględnione w ostatecznym rozwiązaniu.";
+    }
+    
+    if (stepName.includes('Petrick: dystrybucja')) {
+      return "Formuła Petricka to iloczyn sum reprezentujący wszystkie możliwe pokrycia pozostałych mintermów. Każda suma w iloczynie reprezentuje PI, które pokrywają dany minterm.";
+    }
+    
+    if (stepName.includes('Petrick: absorpcja')) {
+      return "Na tym etapie znajdujemy minimalny iloczyn z formuły Petricka, co odpowiada najmniejszemu pokryciu pozostałych mintermów.";
     }
     
     if (stepName.includes('Minimalne pokrycie')) {
