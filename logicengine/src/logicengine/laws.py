@@ -433,7 +433,7 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         new_args.append(CONST(0))
                         replaced = True
                     else:
-                new_args.append(a)
+                        new_args.append(a)
                 else:
                     new_args.append(a)
             if replaced:
