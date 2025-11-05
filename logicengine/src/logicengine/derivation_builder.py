@@ -1565,15 +1565,7 @@ def build_absorb_steps(
 def _extract_lits_from_term(term: Any) -> List[Tuple[str, bool]]:
     """Extract list of (var, polarity) from a term node."""
     if not isinstance(term, dict):
-        # Single literal
-        if term.get("op") == "VAR":
-            return [(term.get("name"), True)]
-        elif term.get("op") == "NOT":
-            child = term.get("child")
-            if isinstance(child, dict) and child.get("op") == "VAR":
-                return [(child.get("name"), False)]
-        elif term.get("op") == "CONST":
-            return []  # Constants don't have literals
+        # Not a dict - can't be a term node
         return []
     
     op = term.get("op")

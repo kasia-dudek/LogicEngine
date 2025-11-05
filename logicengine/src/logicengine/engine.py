@@ -331,7 +331,6 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     
                     # If not minimal, apply absorption iteratively until minimal DNF is reached
                     if current_canon_after_laws != qm_result_canon_check or current_measure_after_laws[0] > qm_measure_check[0]:
-                        print(f"DEBUG: Expression not minimal after laws. Current: {current_canon_after_laws} (literals={current_measure_after_laws[0]}), QM: {qm_result_canon_check} (literals={qm_measure_check[0]})")
                         # Iteratively apply absorption until we reach minimal DNF
                         max_absorb_iterations = 20
                         for absorb_iteration in range(max_absorb_iterations):
@@ -340,12 +339,10 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             current_measure_iter = measure(current_ast)
                             if current_canon_iter == qm_result_canon_check and current_measure_iter[0] <= qm_measure_check[0]:
                                 # Reached minimal DNF
-                                print(f"DEBUG: Reached minimal DNF after {absorb_iteration} absorption iterations")
                                 break
                             
                             # Apply absorption
                             absorb_steps = build_absorb_steps(current_ast, vars_list, selected_pi, pi_to_minterms)
-                            print(f"DEBUG: Iteration {absorb_iteration}, absorb_steps: {len(absorb_steps)}")
                             if absorb_steps:
                                 steps.extend(absorb_steps)
                                 current_ast = generate_ast(absorb_steps[-1].after_str)
@@ -359,7 +356,6 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                     current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
                             else:
                                 # No more absorption steps can be generated
-                                print(f"DEBUG: No more absorption steps found at iteration {absorb_iteration}, current: {current_canon_iter}")
                                 break
                         
                         # After iterative absorption, update current_ast to reflect final state
