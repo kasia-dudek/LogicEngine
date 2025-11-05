@@ -362,6 +362,14 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         if steps:
                             current_ast = generate_ast(steps[-1].after_str)
                             current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                            
+                            # Verify that we actually reached minimal DNF after absorption
+                            # If not, we need to continue in the next section
+                            final_canon_after_absorb = canonical_str(current_ast)
+                            final_measure_after_absorb = measure(current_ast)
+                            if final_canon_after_absorb != qm_result_canon_check or final_measure_after_absorb[0] > qm_measure_check[0]:
+                                # Not minimal yet - will continue in next section
+                                pass
             
             laws_result_str = None
             if steps:
