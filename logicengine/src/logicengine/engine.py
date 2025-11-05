@@ -486,6 +486,29 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 except Exception:
                     laws_completed = False
             
+            # Even if laws_completed is True, we need to verify that the result is actually minimal
+            # and continue with absorption if it's not
+            # Get current AST from steps to check minimality
+            if laws_completed and steps:
+                # Check if the last step is actually minimal
+                last_ast_check = generate_ast(steps[-1].after_str)
+                last_ast_check = normalize_bool_ast(last_ast_check, expand_imp_iff=True)
+                last_canon_check = canonical_str(last_ast_check)
+                last_measure_check = measure(last_ast_check)
+                
+                qm_result_str_check = qm_result.get("result", "")
+                qm_result_ast_check = generate_ast(qm_result_str_check)
+                qm_result_ast_check = normalize_bool_ast(qm_result_ast_check, expand_imp_iff=True)
+                qm_result_canon_check = canonical_str(qm_result_ast_check)
+                qm_measure_check = measure(qm_result_ast_check)
+                
+                # If not minimal, continue with absorption
+                if last_canon_check != qm_result_canon_check or last_measure_check[0] > qm_measure_check[0]:
+                    # Not minimal - reset laws_completed and continue
+                    laws_completed = False
+                    # Set current_ast for continuation
+                    current_ast = last_ast_check
+            
             # If laws didn't complete, we need to build steps from scratch
             # This can happen when laws_result is not in DNF format
             # BUT: Skip if input is already minimal DNF (checked above)
