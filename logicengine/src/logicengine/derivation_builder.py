@@ -905,10 +905,10 @@ def build_merge_steps(
                         before_subexpr_3 = parsed_ast_bool
                         # Compute after_subexpr by removing CONST(1)
                         args = parsed_ast_bool.get("args", [])
-                        new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
-                        if len(new_args) == 1:
-                            after_subexpr_3 = new_args[0]
-                        else:
+                    new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    if len(new_args) == 1:
+                        after_subexpr_3 = new_args[0]
+                    else:
                             after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
                         # Find path in working_ast for highlighting (approximate)
                         neutral_path = None
@@ -919,7 +919,7 @@ def build_merge_steps(
                                 if after_subexpr_3:
                                     if canonical_str(sub) == canonical_str(after_subexpr_3):
                                         neutral_path = path
-                                        break
+                    break
                 except Exception:
                     # If parsing fails, continue with original logic
                     pass
@@ -941,45 +941,72 @@ def build_merge_steps(
                 # This shouldn't happen, but if it does, skip this step
                 return steps
         
-        # Use pretty_with_tokens_no_norm to avoid normalization
-        # This ensures before_subexpr shows A∧1 (not just A)
-        before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3)
+        # Generate before_subexpr string: should show A∧¬B∧1
+        # First, try to get the string from after_str_2 which contains "∧1"
+        # This is similar to how "Neutralny (∨0)" uses before_subexpr="0" directly
+        before_subexpr_str_3 = None
+        if "∧1" in after_str_2:
+            # Find the expression containing "∧1" that matches our before_subexpr_3
+            import re
+            # Pattern: find expressions like (A∧¬B∧1) or A∧¬B∧1 (with or without parentheses)
+            pattern = r'\([^()]*∧1[^()]*\)'
+            matches = re.findall(pattern, after_str_2)
+            if matches:
+                # Try to find a match that contains our subexpr (without "1")
+                # Get the string representation of before_subexpr_3 without CONST(1)
+                if isinstance(before_subexpr_3, dict) and before_subexpr_3.get("op") == "AND":
+                    args = before_subexpr_3.get("args", [])
+                    non_const_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    if non_const_args:
+                        # Build AND node from non_const_args
+                        if len(non_const_args) == 1:
+                            before_subexpr_without_1 = non_const_args[0]
+                        else:
+                            before_subexpr_without_1 = {"op": "AND", "args": non_const_args}
+                        before_subexpr_without_1_str = pretty(before_subexpr_without_1)
+                        
+                        # Find match that contains this pattern
+                        for match in matches:
+                            match_without_1 = match.replace("∧1", "").replace("1∧", "")
+                            # Remove parentheses and compare
+                            if match_without_1.replace("(", "").replace(")", "") == before_subexpr_without_1_str.replace("(", "").replace(")", ""):
+                                before_subexpr_str_3 = match
+                                break
         
-        # Double-check that the string contains "1"
-        # If it doesn't, try to extract it from after_str_2 (which should contain "∧1")
-        if "1" not in before_subexpr_str_3:
-            # before_subexpr_3 structure doesn't contain CONST(1) - this can happen
-            # if the structure was modified. Try to find the matching fragment in after_str_2
-            # that contains "∧1"
-            
-            # First, try to reconstruct from structure by adding CONST(1)
+        # If we didn't find it in after_str_2, try to reconstruct from structure
+        if not before_subexpr_str_3:
+            # Try to reconstruct from structure by adding CONST(1)
             if isinstance(before_subexpr_3, dict) and before_subexpr_3.get("op") == "AND":
                 args = before_subexpr_3.get("args", [])
                 non_const_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
                 # Reconstruct with CONST(1) explicitly added
                 before_subexpr_3_reconstructed = {"op": "AND", "args": non_const_args + [CONST(1)]}
-                before_subexpr_str_3_reconstructed, _ = pretty_with_tokens_no_norm(before_subexpr_3_reconstructed)
+                before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3_reconstructed)
                 
-                # If reconstructed string contains "1", use it
-                if "1" in before_subexpr_str_3_reconstructed:
-                    before_subexpr_3 = before_subexpr_3_reconstructed
-                    before_subexpr_str_3 = before_subexpr_str_3_reconstructed
-                else:
-                    # Last resort: try to find fragment in after_str_2 that matches
-                    # Find subexpressions that contain "∧1" and match our subexpr pattern
-                    import re
-                    # Pattern: find expressions like (A∧¬B∧1) or similar
-                    pattern = r'\([^)]*∧1[^)]*\)'
-                    matches = re.findall(pattern, after_str_2)
-                    if matches:
-                        # Try to find a match that contains our subexpr (without "1")
-                        for match in matches:
-                            # Remove "∧1" from match and check if it matches before_subexpr_str_3
-                            match_without_1 = match.replace("∧1", "").replace("1∧", "")
-                            if match_without_1.replace("(", "").replace(")", "") == before_subexpr_str_3.replace("(", "").replace(")", ""):
-                                before_subexpr_str_3 = match
-                                break
+                # Verify it contains "1"
+                if "1" not in before_subexpr_str_3:
+                    # Last resort: use pretty() which should preserve CONST(1)
+                    before_subexpr_str_3 = pretty(before_subexpr_3_reconstructed)
+            else:
+                # Fallback: use pretty_with_tokens_no_norm
+                before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3)
         
+        # Verify that before_subexpr_str_3 contains "1"
+        if "1" not in before_subexpr_str_3:
+            # Final fallback: construct manually from after_subexpr_3
+            if after_subexpr_3:
+                after_subexpr_str_3_temp, _ = pretty_with_tokens_no_norm(after_subexpr_3)
+                # Add "∧1" to the end
+                before_subexpr_str_3 = f"{after_subexpr_str_3_temp}∧1"
+            else:
+                # Last resort: use pretty() on reconstructed
+                if isinstance(before_subexpr_3, dict) and before_subexpr_3.get("op") == "AND":
+                    args = before_subexpr_3.get("args", [])
+                    non_const_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    before_subexpr_3_reconstructed = {"op": "AND", "args": non_const_args + [CONST(1)]}
+                    before_subexpr_str_3 = pretty(before_subexpr_3_reconstructed)
+        
+        # Generate after_subexpr string
         if after_subexpr_3:
             after_subexpr_str_3, _ = pretty_with_tokens_no_norm(after_subexpr_3)
         else:
