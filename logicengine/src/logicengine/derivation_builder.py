@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 from typing import Any, List, Tuple, Dict, Optional
 from .steps import Step, RuleName
 from .ast import generate_ast, canonical_str, normalize_bool_ast, canonical_str_minimal, pretty_with_spans
@@ -855,23 +856,29 @@ def build_merge_steps(
         before_canon_3 = after_canon_2  # Use after_canon_2 from step 2
         
         # Find the AND node with CONST(1) before applying the transformation
+        # IMPORTANT: We need to find it in working_ast BEFORE normalization
+        # because normalize_bool_ast might remove CONST(1) via neutral element rule
         before_subexpr_3 = None
         after_subexpr_3 = None
         neutral_path = None
         
-        for path, sub in iter_nodes(working_ast):
+        # Deep copy working_ast to avoid modifying it during search
+        working_ast_copy = copy.deepcopy(working_ast)
+        
+        for path, sub in iter_nodes(working_ast_copy):
             if isinstance(sub, dict) and sub.get("op") == "AND":
                 args = sub.get("args", [])
                 has_const_1 = any(isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1 for arg in args)
                 if has_const_1:
-                    before_subexpr_3 = sub
+                    # Store the original node with CONST(1) - this is what we want to show
+                    before_subexpr_3 = copy.deepcopy(sub)
                     neutral_path = path
-                    # Compute what it will become
+                    # Compute what it will become (remove CONST(1))
                     new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
                     if len(new_args) == 1:
-                        after_subexpr_3 = new_args[0]
+                        after_subexpr_3 = copy.deepcopy(new_args[0])
                     else:
-                        after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
+                        after_subexpr_3 = {"op": "AND", "args": copy.deepcopy(new_args)} if new_args else None
                     break
         
         # If we didn't find an AND with CONST(1), skip this step
