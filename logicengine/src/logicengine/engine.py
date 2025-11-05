@@ -691,21 +691,46 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         qm_result_ast = generate_ast(qm_result_str)
                         qm_result_ast = normalize_bool_ast(qm_result_ast, expand_imp_iff=True)
                         qm_result_canon = canonical_str(qm_result_ast)
+                        current_measure = measure(current_ast)
+                        qm_measure = measure(qm_result_ast)
                         
                         # If they're different, we need to generate steps to simplify
-                        if current_canon != qm_result_canon:
-                            # Try to generate steps using minterm expansion and absorption
-                            # This handles cases where we can factor terms or absorb redundant ones
+                        if current_canon != qm_result_canon or current_measure[0] > qm_measure[0]:
+                            # Try to generate steps using iterative absorption
+                            # This handles cases where we can absorb redundant terms
                             working_ast = current_ast
                             
-                            # Try absorption first (simpler, more direct)
-                            absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
-                            if absorb_steps:
-                                steps.extend(absorb_steps)
-                                # Update working_ast
-                                working_ast = generate_ast(absorb_steps[-1].after_str)
-                                working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                                current_canon = canonical_str(working_ast)
+                            # Iteratively apply absorption until we reach minimal DNF
+                            max_absorb_iterations = 20
+                            for absorb_iteration in range(max_absorb_iterations):
+                                # Check if we've reached minimal DNF
+                                current_canon_iter = canonical_str(working_ast)
+                                current_measure_iter = measure(working_ast)
+                                if current_canon_iter == qm_result_canon and current_measure_iter[0] <= qm_measure[0]:
+                                    # Reached minimal DNF
+                                    break
+                                
+                                # Try absorption
+                                absorb_steps = build_absorb_steps(working_ast, vars_list, selected_pi, pi_to_minterms)
+                                if absorb_steps:
+                                    steps.extend(absorb_steps)
+                                    # Update working_ast
+                                    working_ast = generate_ast(absorb_steps[-1].after_str)
+                                    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                                    
+                                    # Remove contradictions that may have been created
+                                    contradiction_steps = build_contradiction_steps(working_ast, vars_list)
+                                    if contradiction_steps:
+                                        steps.extend(contradiction_steps)
+                                        working_ast = generate_ast(contradiction_steps[-1].after_str)
+                                        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                                else:
+                                    # No more absorption steps can be generated
+                                    break
+                            
+                            # Update current_ast to final state
+                            current_ast = working_ast
+                            current_canon = canonical_str(working_ast)
                             
                             # If still not minimal, generate merge_edges from QM selected_pi
                             # This allows us to use build_merge_steps even when QM didn't provide merge_edges
