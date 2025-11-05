@@ -911,14 +911,14 @@ def build_merge_steps(
                     else:
                             after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
                         # Find path in working_ast for highlighting (approximate)
-                        neutral_path = None
-                        for path, sub in iter_nodes(working_ast):
-                            if isinstance(sub, dict) and sub.get("op") == "AND":
-                                sub_args = sub.get("args", [])
+                        # neutral_path = None
+                        # for path, sub in iter_nodes(working_ast):
+                        # if isinstance(sub, dict) and sub.get("op") == "AND":
+                        # sub_args = sub.get("args", [])
                                 # Check if this AND matches our after_subexpr (without CONST(1))
-                                if after_subexpr_3:
-                                    if canonical_str(sub) == canonical_str(after_subexpr_3):
-                                        neutral_path = path
+                        # if after_subexpr_3:
+                        # if canonical_str(sub) == canonical_str(after_subexpr_3):
+                        # neutral_path = path
                     break
                 except Exception:
                     # If parsing fails, continue with original logic
