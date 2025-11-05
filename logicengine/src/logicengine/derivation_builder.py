@@ -847,23 +847,22 @@ def build_merge_steps(
         }
         step2 = Step(**step2_dict)
         steps.append(step2)
-        # Store the flattened version for continuity with next step
-        working_ast = after_ast_2_flattened
         
         # STEP 3: Neutral element: X ∧ 1 ⇒ X
         # IMPORTANT: before_str_3 must equal after_str_2 (continuity)
         before_str_3 = after_str_2  # Use after_str_2 from step 2 to ensure continuity
         before_canon_3 = after_canon_2  # Use after_canon_2 from step 2
         
-        # Find the AND node with CONST(1) before applying the transformation
-        # IMPORTANT: We need to find it in working_ast (which is after_ast_2_flattened)
-        # This should contain CONST(1) from step 2 (tautology)
+        # Find the AND node with CONST(1) BEFORE flattening
+        # Use after_ast_2 (not after_ast_2_flattened) to find the node with CONST(1)
+        # because _flatten_only might have changed the structure
         before_subexpr_3 = None
         after_subexpr_3 = None
         neutral_path = None
         
-        # Search in working_ast for AND node with CONST(1)
-        for path, sub in iter_nodes(working_ast):
+        # Search in after_ast_2 (before flatten) for AND node with CONST(1)
+        # This ensures we find the node with CONST(1) in its original structure
+        for path, sub in iter_nodes(after_ast_2):
             if isinstance(sub, dict) and sub.get("op") == "AND":
                 args = sub.get("args", [])
                 has_const_1 = any(isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1 for arg in args)
@@ -871,6 +870,7 @@ def build_merge_steps(
                     # Store the original node with CONST(1) - this is what we want to show
                     # Use deep copy to preserve the structure with CONST(1)
                     before_subexpr_3 = copy.deepcopy(sub)
+                    # Find the corresponding path in the flattened version for later use
                     neutral_path = path
                     # Compute what it will become (remove CONST(1))
                     new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
@@ -879,6 +879,9 @@ def build_merge_steps(
                     else:
                         after_subexpr_3 = {"op": "AND", "args": copy.deepcopy(new_args)} if new_args else None
                     break
+        
+        # Store the flattened version for continuity with next step
+        working_ast = after_ast_2_flattened
         
         # If we didn't find an AND with CONST(1), skip this step
         if not before_subexpr_3 or not neutral_path:
