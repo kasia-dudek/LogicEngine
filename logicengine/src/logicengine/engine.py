@@ -488,6 +488,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 # Build user-visible algebraic steps from QM plan
                 # Get current AST from last step's after string
                 # Note: current_ast may already be set after iterative absorption above
+                # But if iterative absorption didn't complete, we need to continue here
                 if current_ast is None:
                     if steps:
                         current_expr = steps[-1].after_str
@@ -497,6 +498,15 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                         # No laws steps, start from initial normalized AST
                         # Don't use laws_result.get("normalized_ast") as it might already have factorization applied
                         current_ast = node
+                else:
+                    # current_ast is already set from iterative absorption above
+                    # But we need to verify it's the latest state
+                    if steps:
+                        current_expr = steps[-1].after_str
+                        current_ast_check = generate_ast(current_expr)
+                        current_ast_check = normalize_bool_ast(current_ast_check, expand_imp_iff=True)
+                        # Use the latest state from steps
+                        current_ast = current_ast_check
                 
                 # Check if expression is already minimal DNF before generating steps
                 current_is_dnf = is_dnf(current_ast)
