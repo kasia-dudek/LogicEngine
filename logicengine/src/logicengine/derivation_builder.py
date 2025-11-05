@@ -8,7 +8,8 @@ from .steps import Step, RuleName
 from .ast import generate_ast, canonical_str, normalize_bool_ast, canonical_str_minimal, pretty_with_spans
 from .utils import truth_table_hash
 from .laws import VAR, NOT, AND, OR, CONST, to_lit, lit_to_node, term_from_lits, canonical_lits, iter_nodes, set_by_path
-from .laws import canon, pretty, pretty_with_tokens, find_subtree_span_by_path
+from .laws import canon, pretty, pretty_with_tokens, find_subtree_span_by_path_cp, term_is_contradictory
+from .laws import _pretty_with_tokens_internal
 
 
 def is_dnf(ast: Any) -> bool:
@@ -24,6 +25,273 @@ def is_dnf(ast: Any) -> bool:
         return _is_product_of_literals(ast)
     else:
         return op in ["VAR", "CONST", "NOT"]
+
+
+def convert_to_dnf_with_laws(ast: Any, vars_list: List[str]) -> Tuple[Any, List[Step]]:
+    """
+    Convert AST to DNF using logical laws (distribution) step by step.
+    Returns (dnf_ast, steps).
+    """
+    steps: List[Step] = []
+    working_ast = ast
+    
+    # Keep applying distribution until we reach DNF
+    max_iterations = 50
+    for iteration in range(max_iterations):
+        if is_dnf(working_ast):
+            break
+        
+        # Find AND nodes that contain OR (these need distribution)
+        # Pattern: AND(..., OR(...), ...) → distribute OR over other AND args
+        distribution_applied = False
+        
+        for path, node in iter_nodes(working_ast):
+            if isinstance(node, dict) and node.get("op") == "AND":
+                args = node.get("args", [])
+                
+                # Find OR argument
+                or_idx = None
+                or_node = None
+                for idx, arg in enumerate(args):
+                    if isinstance(arg, dict) and arg.get("op") == "OR":
+                        or_idx = idx
+                        or_node = arg
+                        break
+                
+                if or_idx is not None and or_node is not None:
+                    # Found AND with OR argument - apply distribution
+                    # A∧(B∨C) → (A∧B)∨(A∧C)
+                    or_args = or_node.get("args", [])
+                    other_and_args = [arg for i, arg in enumerate(args) if i != or_idx]
+                    
+                    # Create distributed terms: (A∧B), (A∧C), ...
+                    distributed_terms = []
+                    for or_arg in or_args:
+                        # Combine or_arg with other_and_args
+                        new_term_args = [or_arg] + other_and_args
+                        if len(new_term_args) == 1:
+                            distributed_terms.append(new_term_args[0])
+                        else:
+                            distributed_terms.append({"op": "AND", "args": new_term_args})
+                    
+                    # Create OR of distributed terms
+                    distributed_result = {"op": "OR", "args": distributed_terms} if len(distributed_terms) > 1 else distributed_terms[0]
+                    
+                    # Generate step
+                    before_str, _ = pretty_with_tokens(working_ast)
+                    before_canon = canonical_str(working_ast)
+                    
+                    # Calculate subexpressions
+                    before_subexpr = node
+                    after_subexpr = distributed_result
+                    before_subexpr_str = pretty(before_subexpr)
+                    after_subexpr_str = pretty(after_subexpr)
+                    before_subexpr_canon = canonical_str(before_subexpr)
+                    after_subexpr_canon = canonical_str(after_subexpr)
+                    
+                    # Calculate spans
+                    before_highlight_spans_cp = []
+                    before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                    if before_span:
+                        before_highlight_spans_cp.append((before_span["start"], before_span["end"]))
+                    
+                    working_ast_temp = set_by_path(working_ast, path, distributed_result)
+                    working_ast_temp = normalize_bool_ast(working_ast_temp, expand_imp_iff=True)
+                    
+                    contradiction_steps = build_contradiction_steps(working_ast_temp, vars_list)
+                    if contradiction_steps:
+                        working_ast = generate_ast(contradiction_steps[-1].after_str)
+                        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                    else:
+                        working_ast = working_ast_temp
+                    
+                    after_str, _ = pretty_with_tokens(working_ast)
+                    after_canon = canonical_str(working_ast)
+                    
+                    # After: find the distributed result fragment in the AST
+                    # distributed_result is OR of terms like [(A∧B), (A∧C)]
+                    # We want to highlight the entire fragment (A∧B)∨(A∧C) in the after_str
+                    after_highlight_spans_cp = []
+                    
+                    # Strategy: First try to find after_subexpr as a complete subtree in working_ast
+                    # using canonical comparison
+                    after_subexpr_normalized = normalize_bool_ast(after_subexpr, expand_imp_iff=True)
+                    after_subexpr_canon_search = canonical_str(after_subexpr_normalized)
+                    
+                    found_after_subexpr = False
+                    for after_path, after_node in iter_nodes(working_ast):
+                        after_node_canon = canonical_str(after_node)
+                        if after_node_canon == after_subexpr_canon_search:
+                            # Found it - get span
+                            after_span = find_subtree_span_by_path_cp(after_path, working_ast)
+                            if after_span:
+                                # Extend span to include outer parentheses if needed
+                                span_start = after_span["start"]
+                                span_end = after_span["end"]
+                                
+                                # Check if after_subexpr is a simple node (VAR, CONST)
+                                is_simple_node = (
+                                    isinstance(after_subexpr_normalized, dict) and 
+                                    after_subexpr_normalized.get("op") in {"VAR", "CONST"}
+                                )
+                                
+                                if not is_simple_node:
+                                    # For complex nodes, extend span to include outer parentheses if needed
+                                    merged_start = span_start
+                                    for i in range(span_start - 1, -1, -1):
+                                        if after_str[i] == '(':
+                                            merged_start = i
+                                            break
+                                    
+                                    merged_end = span_end
+                                    for i in range(span_end, len(after_str)):
+                                        if after_str[i] == ')':
+                                            merged_end = i + 1
+                                            break
+                                    
+                                    after_highlight_spans_cp.append((merged_start, merged_end))
+                                else:
+                                    # For simple nodes, use the span directly without extending
+                                    after_highlight_spans_cp.append((span_start, span_end))
+                                found_after_subexpr = True
+                                break
+                    
+                    # If not found as complete subtree, try to find all terms from distributed_result
+                    # After normalization, distributed_result's terms may be scattered as separate OR arguments
+                    # We need to find all of them and combine their spans
+                    if not found_after_subexpr and isinstance(distributed_result, dict) and distributed_result.get("op") == "OR":
+                        distributed_terms = distributed_result.get("args", [])
+                        
+                        # Find all distributed terms in working_ast
+                        # They should be arguments of the root OR (or a parent OR)
+                        found_term_spans = []
+                        for dist_term in distributed_terms:
+                            dist_term_normalized = normalize_bool_ast(dist_term, expand_imp_iff=True)
+                            dist_term_canon = canonical_str(dist_term_normalized)
+                            
+                            # Search for this term in working_ast
+                            # It should be an argument of an OR node (preferably root OR)
+                            for after_path, after_node in iter_nodes(working_ast):
+                                after_node_canon = canonical_str(after_node)
+                                if after_node_canon == dist_term_canon:
+                                    # Check if it's an OR argument (not nested)
+                                    is_or_arg = False
+                                    if after_path:
+                                        # Check if parent is OR
+                                        parent_path = after_path[:-1]
+                                        parent_node = working_ast
+                                        for key, idx in parent_path:
+                                            if key == "args":
+                                                parent_node = parent_node["args"][idx]
+                                        if isinstance(parent_node, dict) and parent_node.get("op") == "OR":
+                                            is_or_arg = True
+                                    else:
+                                        # Root node - check if it's OR
+                                        if isinstance(working_ast, dict) and working_ast.get("op") == "OR":
+                                            is_or_arg = True
+                                    
+                                    if is_or_arg:
+                                        term_span = find_subtree_span_by_path_cp(after_path, working_ast)
+                                        if term_span:
+                                            # Extend span to include outer parentheses if needed
+                                            span_start = term_span["start"]
+                                            span_end = term_span["end"]
+                                            
+                                            # Find opening parenthesis before span
+                                            merged_start = span_start
+                                            for i in range(span_start - 1, -1, -1):
+                                                if after_str[i] == '(':
+                                                    merged_start = i
+                                                    break
+                                            
+                                            # Find closing parenthesis after span
+                                            merged_end = span_end
+                                            for i in range(span_end, len(after_str)):
+                                                if after_str[i] == ')':
+                                                    merged_end = i + 1
+                                                    break
+                                            
+                                            found_term_spans.append((merged_start, merged_end))
+                                        break
+                        
+                        # If we found all terms (or at least most of them), combine their spans
+                        # We need at least 2 terms to create a meaningful highlight
+                        if len(found_term_spans) >= min(2, len(distributed_terms)):
+                            # Sort by start position
+                            found_term_spans.sort(key=lambda s: s[0])
+                            
+                            # Merge spans to cover the entire fragment (A∧B)∨(A∧C)
+                            # Include opening parenthesis before first term and closing parenthesis after last term
+                            first_term_start = found_term_spans[0][0]
+                            last_term_end = found_term_spans[-1][1]
+                            
+                            # Find the opening parenthesis before the first term
+                            merged_start = first_term_start
+                            for i in range(first_term_start - 1, -1, -1):
+                                if after_str[i] == '(':
+                                    merged_start = i
+                                    break
+                            
+                            # Find the closing parenthesis after the last term
+                            merged_end = last_term_end
+                            for i in range(last_term_end, len(after_str)):
+                                if after_str[i] == ')':
+                                    merged_end = i + 1
+                                    break
+                            
+                            # The merged span should cover from opening ( to closing )
+                            # This includes the ∨ operators between terms
+                            after_highlight_spans_cp.append((merged_start, merged_end))
+                    else:
+                        # distributed_result is a single term (shouldn't happen, but handle it)
+                        distributed_result_normalized = normalize_bool_ast(distributed_result, expand_imp_iff=True)
+                        distributed_result_canon = canonical_str(distributed_result_normalized)
+                        
+                        for after_path, after_node in iter_nodes(working_ast):
+                            if canonical_str(after_node) == distributed_result_canon:
+                                after_span = find_subtree_span_by_path_cp(after_path, working_ast)
+                                if after_span:
+                                    after_highlight_spans_cp.append((after_span["start"], after_span["end"]))
+                                break
+                    
+                    # Fallback: if not found, try to find by path
+                    if not after_highlight_spans_cp:
+                        # The distributed_result should be at the same path where we replaced it
+                        # But after normalization, it might be at a different location
+                        # Try the original path first
+                        after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                        if after_span:
+                            after_highlight_spans_cp.append((after_span["start"], after_span["end"]))
+                    
+                    # Verify equivalence
+                    is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                    
+                    step = Step(
+                        before_str=before_str,
+                        after_str=after_str,
+                        rule="Dystrybutywność (A∧(B∨C))",
+                        category="user",
+                        schema="A∧(B∨C) → (A∧B)∨(A∧C)",
+                        location=path,
+                        proof={"method": "tt-hash", "equal": is_equal},
+                        before_canon=before_canon,
+                        after_canon=after_canon,
+                        before_subexpr=before_subexpr_str,
+                        after_subexpr=after_subexpr_str,
+                        before_subexpr_canon=before_subexpr_canon,
+                        after_subexpr_canon=after_subexpr_canon,
+                        before_highlight_spans_cp=before_highlight_spans_cp if before_highlight_spans_cp else None,
+                        after_highlight_spans_cp=after_highlight_spans_cp if after_highlight_spans_cp else None,
+                    )
+                    steps.append(step)
+                    distribution_applied = True
+                    break  # Restart search after each change
+        
+        if not distribution_applied:
+            # No more distributions possible - should be in DNF now
+            break
+    
+    return (working_ast, steps)
 
 
 def _is_product_of_literals(ast: Any) -> bool:
@@ -207,7 +475,7 @@ def build_minterm_expansion_steps(
         before_canon_1 = canonical_str(working_ast)
         
         # Calculate span for current_product_norm before transformation
-        before_highlight_span_1 = find_subtree_span_by_path(current_path, working_ast) if current_path else None
+        before_highlight_span_1 = find_subtree_span_by_path_cp(current_path, working_ast) if current_path else None
         
         expanded_product = AND([current_product_norm, var_or])
         
@@ -218,7 +486,7 @@ def build_minterm_expansion_steps(
         after_canon_1 = canonical_str(working_ast)
         
         # After: expanded_product is at current_path
-        after_highlight_span_1 = find_subtree_span_by_path(current_path, working_ast) if current_path else None
+        after_highlight_span_1 = find_subtree_span_by_path_cp(current_path, working_ast) if current_path else None
         
         # Verify TT equivalence
         is_equal_1 = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str_1))
@@ -259,7 +527,7 @@ def build_minterm_expansion_steps(
             return (working_ast, steps)
         
         # Calculate span for expanded_product before distribution
-        before_highlight_span_2 = find_subtree_span_by_path(distrib_path, working_ast) if distrib_path else None
+        before_highlight_span_2 = find_subtree_span_by_path_cp(distrib_path, working_ast) if distrib_path else None
         
         # Distribute
         working_ast = _distribute_term(
@@ -273,7 +541,7 @@ def build_minterm_expansion_steps(
         after_canon_2 = canonical_str(working_ast)
         
         # After: distributed result is at distrib_path (replaces expanded_product)
-        after_highlight_span_2 = find_subtree_span_by_path(distrib_path, working_ast) if distrib_path else None
+        after_highlight_span_2 = find_subtree_span_by_path_cp(distrib_path, working_ast) if distrib_path else None
         
         # Verify TT equivalence
         is_equal_2 = (truth_table_hash(vars_list, before_str_2) == truth_table_hash(vars_list, after_str_2))
@@ -442,11 +710,11 @@ def build_merge_steps(
         
         # Calculate spans using path-based lookup
         # For before: the OR node is at merge_path, so use that path directly
-        before_highlight_span = find_subtree_span_by_path(merge_path, working_ast) if before_subexpr else None
+        before_highlight_span = find_subtree_span_by_path_cp(merge_path, working_ast) if before_subexpr else None
         
         # For after: need to find the path to factored_node in after_ast_1
         # The factored node should be at merge_path in after_ast_1 (same location as OR was)
-        after_highlight_span = find_subtree_span_by_path(merge_path, after_ast_1) if after_subexpr else None
+        after_highlight_span = find_subtree_span_by_path_cp(merge_path, after_ast_1) if after_subexpr else None
         
         # Compute code-point spans using pretty_with_spans
         before_spans_cp = []
@@ -506,16 +774,23 @@ def build_merge_steps(
         }
         step1 = Step(**step1_dict)
         steps.append(step1)
-        working_ast = normalize_bool_ast(after_ast_1, expand_imp_iff=True)
+        # Don't normalize - use _flatten_only to preserve structure for next step
+        # Store the flattened version for continuity
+        working_ast = _flatten_only(after_ast_1)
         
         # STEP 2: Tautology: Y ∨ ¬Y ⇒ 1
-        before_str_2, _ = pretty_with_tokens(working_ast)
-        before_canon_2 = canonical_str(working_ast)
+        # IMPORTANT: before_str_2 must equal after_str_1 from step 1 (continuity)
+        before_str_2 = after_str_1  # Use after_str_1 from step 1 to ensure continuity
+        before_canon_2 = after_canon_1  # Use after_canon_1 from step 1
         
         after_ast_2 = _apply_tautology(working_ast, diff_var)
-        after_ast_2 = normalize_bool_ast(after_ast_2, expand_imp_iff=True)
-        after_str_2, _ = pretty_with_tokens(after_ast_2)
-        after_canon_2 = canonical_str(after_ast_2)
+        # Don't normalize yet - we want to show A∨(A∧1) as the result
+        # normalize_bool_ast would apply idempotence (A∨A → A) which is a separate law
+        # We'll only do minimal flattening to ensure structure is correct for pretty printing
+        after_ast_2_flattened = _flatten_only(after_ast_2)
+        # Use pretty_with_tokens_no_norm to avoid normalization that would deduplicate
+        after_str_2, _ = pretty_with_tokens_no_norm(after_ast_2_flattened)
+        after_canon_2 = canonical_str(after_ast_2_flattened)
         
         # Compute subexpression for highlighting
         diff_node_pos = VAR(diff_var)
@@ -534,10 +809,10 @@ def build_merge_steps(
         # The factored node is at merge_path, and diff_or is its second child (args[1])
         # So path is merge_path + [("args", 1)]
         diff_or_path = merge_path + [("args", 1)]
-        before_highlight_span_2 = find_subtree_span_by_path(diff_or_path, working_ast)
+        before_highlight_span_2 = find_subtree_span_by_path_cp(diff_or_path, working_ast)
         
         # For after: CONST(1) replaces diff_or at the same path
-        after_highlight_span_2 = find_subtree_span_by_path(diff_or_path, after_ast_2)
+        after_highlight_span_2 = find_subtree_span_by_path_cp(diff_or_path, after_ast_2)
         
         # Compute code-point spans for Tautology (single span before and after)
         before_spans_cp_2, before_text_2 = _find_spans_for_subtree(before_subexpr_2, working_ast) if before_subexpr_2 else ([], "")
@@ -574,11 +849,13 @@ def build_merge_steps(
         }
         step2 = Step(**step2_dict)
         steps.append(step2)
-        working_ast = after_ast_2
+        # Store the flattened version for continuity with next step
+        working_ast = after_ast_2_flattened
         
         # STEP 3: Neutral element: X ∧ 1 ⇒ X
-        before_str_3, _ = pretty_with_tokens(working_ast)
-        before_canon_3 = canonical_str(working_ast)
+        # IMPORTANT: before_str_3 must equal after_str_2 (continuity)
+        before_str_3 = after_str_2  # Use after_str_2 from step 2 to ensure continuity
+        before_canon_3 = after_canon_2  # Use after_canon_2 from step 2
         
         # Find the AND node with CONST(1) before applying the transformation
         before_subexpr_3 = None
@@ -605,23 +882,32 @@ def build_merge_steps(
             # Skip step 3 - no neutral element to remove
             return steps
         
-        before_subexpr_str_3 = pretty(before_subexpr_3)
-        after_subexpr_str_3 = pretty(after_subexpr_3) if after_subexpr_3 else None
+        # Use pretty_with_tokens_no_norm to avoid normalization
+        # This ensures before_subexpr shows A∧1 (not just A)
+        before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3)
+        if after_subexpr_3:
+            after_subexpr_str_3, _ = pretty_with_tokens_no_norm(after_subexpr_3)
+        else:
+            after_subexpr_str_3 = None
         before_subexpr_canon_3 = canonical_str(before_subexpr_3)
         after_subexpr_canon_3 = canonical_str(after_subexpr_3) if after_subexpr_3 else None
         
         # Use path-based span lookup
-        before_highlight_span_3 = find_subtree_span_by_path(neutral_path, working_ast)
+        before_highlight_span_3 = find_subtree_span_by_path_cp(neutral_path, working_ast)
         
         after_ast_3 = _apply_neutral(working_ast)
-        after_ast_3 = normalize_bool_ast(after_ast_3, expand_imp_iff=True)
-        after_str_3, _ = pretty_with_tokens(after_ast_3)
-        after_canon_3 = canonical_str(after_ast_3)
+        # Don't normalize yet - normalize_bool_ast would apply idempotence (A∨A → A)
+        # which is a separate law that should be in a separate step
+        # We'll only flatten to ensure structure is valid for pretty printing
+        after_ast_3_flattened = _flatten_only(after_ast_3)
+        # Use pretty_with_tokens_no_norm to avoid normalization that would deduplicate
+        after_str_3, _ = pretty_with_tokens_no_norm(after_ast_3_flattened)
+        after_canon_3 = canonical_str(after_ast_3_flattened)
         
         # For after: if after_subexpr_3 is a single element, it might be at the same path or a parent path
         # First try the same path (if it's still an AND with multiple args)
         if after_subexpr_3:
-            after_highlight_span_3 = find_subtree_span_by_path(neutral_path, after_ast_3)
+            after_highlight_span_3 = find_subtree_span_by_path_cp(neutral_path, after_ast_3)
             # If not found at same path, search for it (it might have been lifted to parent)
             if not after_highlight_span_3:
                 # Search for the node in after_ast_3 using structural comparison
@@ -629,7 +915,7 @@ def build_merge_steps(
                 for path, node in iter_nodes(after_ast_3):
                     node_canon = canonical_str(node)
                     if node_canon == after_subexpr_canon:
-                        after_highlight_span_3 = find_subtree_span_by_path(path, after_ast_3)
+                        after_highlight_span_3 = find_subtree_span_by_path_cp(path, after_ast_3)
                         break
                 # If still not found, try searching by matching the pretty string
                 if not after_highlight_span_3 and after_subexpr_str_3:
@@ -637,7 +923,7 @@ def build_merge_steps(
                     for path, node in iter_nodes(after_ast_3):
                         node_pretty = pretty(node)
                         if node_pretty == after_subexpr_pretty:
-                            after_highlight_span_3 = find_subtree_span_by_path(path, after_ast_3)
+                            after_highlight_span_3 = find_subtree_span_by_path_cp(path, after_ast_3)
                             break
         else:
             after_highlight_span_3 = None
@@ -677,7 +963,323 @@ def build_merge_steps(
         }
         step3 = Step(**step3_dict)
         steps.append(step3)
-        working_ast = after_ast_3
+        # Store the flattened version for continuity with next step
+        working_ast = after_ast_3_flattened
+        
+        # STEP 4: Idempotence (if needed): A ∨ A ⇒ A
+        # Check if we have A∨A after removing 1 from A∨(A∧1)
+        # This happens when after_step3 we have A∨A
+        # IMPORTANT: before_str_4 must equal after_str_3 (continuity)
+        before_str_4 = after_str_3  # Use after_str_3 from step 3 to ensure continuity
+        before_canon_4 = after_canon_3  # Use after_canon_3 from step 3
+        
+        # Check if we have an OR node with duplicate arguments
+        idempotence_applied = False
+        for path, sub in iter_nodes(working_ast):
+            if isinstance(sub, dict) and sub.get("op") == "OR":
+                args = sub.get("args", [])
+                # Check for duplicates using canonical comparison
+                seen_canon = set()
+                duplicates = []
+                for i, arg in enumerate(args):
+                    arg_canon = canonical_str(arg)
+                    if arg_canon in seen_canon:
+                        duplicates.append((i, arg, arg_canon))
+                    else:
+                        seen_canon.add(arg_canon)
+                
+                if duplicates:
+                    # Found duplicates - apply idempotence
+                    before_subexpr_4 = sub
+                    # Use pretty_with_tokens_no_norm to avoid normalization
+                    # This ensures before_subexpr shows A∨A (not just A)
+                    before_subexpr_str_4, _ = pretty_with_tokens_no_norm(before_subexpr_4)
+                    before_subexpr_canon_4 = canonical_str(before_subexpr_4)
+                    
+                    # Remove duplicates
+                    unique_args = []
+                    seen_canon_unique = set()
+                    for arg in args:
+                        arg_canon = canonical_str(arg)
+                        if arg_canon not in seen_canon_unique:
+                            unique_args.append(arg)
+                            seen_canon_unique.add(arg_canon)
+                    
+                    if len(unique_args) == 1:
+                        after_subexpr_4 = unique_args[0]
+                    else:
+                        after_subexpr_4 = {"op": "OR", "args": unique_args}
+                    
+                    # Use pretty_with_tokens_no_norm to avoid normalization
+                    # This ensures before_subexpr shows A∨A (not just A)
+                    after_subexpr_str_4, _ = pretty_with_tokens_no_norm(after_subexpr_4)
+                    after_subexpr_canon_4 = canonical_str(after_subexpr_4)
+                    
+                    # Apply idempotence
+                    after_ast_4 = set_by_path(working_ast, path, after_subexpr_4)
+                    after_ast_4 = _flatten_only(after_ast_4)  # Only flatten, don't dedupe again
+                    # Use pretty_with_tokens_no_norm to avoid normalization
+                    after_str_4, _ = pretty_with_tokens_no_norm(after_ast_4)
+                    after_canon_4 = canonical_str(after_ast_4)
+                    
+                    # Calculate spans
+                    before_highlight_span_4 = find_subtree_span_by_path_cp(path, working_ast)
+                    after_highlight_span_4 = find_subtree_span_by_path_cp(path, after_ast_4) if path else None
+                    if not after_highlight_span_4 and after_subexpr_4:
+                        # Search for after_subexpr_4 in after_ast_4
+                        after_subexpr_canon_search = canonical_str(after_subexpr_4)
+                        for after_path, after_node in iter_nodes(after_ast_4):
+                            if canonical_str(after_node) == after_subexpr_canon_search:
+                                after_highlight_span_4 = find_subtree_span_by_path_cp(after_path, after_ast_4)
+                                break
+                    
+                    # Compute code-point spans
+                    before_spans_cp_4, before_text_4 = _find_spans_for_subtree(before_subexpr_4, working_ast) if before_subexpr_4 else ([], "")
+                    after_spans_cp_4, after_text_4 = _find_spans_for_subtree(after_subexpr_4, after_ast_4) if after_subexpr_4 else ([], "")
+                    before_focus_texts_4 = _extract_focus_text(before_text_4, before_spans_cp_4) if before_text_4 else []
+                    after_focus_texts_4 = _extract_focus_text(after_text_4, after_spans_cp_4) if after_text_4 else []
+                    
+                    # Verify TT equivalence
+                    is_equal_4 = (truth_table_hash(vars, before_str_4) == truth_table_hash(vars, after_str_4))
+                    
+                    step4_dict = {
+                        "before_str": before_str_4,
+                        "after_str": after_str_4,
+                        "rule": "Idempotencja (∨)",
+                        "category": "user",
+                        "schema": "A ∨ A ⇒ A",
+                        "location": path,
+                        "details": {"step_num": 4},
+                        "proof": {"method": "tt-hash", "equal": is_equal_4},
+                        "before_canon": before_canon_4,
+                        "after_canon": after_canon_4,
+                        "before_subexpr": before_subexpr_str_4,
+                        "after_subexpr": after_subexpr_str_4,
+                        "before_subexpr_canon": before_subexpr_canon_4,
+                        "after_subexpr_canon": after_subexpr_canon_4,
+                        "before_span": before_highlight_span_4,
+                        "after_span": after_highlight_span_4,
+                        "before_highlight_span": before_highlight_span_4,
+                        "after_highlight_span": after_highlight_span_4,
+                        "before_highlight_spans_cp": before_spans_cp_4 if before_spans_cp_4 else None,
+                        "after_highlight_spans_cp": after_spans_cp_4 if after_spans_cp_4 else None,
+                        "before_focus_texts": before_focus_texts_4 if before_focus_texts_4 else None,
+                        "after_focus_texts": after_focus_texts_4 if after_focus_texts_4 else None
+                    }
+                    step4 = Step(**step4_dict)
+                    steps.append(step4)
+                    working_ast = after_ast_4
+                    idempotence_applied = True
+                    break
+        
+        if not idempotence_applied:
+            # No idempotence needed - we're done
+            pass
+    
+    return steps
+
+
+def build_contradiction_steps(
+    ast: Any,
+    vars_list: List[str]
+) -> List[Step]:
+    """
+    Build steps to remove contradictory terms (A∧¬A = 0) from DNF expression.
+    
+    Uses Boolean laws:
+    1. Kontradykcja: (A∧...∧¬A∧...) = 0 (replace contradictory term with 0)
+    2. Element neutralny (A∨0): Remove 0 from OR (A∨0 = A)
+    
+    This function should be called early in the simplification process to remove
+    contradictions immediately, before other rules are applied.
+    """
+    steps: List[Step] = []
+    working_ast = ast
+    
+    # Stabilization loop: keep applying until no more changes
+    max_iterations = 50
+    changed = True
+    
+    for iteration in range(max_iterations):
+        if not changed:
+            break
+        
+        changed = False
+        
+        # Find OR nodes to check for contradictory terms
+        for path, sub in iter_nodes(working_ast):
+            if not (isinstance(sub, dict) and sub.get("op") == "OR"):
+                continue
+            
+            args = sub.get("args", [])
+            if len(args) == 0:
+                continue
+            
+            new_args = []
+            has_contradiction = False
+            
+            for arg in args:
+                if isinstance(arg, dict) and arg.get("op") == "AND":
+                    and_args = arg.get("args", [])
+                    lits = [to_lit(x) for x in and_args]
+                    lits_filtered = [t for t in lits if t is not None]
+                    
+                    if len(lits_filtered) > 0 and term_is_contradictory(lits_filtered):
+                        has_contradiction = True
+                        changed = True
+                    else:
+                        new_args.append(arg)
+                else:
+                    new_args.append(arg)
+            
+            if has_contradiction:
+                before_str, _ = pretty_with_tokens(working_ast)
+                before_canon = canonical_str(working_ast)
+                
+                before_highlight_spans_cp = []
+                contradictory_terms = []
+                for arg in args:
+                    if isinstance(arg, dict) and arg.get("op") == "AND":
+                        and_args = arg.get("args", [])
+                        lits = [to_lit(x) for x in and_args]
+                        lits_filtered = [t for t in lits if t is not None]
+                        if len(lits_filtered) > 0 and term_is_contradictory(lits_filtered):
+                            contradictory_terms.append(arg)
+                
+                for term in contradictory_terms:
+                    for term_path, term_node in iter_nodes(working_ast):
+                        if isinstance(term_node, dict) and canonical_str(term_node) == canonical_str(term):
+                            term_span = find_subtree_span_by_path_cp(term_path, working_ast)
+                            if term_span:
+                                before_highlight_spans_cp.append((term_span["start"], term_span["end"]))
+                            break
+                
+                # Remove contradictory terms (they become 0, which will be removed)
+                # If all terms are contradictory, result is CONST(0)
+                if len(new_args) == 0:
+                    after_ast = CONST(0)
+                elif len(new_args) == 1:
+                    after_ast = new_args[0]
+                else:
+                    after_ast = {"op": "OR", "args": new_args}
+                
+                # Now remove CONST(0) if present (element neutralny)
+                if isinstance(after_ast, dict) and after_ast.get("op") == "OR":
+                    final_args = []
+                    has_zero = False
+                    for arg in after_ast.get("args", []):
+                        if isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 0:
+                            has_zero = True
+                            # Don't add 0 (will be removed)
+                        else:
+                            final_args.append(arg)
+                    
+                    if has_zero:
+                        # Remove 0: element neutralny step
+                        if len(final_args) == 0:
+                            after_ast = CONST(0)
+                        elif len(final_args) == 1:
+                            after_ast = final_args[0]
+                        else:
+                            after_ast = {"op": "OR", "args": final_args}
+                
+                after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                after_str, _ = pretty_with_tokens(after_ast)
+                after_canon = canonical_str(after_ast)
+                
+                # Calculate subexpressions
+                before_subexpr_str = " ∨ ".join([pretty(t) for t in contradictory_terms])
+                after_subexpr_str = "0" if len(contradictory_terms) > 0 else pretty(after_ast)
+                
+                # Calculate after highlight spans (should be empty or show 0 being removed)
+                after_highlight_spans_cp = []
+                
+                # Create step
+                step = Step(
+                    rule="Kontradykcja",
+                    before_str=before_str,
+                    after_str=after_str,
+                    before_canon=before_canon,
+                    after_canon=after_canon,
+                    before_subexpr=before_subexpr_str,
+                    after_subexpr=after_subexpr_str,
+                    before_subexpr_canon=canonical_str(contradictory_terms[0]) if contradictory_terms else "",
+                    after_subexpr_canon="0",
+                    before_highlight_spans_cp=before_highlight_spans_cp if len(before_highlight_spans_cp) > 0 else None,
+                    after_highlight_spans_cp=after_highlight_spans_cp if len(after_highlight_spans_cp) > 0 else None,
+                )
+                steps.append(step)
+                
+                if path:
+                    working_ast = set_by_path(working_ast, path, after_ast)
+                else:
+                    working_ast = after_ast
+                working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                
+                break
+        for path, sub in iter_nodes(working_ast):
+            if not (isinstance(sub, dict) and sub.get("op") == "OR"):
+                continue
+            
+            args = sub.get("args", [])
+            has_zero = any(
+                isinstance(a, dict) and a.get("op") == "CONST" and a.get("value") == 0
+                for a in args
+            )
+            
+            if has_zero:
+                # Remove 0 from OR
+                new_args = [
+                    a for a in args
+                    if not (isinstance(a, dict) and a.get("op") == "CONST" and a.get("value") == 0)
+                ]
+                
+                if len(new_args) == 0:
+                    after_ast = CONST(0)
+                elif len(new_args) == 1:
+                    after_ast = new_args[0]
+                else:
+                    after_ast = {"op": "OR", "args": new_args}
+                
+                after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                
+                # Generate step for element neutralny
+                before_str, _ = pretty_with_tokens(working_ast)
+                after_str, _ = pretty_with_tokens(after_ast)
+                before_canon = canonical_str(working_ast)
+                after_canon = canonical_str(after_ast)
+                
+                # Find 0 in working_ast for highlighting
+                before_highlight_spans_cp = []
+                for zero_path, zero_node in iter_nodes(working_ast):
+                    if isinstance(zero_node, dict) and zero_node.get("op") == "CONST" and zero_node.get("value") == 0:
+                        zero_span = find_subtree_span_by_path_cp(zero_path, working_ast)
+                        if zero_span:
+                            before_highlight_spans_cp.append((zero_span["start"], zero_span["end"]))
+                
+                step = Step(
+                    rule="Neutralny (∨0)",
+                    before_str=before_str,
+                    after_str=after_str,
+                    before_canon=before_canon,
+                    after_canon=after_canon,
+                    before_subexpr="0",
+                    after_subexpr="",
+                    before_subexpr_canon="0",
+                    after_subexpr_canon="",
+                    before_highlight_spans_cp=before_highlight_spans_cp if len(before_highlight_spans_cp) > 0 else None,
+                    after_highlight_spans_cp=None,
+                )
+                steps.append(step)
+                
+                if path:
+                    working_ast = set_by_path(working_ast, path, after_ast)
+                else:
+                    working_ast = after_ast
+                working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                
+                changed = True
+                break
     
     return steps
 
@@ -739,7 +1341,7 @@ def build_absorb_steps(
                 before_canon_val = canonical_str(working_ast)
                 
                 # Calculate span for the OR node being modified
-                before_span = find_subtree_span_by_path(path, working_ast) if path else None
+                before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
                 
                 new_or_node = {"op": "OR", "args": unique_args}
                 working_ast = set_by_path(working_ast, path, new_or_node)
@@ -748,7 +1350,7 @@ def build_absorb_steps(
                 after_canon_val = canonical_str(working_ast)
                 
                 # After span - same path (OR node is still there, just with fewer args)
-                after_span = find_subtree_span_by_path(path, working_ast) if path else None
+                after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
                 
                 # Verify TT equivalence
                 is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -800,7 +1402,7 @@ def build_absorb_steps(
                             before_canon_val = canonical_str(working_ast)
                             
                             # Calculate span for the OR node being modified
-                            before_span = find_subtree_span_by_path(path, working_ast) if path else None
+                            before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
                             
                             new_args = [args[k] for k in range(len(args)) if k != j]
                             new_or_node = {"op": "OR", "args": new_args}
@@ -810,7 +1412,7 @@ def build_absorb_steps(
                             after_canon_val = canonical_str(working_ast)
                             
                             # After span - same path
-                            after_span = find_subtree_span_by_path(path, working_ast) if path else None
+                            after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
                             
                             # Verify TT equivalence
                             is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
@@ -976,6 +1578,8 @@ def ensure_pair_present(
         # Find any OR node to add common_node as a term
         # We'll use identity injection: X becomes X ∨ (Y∧(v∨¬v)) where Y is common
         # Actually simpler: just add common_node ∧ (v∨¬v) as a new term
+        # Debug: print injection block (commented out for production)
+        # print(f"DEBUG: Entering injection block for common_node={canonical_str(common_node)}, diff_var={diff_var}")
         injection_path = None
         for path, sub in iter_nodes(working_ast):
             if isinstance(sub, dict) and sub.get("op") == "OR":
@@ -1029,7 +1633,7 @@ def ensure_pair_present(
                 common_node_path = path
                 break
         
-        before_highlight_span_1 = find_subtree_span_by_path(common_node_path, working_ast) if common_node_path else None
+        before_highlight_span_1 = find_subtree_span_by_path_cp(common_node_path, working_ast) if common_node_path else None
         
         # Apply transformation
         working_ast = set_by_path(working_ast, injection_path, new_or_node)
@@ -1037,24 +1641,166 @@ def ensure_pair_present(
         after_str_1, _ = pretty_with_tokens(working_ast)
         after_canon_1 = canonical_str(working_ast)
         
-        # Find position in AFTER state - new_term is at the end of injection_path's args
-        # Find the path to the new term in the OR node
-        or_node_after = working_ast
-        for key, idx in injection_path:
-            if key == "args":
-                or_node_after = or_node_after["args"][idx]
+        # Find position in AFTER state - find new_term in working_ast after normalization
+        # Use canonical comparison to find the correct node
+        new_term_normalized = normalize_bool_ast(new_term, expand_imp_iff=True)
+        new_term_canon = canonical_str(new_term_normalized)
         
-        # The new term is the last argument in the OR
-        or_args_after = or_node_after.get("args", [])
-        if or_args_after:
-            new_term_path = injection_path + [("args", len(or_args_after) - 1)]
-            after_highlight_span_1 = find_subtree_span_by_path(new_term_path, working_ast)
-        else:
-            after_highlight_span_1 = None
+        after_highlight_span_1 = None
+        after_highlight_spans_cp_1 = []
+        
+        # Search for new_term in working_ast using canonical comparison
+        for after_path, after_node in iter_nodes(working_ast):
+            after_node_canon = canonical_str(after_node)
+            if after_node_canon == new_term_canon:
+                # Found it - check if it's an OR argument (not nested)
+                is_or_arg = False
+                if after_path:
+                    # Check if parent is OR
+                    parent_path = after_path[:-1]
+                    parent_node = working_ast
+                    for key, idx in parent_path:
+                        if key == "args":
+                            parent_node = parent_node["args"][idx]
+                    if isinstance(parent_node, dict) and parent_node.get("op") == "OR":
+                        is_or_arg = True
+                else:
+                    # Root node - check if it's OR
+                    if isinstance(working_ast, dict) and working_ast.get("op") == "OR":
+                        is_or_arg = True
+                
+                if is_or_arg:
+                    after_span = find_subtree_span_by_path_cp(after_path, working_ast)
+                    if after_span:
+                        # Extend span to include outer parentheses
+                        # The span from find_subtree_span_by_path_cp doesn't include outer parentheses
+                        # So we need to extend: start from opening ( before span, end at closing ) after span
+                        span_start = after_span["start"]
+                        span_end = after_span["end"]
+                        
+                        # Find the opening parenthesis before the span
+                        merged_start = span_start
+                        for i in range(span_start - 1, -1, -1):
+                            if after_str_1[i] == '(':
+                                merged_start = i
+                                break
+                        
+                        # Find the closing parenthesis after the span
+                        merged_end = span_end
+                        for i in range(span_end, len(after_str_1)):
+                            if after_str_1[i] == ')':
+                                merged_end = i + 1
+                                break
+                        
+                        after_highlight_spans_cp_1.append((merged_start, merged_end))
+                        after_highlight_span_1 = {"start": merged_start, "end": merged_end}  # Keep for backward compatibility
+                        break  # Found and added span, exit loop
+                # If span not found but node matches, continue searching (might be nested)
+        
+        # If we didn't find it using exact canonical match, try a more flexible approach
+        # Use pretty_with_tokens to get the same format as after_str_1
+        if len(after_highlight_spans_cp_1) == 0:
+            new_term_pretty, _ = pretty_with_tokens(normalize_bool_ast(new_term, expand_imp_iff=True))
+            # Look for the subexpression in after_str_1
+            # Try to find it as a substring (may be without outer parentheses in pretty_with_tokens output)
+            if new_term_pretty in after_str_1:
+                idx = after_str_1.find(new_term_pretty)
+                if idx >= 0:
+                    # Always try to find surrounding parentheses
+                    merged_start = idx
+                    for i in range(idx - 1, -1, -1):
+                        if after_str_1[i] == '(':
+                            merged_start = i
+                            break
+                    merged_end = idx + len(new_term_pretty)
+                    for i in range(merged_end, len(after_str_1)):
+                        if after_str_1[i] == ')':
+                            merged_end = i + 1
+                            break
+                    after_highlight_spans_cp_1.append((merged_start, merged_end))
+                    after_highlight_span_1 = {"start": merged_start, "end": merged_end}
+        
+        # Final fallback: if still not found, use after_subexpr_str to find the highlight
+        # This should match what's in after_subexpr_str_1
+        if len(after_highlight_spans_cp_1) == 0 and after_subexpr_str_1:
+            # Try to find after_subexpr_str_1 in after_str_1
+            # Remove outer parentheses if present
+            search_str = after_subexpr_str_1
+            if search_str.startswith('(') and search_str.endswith(')'):
+                # Try with and without parentheses
+                search_variants = [search_str, search_str[1:-1]]
+            else:
+                search_variants = [search_str]
+            
+            for variant in search_variants:
+                if variant in after_str_1:
+                    idx = after_str_1.find(variant)
+                    if idx >= 0:
+                        # Find surrounding parentheses
+                        merged_start = idx
+                        for i in range(idx - 1, -1, -1):
+                            if after_str_1[i] == '(':
+                                merged_start = i
+                                break
+                        merged_end = idx + len(variant)
+                        for i in range(merged_end, len(after_str_1)):
+                            if after_str_1[i] == ')':
+                                merged_end = i + 1
+                                break
+                        after_highlight_spans_cp_1.append((merged_start, merged_end))
+                        after_highlight_span_1 = {"start": merged_start, "end": merged_end}
+                        break
+        
+        # Ultimate fallback: if we know the new_term should be at the start of the OR expression
+        # (since it was just added), try to find it by looking for the pattern
+        # This is a reliable fallback when other methods fail
+        if len(after_highlight_spans_cp_1) == 0:
+            # new_term is (C∧¬A)∧(B∨¬B) which normalizes to C∧¬A∧(B∨¬B)
+            # In after_str_1 it should appear as (C∧¬A∧(B∨¬B)) at the start
+            # Try to match the pattern: starts with (C∧¬A or similar
+            if after_str_1.startswith('('):
+                # Find the first complete parenthesized expression
+                depth = 0
+                for i, char in enumerate(after_str_1):
+                    if char == '(':
+                        depth += 1
+                    elif char == ')':
+                        depth -= 1
+                        if depth == 0:
+                            # Found the first complete expression
+                            after_highlight_spans_cp_1.append((0, i + 1))
+                            after_highlight_span_1 = {"start": 0, "end": i + 1}
+                            break
         
         # Verify TT equivalence
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
         after_hash_1 = truth_table_hash(vars_list, after_str_1)
+        
+        # Calculate before_highlight_spans_cp for common_node
+        before_highlight_spans_cp_1 = []
+        if before_highlight_span_1:
+            before_highlight_spans_cp_1.append((before_highlight_span_1["start"], before_highlight_span_1["end"]))
+        
+        # Final check: ensure after_highlight_spans_cp_1 is populated
+        # This should have been done by the ultimate fallback above, but double-check here
+        # This is the last chance before creating step1_dict
+        if len(after_highlight_spans_cp_1) == 0:
+            if after_str_1 and after_str_1.startswith('('):
+                depth = 0
+                for i, char in enumerate(after_str_1):
+                    if char == '(':
+                        depth += 1
+                    elif char == ')':
+                        depth -= 1
+                        if depth == 0:
+                            after_highlight_spans_cp_1.append((0, i + 1))
+                            after_highlight_span_1 = {"start": 0, "end": i + 1}
+                            break
+        
+        # Debug: print final state (commented out for production)
+        # print(f"DEBUG: after_highlight_spans_cp_1 = {after_highlight_spans_cp_1}, len = {len(after_highlight_spans_cp_1)}")
+        # print(f"DEBUG: after_str_1 = {after_str_1}")
+        # print(f"DEBUG: after_str_1.startswith('(') = {after_str_1.startswith('(') if after_str_1 else False}")
         
         step1_dict = {
             "before_str": before_str_1,
@@ -1072,7 +1818,9 @@ def ensure_pair_present(
             "before_span": before_highlight_span_1,
             "after_span": after_highlight_span_1,
             "before_highlight_span": before_highlight_span_1,
-            "after_highlight_span": after_highlight_span_1
+            "after_highlight_span": after_highlight_span_1,
+            "before_highlight_spans_cp": before_highlight_spans_cp_1 if len(before_highlight_spans_cp_1) > 0 else None,
+            "after_highlight_spans_cp": after_highlight_spans_cp_1 if len(after_highlight_spans_cp_1) > 0 else None,
         }
         step1 = Step(**step1_dict)
         steps.append(step1)
@@ -1128,7 +1876,7 @@ def ensure_pair_present(
         after_subexpr_canon_1 = canonical_str(after_subexpr_1)
         
         # Find position in BEFORE state using path-based lookup
-        before_highlight_span_1 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
+        before_highlight_span_1 = find_subtree_span_by_path_cp(split_path, working_ast) if split_path else None
         
         # Apply transformation
         working_ast = set_by_path(working_ast, split_path, expanded_node)
@@ -1136,8 +1884,96 @@ def ensure_pair_present(
         after_str_1, _ = pretty_with_tokens(working_ast)
         after_canon_1 = canonical_str(working_ast)
         
-        # Find position in AFTER state - expanded_node is at split_path
-        after_highlight_span_1 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
+        # Find position in AFTER state - find expanded_node in working_ast after normalization
+        # Use canonical comparison to find the correct node
+        expanded_node_normalized = normalize_bool_ast(expanded_node, expand_imp_iff=True)
+        expanded_node_canon = canonical_str(expanded_node_normalized)
+        
+        after_highlight_span_1 = None
+        after_highlight_spans_cp_1 = []
+        
+        # Search for expanded_node in working_ast using canonical comparison
+        for after_path, after_node in iter_nodes(working_ast):
+            after_node_canon = canonical_str(after_node)
+            if after_node_canon == expanded_node_canon:
+                # Found it - check if it's an OR argument (not nested)
+                is_or_arg = False
+                if after_path:
+                    # Check if parent is OR
+                    parent_path = after_path[:-1]
+                    parent_node = working_ast
+                    for key, idx in parent_path:
+                        if key == "args":
+                            parent_node = parent_node["args"][idx]
+                    if isinstance(parent_node, dict) and parent_node.get("op") == "OR":
+                        is_or_arg = True
+                else:
+                    # Root node - check if it's OR
+                    if isinstance(working_ast, dict) and working_ast.get("op") == "OR":
+                        is_or_arg = True
+                
+                if is_or_arg:
+                    after_span = find_subtree_span_by_path_cp(after_path, working_ast)
+                    if after_span:
+                        # Extend span to include outer parentheses
+                        span_start = after_span["start"]
+                        span_end = after_span["end"]
+                        
+                        # Find the opening parenthesis before the span
+                        merged_start = span_start
+                        for i in range(span_start - 1, -1, -1):
+                            if after_str_1[i] == '(':
+                                merged_start = i
+                                break
+                        
+                        # Find the closing parenthesis after the span
+                        merged_end = span_end
+                        for i in range(span_end, len(after_str_1)):
+                            if after_str_1[i] == ')':
+                                merged_end = i + 1
+                                break
+                        
+                        after_highlight_spans_cp_1.append((merged_start, merged_end))
+                        after_highlight_span_1 = {"start": merged_start, "end": merged_end}
+                        break
+        
+        # Fallback: if not found, use pretty_with_tokens to find it
+        if len(after_highlight_spans_cp_1) == 0:
+            expanded_node_pretty, _ = pretty_with_tokens(expanded_node_normalized)
+            if expanded_node_pretty in after_str_1:
+                idx = after_str_1.find(expanded_node_pretty)
+                if idx >= 0:
+                    # Find surrounding parentheses
+                    merged_start = idx
+                    for i in range(idx - 1, -1, -1):
+                        if after_str_1[i] == '(':
+                            merged_start = i
+                            break
+                    merged_end = idx + len(expanded_node_pretty)
+                    for i in range(merged_end, len(after_str_1)):
+                        if after_str_1[i] == ')':
+                            merged_end = i + 1
+                            break
+                    after_highlight_spans_cp_1.append((merged_start, merged_end))
+                    after_highlight_span_1 = {"start": merged_start, "end": merged_end}
+        
+        # Ultimate fallback: find first parenthesized expression
+        if len(after_highlight_spans_cp_1) == 0 and after_str_1.startswith('('):
+            depth = 0
+            for i, char in enumerate(after_str_1):
+                if char == '(':
+                    depth += 1
+                elif char == ')':
+                    depth -= 1
+                    if depth == 0:
+                        after_highlight_spans_cp_1.append((0, i + 1))
+                        after_highlight_span_1 = {"start": 0, "end": i + 1}
+                        break
+        
+        # Calculate before_highlight_spans_cp
+        before_highlight_spans_cp_1 = []
+        if before_highlight_span_1:
+            before_highlight_spans_cp_1.append((before_highlight_span_1["start"], before_highlight_span_1["end"]))
         
         # Verify TT equivalence for step 1
         before_hash_1 = truth_table_hash(vars_list, before_str_1)
@@ -1159,7 +1995,9 @@ def ensure_pair_present(
             "before_span": before_highlight_span_1,
             "after_span": after_highlight_span_1,
             "before_highlight_span": before_highlight_span_1,
-            "after_highlight_span": after_highlight_span_1
+            "after_highlight_span": after_highlight_span_1,
+            "before_highlight_spans_cp": before_highlight_spans_cp_1 if len(before_highlight_spans_cp_1) > 0 else None,
+            "after_highlight_spans_cp": after_highlight_spans_cp_1 if len(after_highlight_spans_cp_1) > 0 else None,
         }
         step1 = Step(**step1_dict)
         steps.append(step1)
@@ -1189,7 +2027,7 @@ def ensure_pair_present(
     after_subexpr_canon_2 = canonical_str(after_subexpr_2)
     
     # Find position in BEFORE state using path-based lookup
-    before_highlight_span_2 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
+    before_highlight_span_2 = find_subtree_span_by_path_cp(split_path, working_ast) if split_path else None
     
     # Apply transformation
     working_ast = _distribute_term(working_ast, split_path, common_node, diff_or)
@@ -1198,7 +2036,7 @@ def ensure_pair_present(
     after_canon_2 = canonical_str(working_ast)
     
     # Find position in AFTER state - distributed_result is at split_path (replaces expanded_node)
-    after_highlight_span_2 = find_subtree_span_by_path(split_path, working_ast) if split_path else None
+    after_highlight_span_2 = find_subtree_span_by_path_cp(split_path, working_ast) if split_path else None
     
     # Verify TT equivalence for step 2
     before_hash_2 = truth_table_hash(vars_list, before_str_2)
@@ -1366,6 +2204,97 @@ def _apply_tautology(ast: Any, diff_var: str) -> Any:
                     return set_by_path(ast, path, new_and)
     
     # Not found, return as-is
+    return ast
+
+
+def pretty_with_tokens_no_norm(node: Any) -> Tuple[str, Dict[str, Tuple[int, int]]]:
+    """
+    Generate pretty string with token map WITHOUT normalizing (no deduplication).
+    This ensures continuity between steps - each step shows only its own transformation.
+    """
+    # Build tokens from non-normalized representation
+    tokens = []
+    text, _ = _pretty_with_tokens_internal(node, None, tokens, 0)
+    
+    # Apply outer parentheses removal (same logic as pretty())
+    if text.startswith('(') and text.endswith(')'):
+        inner = text[1:-1]
+        balance = 0
+        can_remove = True
+        for char in inner:
+            if char == '(':
+                balance += 1
+            elif char == ')':
+                balance -= 1
+            if balance < 0:
+                can_remove = False
+                break
+        if balance == 0 and can_remove:
+            text = inner
+    
+    # Build spans_map from tokens
+    spans_map: Dict[str, Tuple[int, int]] = {}
+    for token in tokens:
+        node_id = token.get("path")
+        if node_id is not None:
+            node_id_str = str(node_id) if isinstance(node_id, list) else str(node_id)
+            token_start = token.get("start", 0)
+            token_end = token.get("end", 0)
+            
+            if node_id_str not in spans_map:
+                spans_map[node_id_str] = (token_start, token_end)
+            else:
+                # Extend span if token overlaps or is adjacent
+                existing_start, existing_end = spans_map[node_id_str]
+                spans_map[node_id_str] = (
+                    min(existing_start, token_start),
+                    max(existing_end, token_end)
+                )
+    
+    return text, spans_map
+
+
+def _flatten_only(ast: Any) -> Any:
+    """
+    Flatten AND/OR nodes but don't dedupe or apply other laws.
+    This ensures structure is correct for pretty printing without applying idempotence.
+    """
+    if not isinstance(ast, dict) or 'op' not in ast:
+        return ast
+    
+    op = ast.get('op')
+    if op in {'AND', 'OR'}:
+        args = ast.get('args', [])
+        if not args:
+            return ast
+        
+        # Flatten nested operators of the same type
+        flat = []
+        for arg in args:
+            if isinstance(arg, dict) and arg.get('op') == op:
+                flat.extend(arg.get('args', []))
+            else:
+                flat.append(_flatten_only(arg))
+        
+        # Return flattened structure without deduplication
+        if len(flat) == 1:
+            return flat[0]
+        return {"op": op, "args": flat}
+    
+    # Recursively flatten children
+    if 'child' in ast:
+        ast = dict(ast)
+        ast['child'] = _flatten_only(ast['child'])
+    if 'left' in ast:
+        ast = dict(ast)
+        ast['left'] = _flatten_only(ast['left'])
+    if 'right' in ast:
+        ast = dict(ast)
+        ast['right'] = _flatten_only(ast['right'])
+    if 'args' in ast:
+        ast = dict(ast)
+        ast['args'] = [_flatten_only(a) for a in ast['args']]
+    
     return ast
 
 

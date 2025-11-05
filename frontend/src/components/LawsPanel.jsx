@@ -331,9 +331,9 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
   }
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between mb-2">
-        <div className="text-sm text-gray-600">
+    <div className="flex flex-col gap-3 min-w-0">
+      <div className="flex items-center justify-between mb-2 min-w-0">
+        <div className="text-sm text-gray-600 break-words overflow-wrap-anywhere min-w-0 flex-1">
           Uproszczone: <ColoredExpression expression={result} className="text-green-700 font-semibold" />
         </div>
       </div>
@@ -347,10 +347,10 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
       {/* Kroki */}
       <ol className="space-y-3">
         {steps.map((s, i) => (
-          <li key={i} className={`p-3 rounded-xl border ${pickedIndex===i ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'}`}>
-            <div className="flex items-center justify-between">
-              <div className="font-semibold text-blue-700 flex items-center gap-2 relative">
-                <span>Krok {i+1}: {s.law}</span>
+          <li key={i} className={`p-3 rounded-xl border ${pickedIndex===i ? 'border-blue-500 bg-blue-50' : 'border-gray-200 bg-white'} min-w-0`}>
+            <div className="flex items-center justify-between min-w-0">
+              <div className="font-semibold text-blue-700 flex items-center gap-2 relative min-w-0 flex-1">
+                <span className="break-words overflow-wrap-anywhere">Krok {i+1}: {s.law}</span>
                 {/* Ikona z tooltipem wyjaśnienia prawa */}
                 <button
                   type="button"
@@ -376,10 +376,10 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
               </div>
             </div>
 
-            <div className="mt-2 text-sm">
-              <div className="mb-2">
+            <div className="mt-2 text-sm min-w-0">
+              <div className="mb-2 min-w-0">
                 <span className="text-xs text-gray-500 font-semibold">Całe wyrażenie przed krokiem:</span>
-                <div className="mt-1">
+                <div className="mt-1 break-words overflow-wrap-anywhere min-w-0">
                   <HighlightedExpression
                     beforeSubexpr={s.before_subexpr}
                     fullExpression={s.before_tree}
@@ -391,17 +391,21 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                   />
                 </div>
               </div>
-              <div className="mb-2">
+              <div className="mb-2 min-w-0">
                 <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
-                <div className="mt-1 flex items-center gap-2">
-                  <ColoredExpression expression={s.before_subexpr} className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" />
-                  <span className="mx-2">→</span>
-                  <ColoredExpression expression={s.after_subexpr} className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" />
+                <div className="mt-1 flex items-center gap-2 flex-wrap min-w-0">
+                  <div className="break-words overflow-wrap-anywhere min-w-0 flex-1">
+                    <ColoredExpression expression={s.before_subexpr} className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" />
+                  </div>
+                  <span className="mx-2 flex-shrink-0">→</span>
+                  <div className="break-words overflow-wrap-anywhere min-w-0 flex-1">
+                    <ColoredExpression expression={s.after_subexpr} className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" />
+                  </div>
                 </div>
               </div>
-              <div className="border-t pt-2">
+              <div className="border-t pt-2 min-w-0">
                 <span className="text-xs text-gray-500 font-semibold">Całe wyrażenie po kroku:</span>
-                <div className="mt-1">
+                <div className="mt-1 break-words overflow-wrap-anywhere min-w-0">
                   <HighlightedExpression 
                     beforeSubexpr={s.before_subexpr}
                     afterSubexpr={s.after_subexpr}
@@ -441,13 +445,13 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                   </button>
                 ))}
                 {hoveredLaw && previewData && hoveredStepIndex === i && (
-                  <div className="absolute left-0 top-full mt-2 z-50 w-96 bg-white border border-gray-300 rounded-lg shadow-xl p-3"
+                  <div className="absolute left-0 top-full mt-2 z-50 w-96 bg-white border border-gray-300 rounded-lg shadow-xl p-3 min-w-0"
                        style={{ minWidth: '320px', maxWidth: '400px' }}>
-                    <div className="text-xs font-semibold text-purple-700 mb-2">{hoveredLaw}:</div>
-                    <div className="text-xs space-y-2">
-                      <div className="break-all">
+                    <div className="text-xs font-semibold text-purple-700 mb-2 break-words overflow-wrap-anywhere min-w-0">{hoveredLaw}:</div>
+                    <div className="text-xs space-y-2 min-w-0">
+                      <div className="break-words overflow-wrap-anywhere min-w-0">
                         <span className="text-gray-600 font-medium mb-1 block">Przed:</span>
-                        <div className="bg-amber-50 px-2 py-1 rounded border">
+                        <div className="bg-amber-50 px-2 py-1 rounded border break-words overflow-wrap-anywhere min-w-0">
                           <ColoredExpression 
                             expression={s.before_tree} 
                             canonExpression={previewData.beforeCanon}
@@ -458,9 +462,9 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                         </div>
                       </div>
                       <div className="text-center text-gray-400">→</div>
-                      <div className="break-all">
+                      <div className="break-words overflow-wrap-anywhere min-w-0">
                         <span className="text-gray-600 font-medium mb-1 block">Po:</span>
-                        <div className="bg-blue-50 px-2 py-1 rounded border">
+                        <div className="bg-blue-50 px-2 py-1 rounded border break-words overflow-wrap-anywhere min-w-0">
                           <ColoredExpression 
                             expression={previewData.afterTree || previewData.after} 
                             canonExpression={previewData.afterCanon}

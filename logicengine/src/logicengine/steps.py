@@ -23,6 +23,7 @@ RuleName = Literal[
     "Komplementarność (∧¬X)",
     "Pochłanianie (∨)",
     "Pochłanianie (∧)",
+    "Kontradykcja",
     "Konsensus",
     "QM: łączenie sąsiednich mintermów",
     "QM: powstanie prime implicants",
@@ -54,12 +55,16 @@ class Step:
     after_canon: Optional[str] = None       # canonical full expression after
     before_subexpr_canon: Optional[str] = None  # canonical highlighted fragment before
     after_subexpr_canon: Optional[str] = None   # canonical highlighted fragment after
-    before_span: Optional[Dict[str, int]] = None  # {start, end} relative to before_str (NEW - preferred)
-    after_span: Optional[Dict[str, int]] = None   # {start, end} relative to after_str (NEW - preferred)
-    before_highlight_span: Optional[Dict[str, int]] = None  # {start, end} in before_canon (UTF-16, DEPRECATED)
-    after_highlight_span: Optional[Dict[str, int]] = None   # {start, end} in after_canon (UTF-16, DEPRECATED)
-    before_highlight_spans_cp: Optional[List[Tuple[int, int]]] = None  # [[start, end], ...] in before_canon (code-points)
-    after_highlight_spans_cp: Optional[List[Tuple[int, int]]] = None   # [[start, end], ...] in after_canon (code-points)
+    # DEPRECATED - kept for backward compatibility only
+    before_span: Optional[Dict[str, int]] = None
+    after_span: Optional[Dict[str, int]] = None
+    before_highlight_span: Optional[Dict[str, int]] = None
+    after_highlight_span: Optional[Dict[str, int]] = None
+    before_highlight_spans: Optional[List[Dict[str, int]]] = None
+    
+    # NEW - preferred: code-point spans relative to before_str/after_str
+    before_highlight_spans_cp: Optional[List[Tuple[int, int]]] = None  # [(start, end), ...] relative to before_str (code-points, NEW - preferred)
+    after_highlight_spans_cp: Optional[List[Tuple[int, int]]] = None   # [(start, end), ...] relative to after_str (code-points, NEW - preferred)
     before_focus_texts: Optional[List[str]] = None  # extracted texts from before_canon[start:end] (code-points)
     after_focus_texts: Optional[List[str]] = None   # extracted texts from after_canon[start:end] (code-points)
 

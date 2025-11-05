@@ -291,21 +291,28 @@ def rules_matches(req: RulesMatchesRequest):
             preview_ast = match.preview_ast
             preview_pretty = pretty(preview_ast)
             
-            # Calculate before_span for focus_expr
-            before_span = find_subtree_span_by_path(tuple_path, node)
+            # Calculate spans in code-points
+            from .laws import find_subtree_span_by_path_cp
+            before_span = find_subtree_span_by_path_cp(tuple_path, node)
             
             # For after_span, we need to calculate from preview_ast
             # The transformed subtree is at the same path
             after_str, after_spans_map = pretty_with_tokens(preview_ast)
-            after_span = find_subtree_span_by_path(tuple_path, preview_ast)
+            after_span = find_subtree_span_by_path_cp(tuple_path, preview_ast)
+            
+            # Create lists in tuple format (code-points)
+            before_highlight_spans_cp = [(before_span["start"], before_span["end"])] if before_span else []
+            after_highlight_spans_cp = [(after_span["start"], after_span["end"])] if after_span else []
             
             result_matches.append({
                 "matchId": match.match_id,
                 "focusPretty": focus_pretty,
                 "previewExpr": preview_pretty,
-                "before_span": before_span,
-                "after_span": after_span,
-                "path": [[key, idx] for key, idx in tuple_path],  # Convert to JSON-serializable format
+                "before_str": before_str,
+                "after_str": after_str,
+                "before_highlight_spans_cp": before_highlight_spans_cp if before_highlight_spans_cp else None,
+                "after_highlight_spans_cp": after_highlight_spans_cp if after_highlight_spans_cp else None,
+                "path": [[key, idx] for key, idx in tuple_path],
             })
         
         return {
@@ -352,18 +359,19 @@ def rules_apply(req: RulesApplyRequest):
         if not target_match:
             raise HTTPException(status_code=404, detail=f"Match '{req.matchId}' not found")
         
-        # Calculate spans BEFORE applying
+        # Calculate spans BEFORE applying (code-points)
         before_str, before_spans_map = pretty_with_tokens(node)
         tuple_path = _convert_path_to_tuple_path(target_match.path, node)
-        before_span = find_subtree_span_by_path(tuple_path, node)
+        from .laws import find_subtree_span_by_path_cp
+        before_span = find_subtree_span_by_path_cp(tuple_path, node)
         
         # Apply the match
         after_ast = apply_match(rule, node, target_match)
         
-        # Calculate spans AFTER applying
+        # Calculate spans AFTER applying (code-points)
         after_str, after_spans_map = pretty_with_tokens(after_ast)
         # The transformed subtree is at the same path
-        after_span = find_subtree_span_by_path(tuple_path, after_ast)
+        after_span = find_subtree_span_by_path_cp(tuple_path, after_ast)
         
         # Calculate metrics (for compatibility with frontend)
         from .laws import count_nodes, count_literals
@@ -398,12 +406,16 @@ def rules_apply(req: RulesApplyRequest):
             "neg_depth_sum": neg_depth_sum(after_ast),
         }
         
+        # Create lists in tuple format (code-points)
+        before_highlight_spans_cp = [(before_span["start"], before_span["end"])] if before_span else []
+        after_highlight_spans_cp = [(after_span["start"], after_span["end"])] if after_span else []
+        
         return {
             "exprAfter": after_str,
             "metricsBefore": metrics_before,
             "metricsAfter": metrics_after,
-            "before_span": before_span,
-            "after_span": after_span,
+            "before_highlight_spans_cp": before_highlight_spans_cp if before_highlight_spans_cp else None,
+            "after_highlight_spans_cp": after_highlight_spans_cp if after_highlight_spans_cp else None,
             "before_str": before_str,
             "after_str": after_str,
         }

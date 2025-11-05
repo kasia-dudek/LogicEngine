@@ -605,7 +605,7 @@ export default function ColoredExpression({
   };
 
   return (
-    <span className={`font-mono ${className}`}>
+    <span className={`font-mono break-words overflow-wrap-anywhere min-w-0 ${className}`}>
       {renderExpression(target)}
     </span>
   );

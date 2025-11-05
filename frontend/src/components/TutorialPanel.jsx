@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ColoredExpression from './ColoredExpression';
-import { highlightBySpan } from './highlightBySpan';
+import { highlightBySpan, highlightBySpansCP } from './highlightBySpan';
 
 /** Małe helpery UI */
 function MetricBadge({ label, before, after }) {
@@ -199,7 +199,15 @@ function TutorialPanel({
               <div>
                 <div className="text-sm">
                   <span className="font-semibold">Fragment:</span>{' '}
-                  {m.before_span && m.before_str ? (
+                  {m.before_highlight_spans_cp && m.before_highlight_spans_cp.length > 0 && m.before_str ? (
+                    <span className="font-mono whitespace-pre">
+                      {highlightBySpansCP(
+                        m.before_str,
+                        m.before_highlight_spans_cp,
+                        "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                      )}
+                    </span>
+                  ) : m.before_span && m.before_str ? (
                     <span className="font-mono whitespace-pre">
                       {highlightBySpan(
                         m.before_str,
@@ -208,12 +216,20 @@ function TutorialPanel({
                       )}
                     </span>
                   ) : (
-                    <span className="font-mono">{m.focusPretty}</span>
+                  <span className="font-mono">{m.focusPretty}</span>
                   )}
                 </div>
                 <div className="text-sm">
                   <span className="font-semibold">Podgląd po zastosowaniu:</span>{' '}
-                  {m.after_span && m.after_str ? (
+                  {m.after_highlight_spans_cp && m.after_highlight_spans_cp.length > 0 && m.after_str ? (
+                    <span className="font-mono whitespace-pre">
+                      {highlightBySpansCP(
+                        m.after_str,
+                        m.after_highlight_spans_cp,
+                        "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                      )}
+                    </span>
+                  ) : m.after_span && m.after_str ? (
                     <span className="font-mono whitespace-pre">
                       {highlightBySpan(
                         m.after_str,
@@ -222,7 +238,7 @@ function TutorialPanel({
                       )}
                     </span>
                   ) : (
-                    <span className="font-mono">{m.previewExpr}</span>
+                  <span className="font-mono">{m.previewExpr}</span>
                   )}
                 </div>
               </div>
@@ -230,8 +246,15 @@ function TutorialPanel({
                 <button
                   className="px-3 py-1 rounded bg-gray-100 text-blue-700 border border-blue-200"
                   onMouseEnter={() => {
-                    // Pass object with text and span for proper highlighting
-                    if (m.before_span && m.before_str) {
+                    // Pass object with text and spans for proper highlighting
+                    if (m.before_highlight_spans_cp && m.before_highlight_spans_cp.length > 0 && m.before_str) {
+                      onHighlight({
+                        text: m.before_str,
+                        spans: m.before_highlight_spans_cp,
+                        type: 'before'
+                      });
+                    } else if (m.before_span && m.before_str) {
+                      // Fallback to single span
                       onHighlight({
                         text: m.before_str,
                         span: m.before_span,

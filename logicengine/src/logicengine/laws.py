@@ -143,14 +143,19 @@ def _pretty_with_tokens_internal(node: Any, path: Optional[List[Tuple[str, Optio
             # Recalculate if there's a mismatch (shouldn't happen, but safety check)
             result_end = current_pos + len(result)
         
-        # Record token for this AND/OR node
+        # Record token for this AND/OR node - WITHOUT outer parentheses
+        # The span should only cover the inner content, not the parentheses
+        # Parentheses are part of the parent node's syntax, not this node's content
+        inner_start = current_pos + 1  # After opening '('
+        inner_end = pos  # Before closing ')'
+        
         tokens.append({
             "node_id": str(path) if path else "root",
             "path": path.copy(),
-            "text": result,
-            "start": current_pos,
-            "end": result_end,
-            "length": len(result)
+            "text": inner,  # Inner content without parentheses
+            "start": inner_start,
+            "end": inner_end,
+            "length": len(inner)
         })
         return result, result_end
     
@@ -244,9 +249,9 @@ def pretty_with_tokens(node: Any) -> Tuple[str, Dict[str, Tuple[int, int]]]:
     return text, spans_map
 
 
-def find_subtree_span_by_path(subtree_path: Path, full_tree: Any) -> Optional[Dict[str, int]]:
+def find_subtree_span_by_path_cp(subtree_path: Path, full_tree: Any) -> Optional[Dict[str, int]]:
     """
-    Find start/end position of subtree in pretty-printed string of full tree.
+    Find start/end position of subtree in pretty-printed string (code-points).
     Uses token-based mapping for accurate positioning.
     
     Args:
@@ -254,7 +259,7 @@ def find_subtree_span_by_path(subtree_path: Path, full_tree: Any) -> Optional[Di
         full_tree: The full AST tree (normalized)
     
     Returns:
-        {"start": int, "end": int} or None if not found
+        {"start": int, "end": int} in code-points or None if not found
     """
     try:
         # Normalize tree
@@ -264,35 +269,50 @@ def find_subtree_span_by_path(subtree_path: Path, full_tree: Any) -> Optional[Di
         # Generate pretty string with tokens
         display_str, spans_map = pretty_with_tokens(full_tree)
         
-        # Look up subtree path in spans_map
+        # Convert display_str to code-point array for accurate indexing
+        display_arr = list(display_str)  # Array of code-points
+        
+        # Look up subtree path in spans_map (spans_map is in UTF-16 positions)
         node_id = str(subtree_path) if subtree_path else "root"
         
+        utf16_start, utf16_end = None, None
+        
         if node_id in spans_map:
-            start, end = spans_map[node_id]
-            return {"start": start, "end": end}
+            utf16_start, utf16_end = spans_map[node_id]
+        else:
+            # If exact path not found, try to find by walking the tree
+            from .ast import iter_nodes, get_by_path
+            
+            try:
+                subtree = get_by_path(full_tree, subtree_path)
+                subtree_canon = canonical_str(subtree) if subtree is not None else None
+                if subtree_canon:
+                    for path, node in iter_nodes(full_tree):
+                        if canonical_str(node) == subtree_canon:
+                            test_node_id = str(path) if path else "root"
+                            if test_node_id in spans_map:
+                                utf16_start, utf16_end = spans_map[test_node_id]
+                                break
+            except (KeyError, IndexError, TypeError):
+                pass
         
-        # If exact path not found, try to find by walking the tree
-        # and matching the subtree structurally
-        from .ast import iter_nodes, get_by_path
+        if utf16_start is None or utf16_end is None:
+            return None
         
-        # Try to get subtree by path
-        try:
-            subtree = get_by_path(full_tree, subtree_path)
-            # Find all nodes with matching canonical representation
-            subtree_canon = canonical_str(subtree) if subtree is not None else None
-            if subtree_canon:
-                for path, node in iter_nodes(full_tree):
-                    if canonical_str(node) == subtree_canon:
-                        test_node_id = str(path) if path else "root"
-                        if test_node_id in spans_map:
-                            start, end = spans_map[test_node_id]
-                            return {"start": start, "end": end}
-        except (KeyError, IndexError, TypeError):
-            pass
+        # Convert UTF-16 positions to code-point positions
+        # We need to count code-points up to utf16_start and utf16_end
+        cp_start = len(list(display_str[:utf16_start])) if utf16_start > 0 else 0
+        cp_end = len(list(display_str[:utf16_end])) if utf16_end > 0 else 0
         
-        return None
+        return {"start": cp_start, "end": cp_end}
     except Exception:
         return None
+
+
+# Keep old function for backward compatibility (deprecated)
+def find_subtree_span_by_path(subtree_path: Path, full_tree: Any) -> Optional[Dict[str, int]]:
+    """DEPRECATED: Use find_subtree_span_by_path_cp for code-point positions."""
+    return find_subtree_span_by_path_cp(subtree_path, full_tree)
 
 
 def find_subtree_position(subtree: Any, full_tree: Any) -> Optional[Dict[str, int]]:
@@ -1221,6 +1241,11 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         # Use path-based span lookup for accurate positioning
         before_highlight_span = find_subtree_span_by_path(path, node_backup)
         
+        # Calculate before_highlight_spans_cp
+        before_highlight_spans_cp = []
+        if before_highlight_span:
+            before_highlight_spans_cp.append((before_highlight_span["start"], before_highlight_span["end"]))
+        
         node = set_by_path(node, path, sub_after)
         node = normalize_bool_ast(node)
         
@@ -1230,9 +1255,67 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         # Compute canonical strings and highlight spans for AFTER state
         after_canon = canonical_str(node)
         after_sub_canon = canonical_str(sub_after)
-        # For after, the subtree is at the same path (we replaced it)
-        after_highlight_span = find_subtree_span_by_path(path, node)
-
+        
+        # Find sub_after in node after normalization using canonical comparison
+        # This ensures we find the correct transformed subexpression, not just the node at path
+        after_highlight_span = None
+        after_highlight_spans_cp = []
+        sub_after_normalized = normalize_bool_ast(sub_after, expand_imp_iff=True)
+        sub_after_canon_search = canonical_str(sub_after_normalized)
+        
+        # Search for sub_after in node using canonical comparison
+        for after_path, after_node in iter_nodes(node):
+            after_node_canon = canonical_str(after_node)
+            if after_node_canon == sub_after_canon_search:
+                # Found it - get span
+                after_span = find_subtree_span_by_path_cp(after_path, node)
+                if after_span:
+                    span_start = after_span["start"]
+                    span_end = after_span["end"]
+                    
+                    # Check if sub_after is a simple variable or constant
+                    # If so, don't extend with parentheses
+                    is_simple_node = (
+                        isinstance(sub_after, dict) and 
+                        sub_after.get("op") in {"VAR", "CONST"}
+                    )
+                    
+                    if is_simple_node:
+                        # For simple nodes, use the span directly without extending
+                        after_highlight_spans_cp.append((span_start, span_end))
+                        after_highlight_span = {"start": span_start, "end": span_end}
+                    else:
+                        # For complex nodes, extend span to include outer parentheses if needed
+                        merged_start = span_start
+                        for i in range(span_start - 1, -1, -1):
+                            if after_str[i] == '(':
+                                merged_start = i
+                                break
+                        
+                        merged_end = span_end
+                        for i in range(span_end, len(after_str)):
+                            if after_str[i] == ')':
+                                merged_end = i + 1
+                                break
+                        
+                        after_highlight_spans_cp.append((merged_start, merged_end))
+                        after_highlight_span = {"start": merged_start, "end": merged_end}
+                    break
+        
+        # Fallback: if not found, use path-based lookup
+        if not after_highlight_span:
+            after_highlight_span = find_subtree_span_by_path(path, node)
+            if after_highlight_span:
+                after_highlight_spans_cp.append((after_highlight_span["start"], after_highlight_span["end"]))
+        
+        # Also set before_highlight_spans_cp for oscillation step
+        before_highlight_spans_cp_osc = []
+        if before_highlight_span:
+            before_highlight_spans_cp_osc.append((before_highlight_span["start"], before_highlight_span["end"]))
+        after_highlight_spans_cp_osc = []
+        if after_highlight_span:
+            after_highlight_spans_cp_osc.append((after_highlight_span["start"], after_highlight_span["end"]))
+        
         # Check for oscillation - use canonical_str for structural comparison
         if after_canon in seen_expressions:
             steps.append({
@@ -1253,6 +1336,8 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
                 "after_span": after_highlight_span,
                 "before_highlight_span": before_highlight_span,
                 "after_highlight_span": after_highlight_span,
+                "before_highlight_spans_cp": before_highlight_spans_cp_osc if len(before_highlight_spans_cp_osc) > 0 else None,
+                "after_highlight_spans_cp": after_highlight_spans_cp_osc if len(after_highlight_spans_cp_osc) > 0 else None,
                 "applicable_here": [],
                 "source": "system",
                 "axiom_id": None,
@@ -1348,6 +1433,8 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
             "after_span": after_highlight_span,    # Span relative to after_str
             "before_highlight_span": before_highlight_span,  # Keep for backward compatibility
             "after_highlight_span": after_highlight_span,     # Keep for backward compatibility
+            "before_highlight_spans_cp": before_highlight_spans_cp if len(before_highlight_spans_cp) > 0 else None,
+            "after_highlight_spans_cp": after_highlight_spans_cp if len(after_highlight_spans_cp) > 0 else None,
             "applicable_here": applicable_here,
             "source": choice.get("source", "algebraic"),
             "axiom_id": choice.get("axiom_id"),

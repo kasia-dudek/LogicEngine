@@ -615,7 +615,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                               {/* Table container */}
                               <div className="relative">
                                 <div ref={tableScrollRef} className="scrollable-steps-table">
-                                  <table className="min-w-full border border-blue-200 rounded-xl text-sm">
+                                <table className="min-w-full border border-blue-200 rounded-xl text-sm">
                                   <thead>
                                     <tr>
                                       {shownColNames.map((name, idx) => {
@@ -628,9 +628,9 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                           : 'bg-blue-50';
                                         return (
                                           <th key={name} className={`px-3 py-2 border-b text-blue-900 ${headerCls}`}>
-                                            <div className="truncate max-w-xs font-mono text-xs" title={name}>
-                                              {name}
-                                            </div>
+                                              <div className="truncate max-w-xs font-mono text-xs" title={name}>
+                                                {name}
+                                              </div>
                                           </th>
                                         );
                                       })}
@@ -657,7 +657,7 @@ export default function ResultScreen({ input, onBack, saveToHistory, onExportToP
                                     ))}
                                   </tbody>
                                 </table>
-                                </div>
+                              </div>
                               </div>
                               
                               {/* Scroll arrows below table */}

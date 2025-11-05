@@ -29,55 +29,86 @@ export function highlightBySpan(text, span, highlightClass) {
 }
 
 /**
- * Render multiple non-overlapping spans in text.
- * Spans are merged if overlapping, with priority: later spans override earlier ones.
+ * Helper function to slice text by code-points (not UTF-16 code units)
+ * Handles multi-byte characters correctly
  */
-export function highlightBySpans(text, spans, highlightClass) {
+function sliceByCodePoints(text, start, end) {
+  const arr = Array.from(text);
+  return arr.slice(start, end).join('');
+}
+
+/**
+ * Render multiple non-overlapping spans in text using code-point indexing.
+ * Spans format: List of tuples [(start, end), ...] (code-points)
+ * Uses Array.from() to handle multi-byte characters correctly.
+ * Optionally merges overlapping/adjacent spans to avoid nested <span> tags.
+ */
+export function highlightBySpansCP(text, spans, highlightClass = 'bg-red-100 rounded px-1') {
   if (!text || !spans || spans.length === 0) {
     return text;
   }
   
-  // Sort spans by start position
-  const sortedSpans = [...spans].sort((a, b) => a[0] - b[0]);
+  // Convert text to array of code-points for accurate indexing
+  const arr = Array.from(text);
+  const parts = [];
+  let i = 0;
   
-  // Merge overlapping spans
+  // Normalize spans format - handle both [{start, end}, ...] and [[start, end], ...]
+  const normalizedSpans = spans.map(span => {
+    if (Array.isArray(span)) {
+      // Tuple format: [start, end]
+      return { start: span[0], end: span[1] };
+    } else {
+      // Object format: {start, end}
+      return { start: span.start || 0, end: span.end || text.length };
+    }
+  });
+  
+  // Sort spans by start position
+  const sortedSpans = [...normalizedSpans].sort((a, b) => a.start - b.start);
+  
+  // Merge overlapping or adjacent spans (end >= next.start)
   const merged = [];
   for (const span of sortedSpans) {
-    const [start, end] = span;
+    const start = span.start;
+    const end = Math.min(span.end, arr.length);
+    
     if (merged.length === 0) {
-      merged.push([start, end]);
+      merged.push({ start, end });
     } else {
       const last = merged[merged.length - 1];
-      if (start <= last[1]) {
-        // Overlapping, merge
-        last[1] = Math.max(last[1], end);
+      // If overlapping or adjacent, merge
+      if (start <= last.end) {
+        last.end = Math.max(last.end, end);
       } else {
-        merged.push([start, end]);
+        merged.push({ start, end });
       }
     }
   }
   
-  // Render text with highlights
-  const parts = [];
-  let lastEnd = 0;
-  
-  for (const [start, end] of merged) {
+  // Render text with merged spans
+  for (const span of merged) {
+    const start = span.start;
+    const end = Math.min(span.end, arr.length);
+    
     // Add text before this span
-    if (start > lastEnd) {
-      parts.push(text.substring(lastEnd, start));
+    if (start > i) {
+      parts.push(arr.slice(i, start).join(''));
     }
+    
     // Add highlighted text
     parts.push(
       <span key={`highlight-${start}`} className={highlightClass}>
-        {text.substring(start, end)}
+        {arr.slice(start, end).join('')}
       </span>
     );
-    lastEnd = end;
+    
+    i = Math.max(i, end);
   }
   
   // Add remaining text
-  if (lastEnd < text.length) {
-    parts.push(text.substring(lastEnd));
+  if (i < arr.length) {
+    parts.push(arr.slice(i).join(''));
   }
   
   return <>{parts}</>;

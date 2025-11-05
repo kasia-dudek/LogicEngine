@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ColoredExpression from './ColoredExpression';
-import { highlightBySpan } from './highlightBySpan';
+import { highlightBySpan, highlightBySpansCP } from './highlightBySpan';
 
 export default function SimplifyDNF({ expression, loading }) {
   const [data, setData] = useState(null);
@@ -76,8 +76,24 @@ export default function SimplifyDNF({ expression, loading }) {
         </div>
       </div>
 
-      {/* Steps */}
-      {steps.length > 0 && (
+      {/* Steps or minimal message */}
+      {data.is_already_minimal ? (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
+          <div className="flex items-start gap-3">
+            <div className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-blue-500 text-white font-bold text-sm mt-0.5">
+              ✓
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-blue-800 mb-2">
+                Wyrażenie jest już w minimalnej formie DNF
+              </h3>
+              <p className="text-blue-700">
+                Wprowadzone wyrażenie jest już w minimalnej formie DNF, więc nie są potrzebne żadne kroki upraszczania.
+              </p>
+            </div>
+          </div>
+        </div>
+      ) : steps.length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between mb-2">
             <h3 className="text-lg font-bold text-gray-800">
@@ -102,8 +118,13 @@ export default function SimplifyDNF({ expression, loading }) {
                     {step.rule || 'Krok'}
                   </div>
                   {step.schema && (
-                    <div className="text-xs text-gray-500 mt-0.5">
+                    <div className="text-xs text-gray-500 mt-0.5 font-mono">
                       {step.schema}
+                    </div>
+                  )}
+                  {step.details && step.details.explanation && (
+                    <div className="text-xs text-blue-600 mt-1 italic">
+                      {step.details.explanation}
                     </div>
                   )}
                 </div>
@@ -114,9 +135,17 @@ export default function SimplifyDNF({ expression, loading }) {
                   <div aria-label="Wyrażenie przed krokiem z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Przed:</span>
                     <div className="mt-1">
-                      {step.before_span ? (
-                        // Use span-based highlighting (preferred)
-                        // Note: span is relative to before_str from pretty_with_tokens()
+                      {step.before_highlight_spans_cp && step.before_highlight_spans_cp.length > 0 ? (
+                        // Use code-point spans (preferred)
+                        <div className="font-mono text-gray-800 whitespace-pre">
+                          {highlightBySpansCP(
+                            step.before_str,
+                            step.before_highlight_spans_cp,
+                            "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                          )}
+                        </div>
+                      ) : step.before_span ? (
+                        // Fallback to single span
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.before_str,
@@ -192,9 +221,17 @@ export default function SimplifyDNF({ expression, loading }) {
                   <div aria-label="Wyrażenie po kroku z podświetlonym fragmentem">
                     <span className="text-xs text-gray-500 font-semibold">Po:</span>
                     <div className="mt-1">
-                      {step.after_span ? (
-                        // Use span-based highlighting (preferred)
-                        // Note: span is relative to after_str from pretty_with_tokens()
+                      {step.after_highlight_spans_cp && step.after_highlight_spans_cp.length > 0 ? (
+                        // Use code-point spans (preferred)
+                        <div className="font-mono text-gray-800 whitespace-pre">
+                          {highlightBySpansCP(
+                            step.after_str,
+                            step.after_highlight_spans_cp,
+                            "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                          )}
+                        </div>
+                      ) : step.after_span ? (
+                        // Fallback to single span
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.after_str,
@@ -234,7 +271,7 @@ export default function SimplifyDNF({ expression, loading }) {
             </div>
           ))}
         </div>
-      )}
+      ) : null}
     </div>
   );
 }
