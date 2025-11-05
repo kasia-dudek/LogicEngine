@@ -905,10 +905,10 @@ def build_merge_steps(
                         before_subexpr_3 = parsed_ast_bool
                         # Compute after_subexpr by removing CONST(1)
                         args = parsed_ast_bool.get("args", [])
-                        new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
-                        if len(new_args) == 1:
-                            after_subexpr_3 = new_args[0]
-                        else:
+                    new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    if len(new_args) == 1:
+                        after_subexpr_3 = new_args[0]
+                    else:
                             after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
                         # Find path in working_ast for highlighting (approximate)
                         neutral_path = None
@@ -919,7 +919,7 @@ def build_merge_steps(
                                 if after_subexpr_3:
                                     if canonical_str(sub) == canonical_str(after_subexpr_3):
                                         neutral_path = path
-                                        break
+                    break
                 except Exception:
                     # If parsing fails, continue with original logic
                     pass
@@ -1488,8 +1488,11 @@ def build_absorb_steps(
                     arg_i = args[i]
                     arg_j = args[j]
                     
-                    # Check if arg_i is a superset of arg_j
-                    # i.e., if arg_i contains all literals of arg_j
+                    # Check absorption: X ∨ (X∧Y) ⇒ X
+                    # We remove the term that is a superset (contains more literals)
+                    # For example: (A∧C) ∨ (A∧B∧C) ⇒ (A∧C) (remove A∧B∧C)
+                    # Or: (A∧B∧C) ∨ (A∧C) ⇒ (A∧C) (remove A∧B∧C)
+                    # So we check if one is subset of the other, and remove the superset
                     lits_i = _extract_lits_from_term(arg_i)
                     lits_j = _extract_lits_from_term(arg_j)
                     
@@ -1497,21 +1500,30 @@ def build_absorb_steps(
                         lits_i_set = set(lits_i)
                         lits_j_set = set(lits_j)
                         
-                        # Check if j is subset of i (i covers j)
-                        if lits_j_set.issubset(lits_i_set):
-                            # j is redundant - remove it
+                        # Determine which term to remove
+                        term_to_remove_idx = None
+                        if lits_j_set.issubset(lits_i_set) and len(lits_i) > len(lits_j):
+                            # arg_i is superset of arg_j - remove arg_i
+                            term_to_remove_idx = i
+                        elif lits_i_set.issubset(lits_j_set) and len(lits_j) > len(lits_i):
+                            # arg_j is superset of arg_i - remove arg_j
+                            term_to_remove_idx = j
+                        
+                        if term_to_remove_idx is not None:
+                            # Found absorption opportunity
                             # First check if canonical forms match (for exact duplicates handled above)
                             if len(lits_i) == len(lits_j):
                                 continue  # Already handled by idempotence
                             
-                            # Remove arg_j
+                            # Remove the superset term
                             before_str, _ = pretty_with_tokens(working_ast)
                             before_canon_val = canonical_str(working_ast)
                             
                             # Calculate span for the OR node being modified
                             before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
                             
-                            new_args = [args[k] for k in range(len(args)) if k != j]
+                            # Remove the term at term_to_remove_idx
+                            new_args = [args[k] for k in range(len(args)) if k != term_to_remove_idx]
                             new_or_node = {"op": "OR", "args": new_args}
                             working_ast = set_by_path(working_ast, path, new_or_node)
                             working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
