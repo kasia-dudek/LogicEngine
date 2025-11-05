@@ -301,10 +301,12 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     steps = []
             
             if not input_already_minimal:
-                current_ast = node
+                current_ast = None  # Initialize to None, will be set below
                 if steps:
                     current_ast = generate_ast(steps[-1].after_str)
                     current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                else:
+                    current_ast = node
                 
                 # Remove contradictions after simplify_with_laws steps
                 # This ensures contradictions created during distribution are removed immediately
@@ -355,6 +357,12 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             else:
                                 # No more absorption steps can be generated
                                 break
+                        
+                        # After iterative absorption, update current_ast to reflect final state
+                        if steps:
+                            current_ast = generate_ast(steps[-1].after_str)
+                            current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+            
             laws_result_str = None
             if steps:
                 laws_result_str = steps[-1].after_str
@@ -460,15 +468,16 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             if not laws_completed and not input_already_minimal:
                 # Build user-visible algebraic steps from QM plan
                 # Get current AST from last step's after string
-                current_ast = None
-                if steps:
-                    current_expr = steps[-1].after_str
-                    current_ast = generate_ast(current_expr)
-                    current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
-                else:
-                    # No laws steps, start from initial normalized AST
-                    # Don't use laws_result.get("normalized_ast") as it might already have factorization applied
-                    current_ast = node
+                # Note: current_ast may already be set after iterative absorption above
+                if current_ast is None:
+                    if steps:
+                        current_expr = steps[-1].after_str
+                        current_ast = generate_ast(current_expr)
+                        current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                    else:
+                        # No laws steps, start from initial normalized AST
+                        # Don't use laws_result.get("normalized_ast") as it might already have factorization applied
+                        current_ast = node
                 
                 # Check if expression is already minimal DNF before generating steps
                 current_is_dnf = is_dnf(current_ast)
