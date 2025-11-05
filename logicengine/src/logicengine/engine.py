@@ -382,8 +382,19 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     laws_ast_check = normalize_bool_ast(laws_ast_check, expand_imp_iff=True)
                     laws_is_dnf = is_dnf(laws_ast_check)
                     
-                    # Only set laws_completed if hashes match AND result is in DNF
-                    laws_completed = (laws_hash == qm_hash and len(laws_hash) > 0 and laws_is_dnf)
+                    # Check if result is minimal DNF (not just equivalent)
+                    # Compare canonical forms and literal counts
+                    laws_canon_check = canonical_str(laws_ast_check)
+                    qm_result_str_check = qm_result.get("result", "")
+                    qm_result_ast_check = generate_ast(qm_result_str_check)
+                    qm_result_ast_check = normalize_bool_ast(qm_result_ast_check, expand_imp_iff=True)
+                    qm_result_canon_check = canonical_str(qm_result_ast_check)
+                    laws_measure_check = measure(laws_ast_check)
+                    qm_measure_check = measure(qm_result_ast_check)
+                    
+                    # Only set laws_completed if hashes match AND result is in DNF AND result is minimal
+                    is_minimal = (laws_canon_check == qm_result_canon_check and laws_measure_check[0] <= qm_measure_check[0])
+                    laws_completed = (laws_hash == qm_hash and len(laws_hash) > 0 and laws_is_dnf and is_minimal)
                     
                     # Additional check: if no steps but TT hashes match, verify canonical equality
                     # This catches cases where laws didn't find any simplifications but TT is equivalent
