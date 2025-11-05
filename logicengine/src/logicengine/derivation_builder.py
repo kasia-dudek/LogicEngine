@@ -885,9 +885,6 @@ def build_merge_steps(
         # If we didn't find it in AST structure, try to extract from after_str_2
         # This can happen if the structure was modified but the string still contains "∧1"
         if not found_in_ast and "∧1" in after_str_2:
-        # If we didn't find it in AST structure, try to extract from after_str_2
-        # This can happen if the structure was modified but the string still contains "∧1"
-        if not found_in_ast and "∧1" in after_str_2:
             import re
             # Find expressions containing "∧1" in after_str_2
             # Pattern: find parenthesized expressions like (A∧¬B∧1) or (A∧1∧B)
@@ -908,10 +905,10 @@ def build_merge_steps(
                         before_subexpr_3 = parsed_ast_bool
                         # Compute after_subexpr by removing CONST(1)
                         args = parsed_ast_bool.get("args", [])
-                        new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
-                        if len(new_args) == 1:
-                            after_subexpr_3 = new_args[0]
-                        else:
+                    new_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                    if len(new_args) == 1:
+                        after_subexpr_3 = new_args[0]
+                    else:
                             after_subexpr_3 = {"op": "AND", "args": new_args} if new_args else None
                         # Find path in working_ast for highlighting (approximate)
                         neutral_path = None
