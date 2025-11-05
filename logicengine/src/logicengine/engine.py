@@ -315,40 +315,46 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                     current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
                 
                 # Check if current expression is in DNF but not minimal
-                # If so, apply absorption to reach minimal DNF (with iteration limit to avoid infinite loops)
+                # If so, apply absorption to reach minimal DNF
                 current_is_dnf_after_laws = is_dnf(current_ast)
                 if current_is_dnf_after_laws and steps:
                     # Compare with QM result to check if minimal
+                    current_canon_after_laws = canonical_str(current_ast)
                     qm_result_str_check = qm_result.get("result", "")
                     qm_result_ast_check = generate_ast(qm_result_str_check)
                     qm_result_ast_check = normalize_bool_ast(qm_result_ast_check, expand_imp_iff=True)
                     qm_result_canon_check = canonical_str(qm_result_ast_check)
+                    current_measure_after_laws = measure(current_ast)
                     qm_measure_check = measure(qm_result_ast_check)
                     
-                    # Try to reach minimal DNF with absorption (limit iterations to avoid infinite loops)
-                    # Only try once - if absorption doesn't make progress, we'll use merge steps instead
-                    current_canon_after_laws = canonical_str(current_ast)
-                    current_measure_after_laws = measure(current_ast)
-                    
-                    # Check if we've already reached minimal DNF
-                    if current_canon_after_laws == qm_result_canon_check and current_measure_after_laws[0] <= qm_measure_check[0]:
-                        # Already minimal, no need to apply absorption
-                        pass
-                    elif current_measure_after_laws[0] > qm_measure_check[0]:
-                        # Apply absorption ONCE to see if it helps
-                        # If it doesn't make progress, we'll continue with merge steps
-                        absorb_steps = build_absorb_steps(current_ast, vars_list, selected_pi, pi_to_minterms)
-                        if absorb_steps:
-                            steps.extend(absorb_steps)
-                            current_ast = generate_ast(absorb_steps[-1].after_str)
-                            current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                    # If not minimal, apply absorption iteratively until minimal DNF is reached
+                    if current_canon_after_laws != qm_result_canon_check or current_measure_after_laws[0] > qm_measure_check[0]:
+                        # Iteratively apply absorption until we reach minimal DNF
+                        max_absorb_iterations = 20
+                        for absorb_iteration in range(max_absorb_iterations):
+                            # Check if we've reached minimal DNF
+                            current_canon_iter = canonical_str(current_ast)
+                            current_measure_iter = measure(current_ast)
+                            if current_canon_iter == qm_result_canon_check and current_measure_iter[0] <= qm_measure_check[0]:
+                                # Reached minimal DNF
+                                break
                             
-                            # Remove contradictions that may have been created
-                            contradiction_steps = build_contradiction_steps(current_ast, vars_list)
-                            if contradiction_steps:
-                                steps.extend(contradiction_steps)
-                                current_ast = generate_ast(contradiction_steps[-1].after_str)
+                            # Apply absorption
+                            absorb_steps = build_absorb_steps(current_ast, vars_list, selected_pi, pi_to_minterms)
+                            if absorb_steps:
+                                steps.extend(absorb_steps)
+                                current_ast = generate_ast(absorb_steps[-1].after_str)
                                 current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                                
+                                # Remove contradictions that may have been created
+                                contradiction_steps = build_contradiction_steps(current_ast, vars_list)
+                                if contradiction_steps:
+                                    steps.extend(contradiction_steps)
+                                    current_ast = generate_ast(contradiction_steps[-1].after_str)
+                                    current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                            else:
+                                # No more absorption steps can be generated
+                                break
             laws_result_str = None
             if steps:
                 laws_result_str = steps[-1].after_str
