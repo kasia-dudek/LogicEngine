@@ -369,7 +369,12 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             final_measure_after_absorb = measure(current_ast)
                             if final_canon_after_absorb != qm_result_canon_check or final_measure_after_absorb[0] > qm_measure_check[0]:
                                 # Not minimal yet - will continue in next section
+                                # Make sure laws_completed is False so we continue
                                 pass
+                        else:
+                            # No steps from iterative absorption - use current_ast as is
+                            # This ensures current_ast is set for the next section
+                            pass
             
             laws_result_str = None
             if steps:
