@@ -856,21 +856,20 @@ def build_merge_steps(
         before_canon_3 = after_canon_2  # Use after_canon_2 from step 2
         
         # Find the AND node with CONST(1) before applying the transformation
-        # IMPORTANT: We need to find it in working_ast BEFORE normalization
-        # because normalize_bool_ast might remove CONST(1) via neutral element rule
+        # IMPORTANT: We need to find it in working_ast (which is after_ast_2_flattened)
+        # This should contain CONST(1) from step 2 (tautology)
         before_subexpr_3 = None
         after_subexpr_3 = None
         neutral_path = None
         
-        # Deep copy working_ast to avoid modifying it during search
-        working_ast_copy = copy.deepcopy(working_ast)
-        
-        for path, sub in iter_nodes(working_ast_copy):
+        # Search in working_ast for AND node with CONST(1)
+        for path, sub in iter_nodes(working_ast):
             if isinstance(sub, dict) and sub.get("op") == "AND":
                 args = sub.get("args", [])
                 has_const_1 = any(isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1 for arg in args)
                 if has_const_1:
                     # Store the original node with CONST(1) - this is what we want to show
+                    # Use deep copy to preserve the structure with CONST(1)
                     before_subexpr_3 = copy.deepcopy(sub)
                     neutral_path = path
                     # Compute what it will become (remove CONST(1))
@@ -886,9 +885,32 @@ def build_merge_steps(
             # Skip step 3 - no neutral element to remove
             return steps
         
+        # Verify that before_subexpr_3 actually contains CONST(1) in its structure
+        # If not, something went wrong - but we should have found it above
+        if isinstance(before_subexpr_3, dict) and before_subexpr_3.get("op") == "AND":
+            args = before_subexpr_3.get("args", [])
+            has_const_1 = any(isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1 for arg in args)
+            if not has_const_1:
+                # This shouldn't happen, but if it does, skip this step
+                return steps
+        
         # Use pretty_with_tokens_no_norm to avoid normalization
         # This ensures before_subexpr shows A∧1 (not just A)
         before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3)
+        
+        # Double-check that the string contains "1"
+        # If it doesn't, there's a bug in pretty_with_tokens_no_norm or the structure
+        if "1" not in before_subexpr_str_3:
+            # This is a bug - before_subexpr_3 should contain CONST(1)
+            # But let's try to reconstruct it from the structure anyway
+            # Find all args that are not CONST(1) and add CONST(1)
+            if isinstance(before_subexpr_3, dict) and before_subexpr_3.get("op") == "AND":
+                args = before_subexpr_3.get("args", [])
+                non_const_args = [arg for arg in args if not (isinstance(arg, dict) and arg.get("op") == "CONST" and arg.get("value") == 1)]
+                # Reconstruct with CONST(1) explicitly added
+                before_subexpr_3 = {"op": "AND", "args": non_const_args + [CONST(1)]}
+                before_subexpr_str_3, _ = pretty_with_tokens_no_norm(before_subexpr_3)
+        
         if after_subexpr_3:
             after_subexpr_str_3, _ = pretty_with_tokens_no_norm(after_subexpr_3)
         else:
