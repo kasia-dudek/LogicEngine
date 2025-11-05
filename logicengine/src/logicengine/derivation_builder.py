@@ -1497,24 +1497,50 @@ def build_absorb_steps(
                     lits_i = _extract_lits_from_term(arg_i)
                     lits_j = _extract_lits_from_term(arg_j)
                     
+                    # Also try canonical string comparison as a fallback for complex terms
+                    # This handles cases where _extract_lits_from_term returns empty lists
+                    # but we can still detect absorption by checking if one term's literals
+                    # are contained in the other term's structure
+                    canon_i = canonical_str(arg_i)
+                    canon_j = canonical_str(arg_j)
+                    
+                    term_to_remove_idx = None
+                    
                     if lits_i and lits_j:
                         lits_i_set = set(lits_i)
                         lits_j_set = set(lits_j)
                         
-                        # Determine which term to remove
-                        term_to_remove_idx = None
+                        # Determine which term to remove based on literal subsets
                         if lits_j_set.issubset(lits_i_set) and len(lits_i) > len(lits_j):
                             # arg_i is superset of arg_j - remove arg_i
                             term_to_remove_idx = i
                         elif lits_i_set.issubset(lits_j_set) and len(lits_j) > len(lits_i):
                             # arg_j is superset of arg_i - remove arg_j
                             term_to_remove_idx = j
-                        
-                        if term_to_remove_idx is not None:
-                            # Found absorption opportunity
-                            # First check if canonical forms match (for exact duplicates handled above)
-                            if len(lits_i) == len(lits_j):
-                                continue  # Already handled by idempotence
+                    
+                    # Fallback: if literal extraction didn't work, try substring matching
+                    # This is less precise but can catch some cases where one term contains another
+                    if term_to_remove_idx is None:
+                        # Check if one canonical string contains all literals of the other
+                        # This is a heuristic - not perfect but can help with complex terms
+                        if lits_i and not lits_j:
+                            # arg_i has literals, arg_j doesn't - check if arg_j contains all of arg_i's literals
+                            all_lits_i_in_j = all(lit in canon_j for lit in [f"{v}" if p else f"¬{v}" for v, p in lits_i])
+                            if all_lits_i_in_j and len(canon_i) < len(canon_j):
+                                term_to_remove_idx = j
+                        elif lits_j and not lits_i:
+                            # arg_j has literals, arg_i doesn't - check if arg_i contains all of arg_j's literals
+                            all_lits_j_in_i = all(lit in canon_i for lit in [f"{v}" if p else f"¬{v}" for v, p in lits_j])
+                            if all_lits_j_in_i and len(canon_j) < len(canon_i):
+                                term_to_remove_idx = i
+                    
+                    if term_to_remove_idx is not None:
+                        # Found absorption opportunity
+                        # First check if canonical forms match (for exact duplicates handled above)
+                        if lits_i and lits_j and len(lits_i) == len(lits_j):
+                            continue  # Already handled by idempotence
+                        if canon_i == canon_j:
+                            continue  # Already handled by idempotence
                             
                             # Remove the superset term
                             before_str, _ = pretty_with_tokens(working_ast)
