@@ -108,9 +108,6 @@ def convert_to_dnf_with_laws(ast: Any, vars_list: List[str]) -> Tuple[Any, List[
                     after_str, _ = pretty_with_tokens(working_ast)
                     after_canon = canonical_str(working_ast)
                     
-                    # After: find the distributed result fragment in the AST
-                    # distributed_result is OR of terms like [(A∧B), (A∧C)]
-                    # We want to highlight the entire fragment (A∧B)∨(A∧C) in the after_str
                     after_highlight_spans_cp = []
                     
                     # Strategy: First try to find after_subexpr as a complete subtree in working_ast
@@ -1106,7 +1103,6 @@ def build_contradiction_steps(
         
         changed = False
         
-        # Find OR nodes to check for contradictory terms
         for path, sub in iter_nodes(working_ast):
             if not (isinstance(sub, dict) and sub.get("op") == "OR"):
                 continue
@@ -1175,7 +1171,6 @@ def build_contradiction_steps(
                             final_args.append(arg)
                     
                     if has_zero:
-                        # Remove 0: element neutralny step
                         if len(final_args) == 0:
                             after_ast = CONST(0)
                         elif len(final_args) == 1:
@@ -1187,14 +1182,11 @@ def build_contradiction_steps(
                 after_str, _ = pretty_with_tokens(after_ast)
                 after_canon = canonical_str(after_ast)
                 
-                # Calculate subexpressions
                 before_subexpr_str = " ∨ ".join([pretty(t) for t in contradictory_terms])
                 after_subexpr_str = "0" if len(contradictory_terms) > 0 else pretty(after_ast)
                 
-                # Calculate after highlight spans (should be empty or show 0 being removed)
                 after_highlight_spans_cp = []
                 
-                # Create step
                 step = Step(
                     rule="Kontradykcja",
                     before_str=before_str,
@@ -1217,6 +1209,7 @@ def build_contradiction_steps(
                 working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
                 
                 break
+        
         for path, sub in iter_nodes(working_ast):
             if not (isinstance(sub, dict) and sub.get("op") == "OR"):
                 continue
@@ -1228,7 +1221,6 @@ def build_contradiction_steps(
             )
             
             if has_zero:
-                # Remove 0 from OR
                 new_args = [
                     a for a in args
                     if not (isinstance(a, dict) and a.get("op") == "CONST" and a.get("value") == 0)

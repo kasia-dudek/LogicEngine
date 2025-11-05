@@ -136,7 +136,6 @@ export default function SimplifyDNF({ expression, loading }) {
                     <span className="text-xs text-gray-500 font-semibold">Przed:</span>
                     <div className="mt-1">
                       {step.before_highlight_spans_cp && step.before_highlight_spans_cp.length > 0 ? (
-                        // Use code-point spans (preferred)
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpansCP(
                             step.before_str,
@@ -145,7 +144,6 @@ export default function SimplifyDNF({ expression, loading }) {
                           )}
                         </div>
                       ) : step.before_span ? (
-                        // Fallback to single span
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.before_str,
@@ -154,7 +152,6 @@ export default function SimplifyDNF({ expression, loading }) {
                           )}
                         </div>
                       ) : (
-                        // Fallback to ColoredExpression with highlightText
                         <ColoredExpression 
                           expression={step.before_str} 
                           canonExpression={step.before_canon}
@@ -169,12 +166,10 @@ export default function SimplifyDNF({ expression, loading }) {
                   </div>
                 )}
                 
-                {/* Show subexpression change if available */}
                 {(step.before_focus_texts || step.after_focus_texts || step.before_subexpr || step.after_subexpr) && (
                   <div>
                     <span className="text-xs text-gray-500 font-semibold">Podwyrażenie:</span>
                     <div className="mt-1 flex items-center gap-2">
-                      {/* Use before_focus_texts if available, otherwise fallback to before_subexpr */}
                       {step.before_focus_texts && Array.isArray(step.before_focus_texts) && step.before_focus_texts.length > 0 ? (
                         <div className="flex items-center gap-1">
                           {step.before_focus_texts.map((text, idx) => (
@@ -194,7 +189,6 @@ export default function SimplifyDNF({ expression, loading }) {
                         />
                       )}
                       <span className="mx-2">→</span>
-                      {/* Use after_focus_texts if available, otherwise fallback to after_subexpr */}
                       {step.after_focus_texts && Array.isArray(step.after_focus_texts) && step.after_focus_texts.length > 0 ? (
                         <div className="flex items-center gap-1">
                           {step.after_focus_texts.map((text, idx) => (
@@ -222,7 +216,6 @@ export default function SimplifyDNF({ expression, loading }) {
                     <span className="text-xs text-gray-500 font-semibold">Po:</span>
                     <div className="mt-1">
                       {step.after_highlight_spans_cp && step.after_highlight_spans_cp.length > 0 ? (
-                        // Use code-point spans (preferred)
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpansCP(
                             step.after_str,
@@ -231,7 +224,6 @@ export default function SimplifyDNF({ expression, loading }) {
                           )}
                         </div>
                       ) : step.after_span ? (
-                        // Fallback to single span
                         <div className="font-mono text-gray-800 whitespace-pre">
                           {highlightBySpan(
                             step.after_str,
@@ -240,7 +232,6 @@ export default function SimplifyDNF({ expression, loading }) {
                           )}
                         </div>
                       ) : (
-                        // Fallback to ColoredExpression with highlightText
                         <ColoredExpression 
                           expression={step.after_str} 
                           canonExpression={step.after_canon}

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import ColoredExpression from './ColoredExpression';
+import { highlightBySpan, highlightBySpansCP } from './highlightBySpan';
 
 // Normalizuj wyrażenie: usuń spacje, znormalizuj białe znaki
 function normalizeExpr(expr) {
@@ -226,6 +227,7 @@ function HighlightedExpression({
   strategy = "auto",
   canonExpression = null,
   highlightSpan = null,
+  highlightSpansCp = null,
   beforeSubexprCanon = null,
   afterSubexprCanon = null
 }) {
@@ -234,23 +236,36 @@ function HighlightedExpression({
   const target = strategy === "before" ? beforeSubexpr : strategy === "after" ? afterSubexpr : (afterSubexpr || beforeSubexpr);
   const targetCanon = strategy === "before" ? beforeSubexprCanon : strategy === "after" ? afterSubexprCanon : (afterSubexprCanon || beforeSubexprCanon);
   
-  if (!target) {
-    return <ColoredExpression expression={fullExpression} className={className} />;
-  }
-
-  // Use RED for "before", GREEN for "after"
   const highlightClass = strategy === "before" 
     ? "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
     : "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5";
 
-  // Use canonical highlighting if available, otherwise fall back to substring matching
+  if (highlightSpansCp && Array.isArray(highlightSpansCp) && highlightSpansCp.length > 0) {
+    return (
+      <span className={`font-mono whitespace-pre ${className}`}>
+        {highlightBySpansCP(fullExpression, highlightSpansCp, highlightClass)}
+      </span>
+    );
+  }
+
+  if (!target) {
+    return <ColoredExpression expression={fullExpression} className={className} />;
+  }
+
+  if (highlightSpan) {
+    return (
+      <span className={`font-mono whitespace-pre ${className}`}>
+        {highlightBySpan(fullExpression, highlightSpan, highlightClass)}
+      </span>
+    );
+  }
+
   return (
     <ColoredExpression 
       expression={fullExpression} 
       canonExpression={canonExpression}
       className={className}
       highlightText={targetCanon || target}
-      highlightSpan={highlightSpan}
       highlightClass={highlightClass}
     />
   );
@@ -387,6 +402,7 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                     className="text-gray-800"
                     strategy="before"
                     highlightSpan={s.before_highlight_span}
+                    highlightSpansCp={s.before_highlight_spans_cp}
                     beforeSubexprCanon={s.before_subexpr_canon}
                   />
                 </div>
@@ -414,6 +430,7 @@ export default function LawsPanel({ data, onPickStep, pickedIndex, onApplyLaw })
                     className="text-gray-800"
                     strategy="after"
                     highlightSpan={s.after_highlight_span}
+                    highlightSpansCp={s.after_highlight_spans_cp}
                     beforeSubexprCanon={s.before_subexpr_canon}
                     afterSubexprCanon={s.after_subexpr_canon}
                   />
