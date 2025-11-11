@@ -1166,23 +1166,42 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                                     # Połącz pozostałości w OR
                                     remaining_or = OR([rem1_node, rem2_node])
                                     
-                                    # Stwórz factored result
-                                    factored = AND([factor, remaining_or])
+                                    # Stwórz factored result (rdzeń)
+                                    factored_core = AND([factor, remaining_or])
+                                    factored = factored_core
                                     
                                     # Dodaj pozostałe argumenty OR
                                     # Usuń indeksy and_indices[i] i and_indices[j] z args
                                     indices_to_remove = [and_indices[i], and_indices[j]]
                                     other_args = [arg for idx, arg in enumerate(args) if idx not in indices_to_remove]
                                     if other_args:
-                                        factored = OR(other_args + [factored])
+                                        factored = OR(other_args + [factored_core])
+                                        target_after_path = path + [("args", len(other_args))]
+                                    else:
+                                        target_after_path = path
                                     
                                     # Sprawdź czy to poprawia measure
                                     if measure(factored) < measure(sub):
+                                        before_focus_paths = [
+                                            path + [("args", and_indices[i])],
+                                            path + [("args", and_indices[j])],
+                                        ]
+                                        after_focus_paths = [target_after_path]
+                                        before_display = OR([
+                                            copy.deepcopy(args[and_indices[i]]),
+                                            copy.deepcopy(args[and_indices[j]]),
+                                        ])
+                                        after_display = factored_core
+                                        
                                         out.append({
                                             "law": "Faktoryzacja",
                                             "path": path,
                                             "before": sub,
                                             "after": factored,
+                                            "before_focus_paths": before_focus_paths,
+                                            "after_focus_paths": after_focus_paths,
+                                            "before_display": before_display,
+                                            "after_display": after_display,
                                             "note": "wyciągnij wspólny czynnik: (A∧X)∨(A∧Y)=A∧(X∨Y)",
                                         })
                                         break

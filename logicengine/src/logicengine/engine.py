@@ -51,6 +51,7 @@ TRIVIAL_LAW_NAMES = {
     "Dopełnienie (A ∨ ¬A)",
     "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B",
     "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B",
+    "Faktoryzacja",
     "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
 }
 
@@ -101,6 +102,7 @@ LAW_TO_RULE_NAME = {
     "Dystrybutywność (A∨B)∧C": "Dystrybutywność (A∨B)∧C",
     "Dystrybutywność A∧(B∨C)": "Dystrybutywność A∧(B∨C)",
     "Redukcja klauzul (x∨Y)∧(¬x∨Y)": "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
+    "Faktoryzacja": "Rozdzielność (faktoryzacja)",
 }
 
 
@@ -211,7 +213,7 @@ def _apply_law_match(
     
     if after_highlight_spans_cp:
         spans_len = sum(max(0, end - start) for start, end in after_highlight_spans_cp)
-        if spans_len < len(after_subexpr_str):
+        if spans_len < len(after_subexpr_str) and not match.get("after_focus_paths"):
             after_highlight_spans_cp = None
 
     if rule_name == "Dystrybutywność A∧(B∨C)":
@@ -242,6 +244,7 @@ def _apply_law_match(
         after_highlight_spans_cp
         and after_subexpr_str
         and rule_name != "Dystrybutywność A∧(B∨C)"
+        and not match.get("after_focus_paths")
     ):
         extracted = "".join(after_str[start:end] for start, end in after_highlight_spans_cp)
         if after_subexpr_str not in extracted:
