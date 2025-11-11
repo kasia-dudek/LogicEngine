@@ -51,6 +51,7 @@ TRIVIAL_LAW_NAMES = {
     "Dopełnienie (A ∨ ¬A)",
     "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B",
     "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B",
+    "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
 }
 
 COMPLEMENT_LAW_NAMES = {
@@ -63,6 +64,7 @@ COMPLEMENT_LAW_NAMES = {
 LAW_PRIORITY_ORDER = [
     "Kontradykcja (A ∧ ¬A)",
     "Dopełnienie (A ∨ ¬A)",
+    "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
     "Element pochłaniający (A∧0)",
     "Element pochłaniający (A∨1)",
     "Element neutralny (A∧1)",
@@ -98,6 +100,7 @@ LAW_TO_RULE_NAME = {
     "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B": "De Morgan (¬(A∨B))",
     "Dystrybutywność (A∨B)∧C": "Dystrybutywność (A∨B)∧C",
     "Dystrybutywność A∧(B∨C)": "Dystrybutywność A∧(B∨C)",
+    "Redukcja klauzul (x∨Y)∧(¬x∨Y)": "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
 }
 
 

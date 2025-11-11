@@ -502,6 +502,14 @@ def canon(n: Any) -> str:
     return canonical_str(n)
 
 
+def _multiset_signature(items: Iterable[Any]) -> Dict[str, int]:
+    sig: Dict[str, int] = {}
+    for item in items:
+        key = canon(item)
+        sig[key] = sig.get(key, 0) + 1
+    return sig
+
+
 def laws_matches(node: Any) -> List[Dict[str, Any]]:
     out: List[Dict[str, Any]] = []
 
@@ -621,6 +629,63 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
             
             # Distributivity: (A∨B)∧C = (A∧C)∨(B∧C)
             args = sub.get("args", [])
+
+            # Clause reduction: (x ∨ Y) ∧ (¬x ∨ Y) => Y
+            or_args_indices = [(idx, a) for idx, a in enumerate(args) if isinstance(a, dict) and a.get("op") == "OR"]
+            clause_reduced = False
+            for (idx_a, or_a), (idx_b, or_b) in combinations(or_args_indices, 2):
+                or_a_args = or_a.get("args", [])
+                or_b_args = or_b.get("args", [])
+                if len(or_a_args) < 2 or len(or_b_args) < 2:
+                    continue
+                for lit_idx_a, arg_a in enumerate(or_a_args):
+                    lit_a = to_lit(arg_a)
+                    if not lit_a:
+                        continue
+                    for lit_idx_b, arg_b in enumerate(or_b_args):
+                        lit_b = to_lit(arg_b)
+                        if not lit_b:
+                            continue
+                        if lit_a[0] != lit_b[0] or lit_a[1] == lit_b[1]:
+                            continue
+
+                        rest_a = [copy.deepcopy(x) for i, x in enumerate(or_a_args) if i != lit_idx_a]
+                        rest_b = [copy.deepcopy(x) for i, x in enumerate(or_b_args) if i != lit_idx_b]
+                        if not rest_a or _multiset_signature(rest_a) != _multiset_signature(rest_b):
+                            continue
+
+                        if len(rest_a) == 1:
+                            y_part = rest_a[0]
+                        else:
+                            y_part = {"op": "OR", "args": rest_a}
+
+                        new_and_args = [copy.deepcopy(arg) for k, arg in enumerate(args) if k not in {idx_a, idx_b}]
+                        new_and_args.append(y_part)
+
+                        if not new_and_args:
+                            after_node = y_part
+                        elif len(new_and_args) == 1:
+                            after_node = new_and_args[0]
+                        else:
+                            after_node = {"op": "AND", "args": new_and_args}
+
+                        out.append({
+                            "law": "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
+                            "path": path,
+                            "before": sub,
+                            "after": after_node,
+                            "note": "Wspólna część Y zostaje.",
+                        })
+
+                        clause_reduced = True
+                        break
+                    if clause_reduced:
+                        break
+                if clause_reduced:
+                    break
+            if clause_reduced:
+                continue
+
             for i, a in enumerate(args):
                 if isinstance(a, dict) and a.get("op") == "OR":
                     or_args = a.get("args", [])
