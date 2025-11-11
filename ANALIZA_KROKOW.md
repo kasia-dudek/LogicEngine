@@ -70,3 +70,4 @@
    - Sprawdzić czy wyrażenie końcowe jest minimalnym DNF (porównanie z QM result)
    - Jeśli nie, kontynuować z absorpcją/innymi krokami
 
+
