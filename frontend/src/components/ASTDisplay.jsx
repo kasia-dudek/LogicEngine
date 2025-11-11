@@ -10,6 +10,8 @@ export const OP_DEFS = {
     table: [['A','B','A ∨ B'], [0,0,0],[0,1,1],[1,0,1],[1,1,1]] },
   '→': { name: 'Implikacja (A → B)', desc: 'Fałsz tylko gdy A=1 i B=0.',
     table: [['A','B','A → B'], [0,0,1],[0,1,1],[1,0,0],[1,1,1]] },
+  '←': { name: 'Implikacja odwrotna (A ← B)', desc: 'Fałsz tylko gdy B=1 i A=0 (czyli B → A).',
+    table: [['A','B','A ← B'], [0,0,1],[0,1,0],[1,0,1],[1,1,1]] },
   '↔': { name: 'Równoważność (A ↔ B)', desc: 'Prawda gdy oba argumenty mają tę samą wartość.',
     table: [['A','B','A ↔ B'], [0,0,1],[0,1,0],[1,0,0],[1,1,1]] },
   '≡': { name: 'Równoważność (XNOR)', desc: 'Prawda, gdy oba argumenty mają tę samą wartość.',

@@ -17,8 +17,8 @@ def to_onp(expr: str) -> str:
     stack = []
 
     # operator precedence (higher = tighter)
-    prec = {"¬": 5, "∧": 4, "∨": 3, "⊕": 3, "↑": 3, "↓": 3, "→": 2, "↔": 1, "≡": 1}
-    right_assoc = {"¬", "→", "↔", "≡"}
+    prec = {"¬": 5, "∧": 4, "∨": 3, "⊕": 3, "↑": 3, "↓": 3, "→": 2, "←": 2, "↔": 1, "≡": 1}
+    right_assoc = {"¬", "→", "←", "↔", "≡"}
 
     i = 0
     n = len(expr)

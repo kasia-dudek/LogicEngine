@@ -95,27 +95,186 @@ code {
     display: none !important;
   }
 
-  /* Ensure text is black for readability */
-  * {
-    color: #000 !important;
-    background: transparent !important;
+  /* Keep colors for important elements - don't force everything to black */
+  /* Only set default text color for elements without specific color classes */
+  body, p, div, span, td, th {
+    color: #000;
   }
 
-  /* Keep important backgrounds */
-  .print\\:bg-white, .print\\:bg-blue-100, .print\\:bg-green-100,
-  .print\\:bg-yellow-100, .print\\:bg-purple-100, .print\\:bg-gray-200 {
-    background: var(--bg-color) !important;
+  /* Preserve text colors */
+  .text-blue-700, .text-blue-600, .text-blue-800, .text-blue-900 {
+    color: #1d4ed8 !important;
+  }
+  .text-green-700, .text-green-600, .text-green-800, .text-green-900 {
+    color: #15803d !important;
+  }
+  .text-yellow-700, .text-yellow-600, .text-yellow-800 {
+    color: #a16207 !important;
+  }
+  .text-purple-700, .text-purple-600, .text-purple-800 {
+    color: #9333ea !important;
+  }
+  .text-red-700, .text-red-600, .text-red-800 {
+    color: #b91c1c !important;
+  }
+  .text-orange-600, .text-orange-700 {
+    color: #ea580c !important;
+  }
+  .text-pink-600, .text-pink-700 {
+    color: #db2777 !important;
+  }
+  .text-indigo-600, .text-indigo-700 {
+    color: #4f46e5 !important;
+  }
+  .text-teal-600, .text-teal-700 {
+    color: #0d9488 !important;
+  }
+  .text-gray-400, .text-gray-500, .text-gray-600, .text-gray-700 {
+    color: #6b7280 !important;
+  }
+
+  /* Preserve background colors */
+  .bg-blue-50, .print\\:bg-blue-100 {
+    background-color: #dbeafe !important;
+  }
+  .bg-green-50, .print\\:bg-green-100, .print\\:bg-green-200 {
+    background-color: #dcfce7 !important;
+  }
+  .bg-yellow-50, .print\\:bg-yellow-100 {
+    background-color: #fef9c3 !important;
+  }
+  .bg-purple-50, .print\\:bg-purple-100 {
+    background-color: #f3e8ff !important;
+  }
+  .bg-gray-100, .bg-gray-200, .print\\:bg-gray-200 {
+    background-color: #f3f4f6 !important;
+  }
+  
+  /* KMapDisplay colors */
+  .bg-blue-200 {
+    background-color: #bfdbfe !important;
+  }
+  .bg-green-200 {
+    background-color: #bbf7d0 !important;
+  }
+  .bg-yellow-200 {
+    background-color: #fde68a !important;
+  }
+  .bg-pink-200 {
+    background-color: #fbcfe8 !important;
+  }
+  .bg-purple-200 {
+    background-color: #e9d5ff !important;
+  }
+  .bg-orange-200 {
+    background-color: #fed7aa !important;
+  }
+  .bg-red-200 {
+    background-color: #fecaca !important;
+  }
+  .bg-teal-200 {
+    background-color: #99f6e4 !important;
+  }
+  
+  /* ColoredExpression highlight colors */
+  .bg-red-50 {
+    background-color: #fef2f2 !important;
+  }
+  .bg-green-100 {
+    background-color: #dcfce7 !important;
+  }
+  .text-red-800 {
+    color: #991b1b !important;
+  }
+  .text-green-800, .text-green-900 {
+    color: #166534 !important;
+  }
+  
+  /* Mark elements for highlighting */
+  mark {
+    background-color: inherit !important;
+    color: inherit !important;
+  }
+  mark.bg-green-100 {
+    background-color: #dcfce7 !important;
+    color: #166534 !important;
+  }
+  mark.bg-red-50 {
+    background-color: #fef2f2 !important;
+    color: #991b1b !important;
+  }
+  
+  /* Keep white backgrounds */
+  .bg-white {
+    background-color: #ffffff !important;
   }
 
   /* Borders for structure */
   .border, .border-gray-200, .border-gray-300 {
     border: 1px solid #ccc !important;
   }
+  
+  /* Colored borders for KMapDisplay and other components */
+  .border-blue-200, .border-blue-300, .border-blue-400 {
+    border-color: #93c5fd !important;
+  }
+  .border-green-200, .border-green-300, .border-green-400 {
+    border-color: #86efac !important;
+  }
+  .border-yellow-200, .border-yellow-300, .border-yellow-400 {
+    border-color: #fde047 !important;
+  }
+  .border-pink-200, .border-pink-300, .border-pink-400 {
+    border-color: #f9a8d4 !important;
+  }
+  .border-purple-200, .border-purple-300, .border-purple-400 {
+    border-color: #c4b5fd !important;
+  }
+  .border-orange-200, .border-orange-300, .border-orange-400 {
+    border-color: #fdba74 !important;
+  }
+  .border-red-200, .border-red-300, .border-red-400 {
+    border-color: #fca5a5 !important;
+  }
+  .border-teal-200, .border-teal-300, .border-teal-400 {
+    border-color: #5eead4 !important;
+  }
+  .border-blue-100 {
+    border-color: #dbeafe !important;
+  }
+  .border-green-100 {
+    border-color: #dcfce7 !important;
+  }
+  .border-yellow-100 {
+    border-color: #fef9c3 !important;
+  }
+  .border-purple-100 {
+    border-color: #f3e8ff !important;
+  }
+  
+  /* Ring colors for highlights */
+  .ring-red-200, .ring-red-300 {
+    --tw-ring-color: #fecaca !important;
+  }
+  .ring-green-200, .ring-green-300 {
+    --tw-ring-color: #bbf7d0 !important;
+  }
+  .ring-blue-500 {
+    --tw-ring-color: #3b82f6 !important;
+  }
 
   /* Typography adjustments */
   h1, h2, h3, h4, h5, h6 {
     color: #000 !important;
     page-break-after: avoid !important;
+  }
+  
+  /* Allow colored headings where specified */
+  h1.text-blue-700, h2.text-blue-700, h3.text-blue-700 {
+    color: #1d4ed8 !important;
+  }
+  h1.text-gray-800, h2.text-gray-800, h3.text-gray-800 {
+    color: #1f2937 !important;
   }
 
   /* Prevent orphans and widows */
@@ -133,6 +292,17 @@ code {
   th, td {
     border: 1px solid #ccc !important;
     padding: 4px !important;
+  }
+  
+  /* Preserve table cell colors */
+  th.bg-gray-100, th.bg-gray-200, th.print\\:bg-gray-200 {
+    background-color: #f3f4f6 !important;
+  }
+  tr.bg-green-100, tr.print\\:bg-green-200 {
+    background-color: #dcfce7 !important;
+  }
+  td.text-green-800, td.print\\:text-green-900 {
+    color: #166534 !important;
   }
 
   /* SVG adjustments */

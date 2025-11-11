@@ -43,7 +43,7 @@ function sliceByCodePoints(text, start, end) {
  * Uses Array.from() to handle multi-byte characters correctly.
  * Optionally merges overlapping/adjacent spans to avoid nested <span> tags.
  */
-export function highlightBySpansCP(text, spans, highlightClass = 'bg-red-100 rounded px-1') {
+export function highlightBySpansCP(text, spans, highlightClass = 'bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-1') {
   if (!text || !spans || spans.length === 0) {
     return text;
   }

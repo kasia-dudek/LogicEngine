@@ -34,7 +34,7 @@ def _eval_rpn(tokens: List[str], env: Dict[str, int]) -> int:
                 raise TruthTableError("Błędne wyrażenie (negacja).")
             a = s.pop()
             s.append(b(not a))
-        elif t in {"∧", "∨", "⊕", "↑", "↓", "→", "↔", "≡"}:
+        elif t in {"∧", "∨", "⊕", "↑", "↓", "→", "←", "↔", "≡"}:
             if len(s) < 2:
                 raise TruthTableError(f"Błędne wyrażenie (operator binarny {t}): za mało argumentów na stosie.")
             b2, b1 = s.pop(), s.pop()
@@ -51,6 +51,8 @@ def _eval_rpn(tokens: List[str], env: Dict[str, int]) -> int:
                 s.append(b(not (b1 or b2)))
             elif t == "→":  # implication
                 s.append(b((not b1) or b2))
+            elif t == "←":  # reverse implication (b2 -> b1)
+                s.append(b((not b2) or b1))
             elif t in {"↔", "≡"}:  # equivalence
                 s.append(b(b1 == b2))
         else:

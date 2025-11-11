@@ -20,10 +20,12 @@ function App() {
         // Sprawdź czy są dane w sessionStorage
         const storedData = sessionStorage.getItem('printData');
         const storedInput = sessionStorage.getItem('printInput');
+        const storedOptions = sessionStorage.getItem('printOptions');
         
         if (storedData && storedInput) {
           try {
-            setPrintData({ data: JSON.parse(storedData), input: storedInput });
+            const printOptions = storedOptions ? JSON.parse(storedOptions) : null;
+            setPrintData({ data: JSON.parse(storedData), input: storedInput, printOptions });
             setScreen('print');
           } catch (e) {
             console.error('Error parsing stored print data:', e);
@@ -84,14 +86,17 @@ function App() {
     setScreen('result');
   };
 
-  const handleExportToPrint = (data, input) => {
+  const handleExportToPrint = (data, input, printOptions = null) => {
     // Zapisz dane w sessionStorage
     sessionStorage.setItem('printData', JSON.stringify(data));
     sessionStorage.setItem('printInput', input);
+    if (printOptions) {
+      sessionStorage.setItem('printOptions', JSON.stringify(printOptions));
+    }
     
     // Przejdź do /print
     window.history.pushState({}, '', '/print');
-    setPrintData({ data, input });
+    setPrintData({ data, input, printOptions });
     setScreen('print');
   };
 
@@ -99,6 +104,7 @@ function App() {
     // Wyczyść dane z sessionStorage
     sessionStorage.removeItem('printData');
     sessionStorage.removeItem('printInput');
+    sessionStorage.removeItem('printOptions');
     
     // Wróć do poprzedniej strony
     window.history.back();
@@ -123,6 +129,7 @@ function App() {
         <PrintableResults 
           data={printData.data} 
           input={printData.input} 
+          printOptions={printData.printOptions}
           onBack={handleBackFromPrint}
         />
       )}

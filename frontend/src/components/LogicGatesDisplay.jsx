@@ -19,6 +19,7 @@ const SYMBOL_TO_GATE = {
   '⊕': 'XOR',
   '≡': 'XNOR',
   '→': 'IMPLIES',
+  '←': 'IMPLIES_LEFT',
   '↔': 'IFF'
 };
 
@@ -32,6 +33,7 @@ const GATE_CONFIG = {
   XOR: { width: 80, height: 50, symbol: '=1', color: '#0891b2' },
   XNOR: { width: 80, height: 50, symbol: '=1', color: '#db2777' },
   IMPLIES: { width: 80, height: 50, symbol: '→', color: '#ea580c' },
+  IMPLIES_LEFT: { width: 80, height: 50, symbol: '←', color: '#ea580c' },
   IFF: { width: 80, height: 50, symbol: '↔', color: '#65a30d' }
 };
 
@@ -209,7 +211,7 @@ function drawGate(svg, gate, x, y) {
   }
 
   // Symbol bramki (tylko dla prostokątnych)
-  if (gate.type === 'IMPLIES' || gate.type === 'IFF') {
+  if (gate.type === 'IMPLIES' || gate.type === 'IMPLIES_LEFT' || gate.type === 'IFF') {
     group.append('text')
       .attr('x', 0)
       .attr('y', 0)

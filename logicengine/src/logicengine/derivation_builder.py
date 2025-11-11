@@ -1480,7 +1480,7 @@ def build_absorb_steps(
                 break  # Restart search after each change
             
             # RULE 2: Absorption - X ∨ (X∧Y) ⇒ X
-            # Check all pairs
+            # Check all pairs - try truth table hash first for complex terms
             for i in range(len(args)):
                 for j in range(len(args)):
                     if i == j:
@@ -1489,18 +1489,113 @@ def build_absorb_steps(
                     arg_i = args[i]
                     arg_j = args[j]
                     
-                    # Check absorption: X ∨ (X∧Y) ⇒ X
-                    # We remove the term that is a superset (contains more literals)
-                    # For example: (A∧C) ∨ (A∧B∧C) ⇒ (A∧C) (remove A∧B∧C)
-                    # Or: (A∧B∧C) ∨ (A∧C) ⇒ (A∧C) (remove A∧B∧C)
-                    # So we check if one is subset of the other, and remove the superset
+                    # FIRST: Try truth table hash check - most reliable for complex terms
+                    from .utils import truth_table_hash
+                    from .laws import pretty_with_tokens
+                    try:
+                        test_expr_i = {"op": "OR", "args": [arg_i]}
+                        test_expr_j = {"op": "OR", "args": [arg_j]}
+                        test_expr_both = {"op": "OR", "args": [arg_i, arg_j]}
+                        
+                        test_str_i, _ = pretty_with_tokens(test_expr_i)
+                        test_str_j, _ = pretty_with_tokens(test_expr_j)
+                        test_str_both, _ = pretty_with_tokens(test_expr_both)
+                        
+                        hash_i = truth_table_hash(vars_list, test_str_i)
+                        hash_j = truth_table_hash(vars_list, test_str_j)
+                        hash_both = truth_table_hash(vars_list, test_str_both)
+                        
+                        # Check if arg_i ∨ arg_j is equivalent to arg_i (then arg_j is redundant)
+                        if hash_i == hash_both and len(hash_i) > 0 and hash_i != "0" * len(hash_i):
+                            term_to_remove_idx = j
+                            # Skip literal-based checks, go directly to removal
+                            if term_to_remove_idx is not None:
+                                # Found absorption opportunity
+                                canon_i = canonical_str(arg_i)
+                                canon_j = canonical_str(arg_j)
+                                if canon_i != canon_j:  # Not already handled by idempotence
+                                    # Remove the redundant term
+                                    before_str, _ = pretty_with_tokens(working_ast)
+                                    before_canon_val = canonical_str(working_ast)
+                                    before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                                    
+                                    new_args = [args[k] for k in range(len(args)) if k != term_to_remove_idx]
+                                    new_or_node = {"op": "OR", "args": new_args}
+                                    working_ast = set_by_path(working_ast, path, new_or_node)
+                                    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                                    after_str, _ = pretty_with_tokens(working_ast)
+                                    after_canon_val = canonical_str(working_ast)
+                                    after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                                    
+                                    is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                                    
+                                    step = Step(
+                                        before_str=before_str,
+                                        after_str=after_str,
+                                        rule="Absorpcja (∨)",
+                                        category="user",
+                                        schema="X ∨ (X∧Y) ⇒ X",
+                                        location=None,
+                                        proof={"method": "tt-hash", "equal": is_equal},
+                                        before_canon=before_canon_val,
+                                        after_canon=after_canon_val,
+                                        before_span=before_span,
+                                        after_span=after_span
+                                    )
+                                    steps.append(step)
+                                    changed = True
+                                    break  # Restart search after each change
+                        
+                        # Check if arg_i ∨ arg_j is equivalent to arg_j (then arg_i is redundant)
+                        if not changed and hash_j == hash_both and len(hash_j) > 0 and hash_j != "0" * len(hash_j):
+                            term_to_remove_idx = i
+                            # Skip literal-based checks, go directly to removal
+                            if term_to_remove_idx is not None:
+                                canon_i = canonical_str(arg_i)
+                                canon_j = canonical_str(arg_j)
+                                if canon_i != canon_j:  # Not already handled by idempotence
+                                    # Remove the redundant term
+                                    before_str, _ = pretty_with_tokens(working_ast)
+                                    before_canon_val = canonical_str(working_ast)
+                                    before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                                    
+                                    new_args = [args[k] for k in range(len(args)) if k != term_to_remove_idx]
+                                    new_or_node = {"op": "OR", "args": new_args}
+                                    working_ast = set_by_path(working_ast, path, new_or_node)
+                                    working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                                    after_str, _ = pretty_with_tokens(working_ast)
+                                    after_canon_val = canonical_str(working_ast)
+                                    after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                                    
+                                    is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                                    
+                                    step = Step(
+                                        before_str=before_str,
+                                        after_str=after_str,
+                                        rule="Absorpcja (∨)",
+                                        category="user",
+                                        schema="X ∨ (X∧Y) ⇒ X",
+                                        location=None,
+                                        proof={"method": "tt-hash", "equal": is_equal},
+                                        before_canon=before_canon_val,
+                                        after_canon=after_canon_val,
+                                        before_span=before_span,
+                                        after_span=after_span
+                                    )
+                                    steps.append(step)
+                                    changed = True
+                                    break  # Restart search after each change
+                    except Exception:
+                        # If hash computation fails, continue to literal-based checks
+                        pass
+                    
+                    # If truth table hash didn't find absorption, continue with literal-based checks
+                    if changed:
+                        break
+                    
+                    # Fallback: literal-based absorption check (for simple cases)
                     lits_i = _extract_lits_from_term(arg_i)
                     lits_j = _extract_lits_from_term(arg_j)
-                    
-                    # Also try canonical string comparison as a fallback for complex terms
-                    # This handles cases where _extract_lits_from_term returns empty lists
-                    # but we can still detect absorption by checking if one term's literals
-                    # are contained in the other term's structure
                     canon_i = canonical_str(arg_i)
                     canon_j = canonical_str(arg_j)
                     
@@ -1518,67 +1613,45 @@ def build_absorb_steps(
                             # arg_j is superset of arg_i - remove arg_j
                             term_to_remove_idx = j
                     
-                    # Fallback: if literal extraction didn't work, try substring matching
-                    # This is less precise but can catch some cases where one term contains another
-                    if term_to_remove_idx is None:
-                        # Check if one canonical string contains all literals of the other
-                        # This is a heuristic - not perfect but can help with complex terms
-                        if lits_i and not lits_j:
-                            # arg_i has literals, arg_j doesn't - check if arg_j contains all of arg_i's literals
-                            all_lits_i_in_j = all(lit in canon_j for lit in [f"{v}" if p else f"¬{v}" for v, p in lits_i])
-                            if all_lits_i_in_j and len(canon_i) < len(canon_j):
-                                term_to_remove_idx = j
-                        elif lits_j and not lits_i:
-                            # arg_j has literals, arg_i doesn't - check if arg_i contains all of arg_j's literals
-                            all_lits_j_in_i = all(lit in canon_i for lit in [f"{v}" if p else f"¬{v}" for v, p in lits_j])
-                            if all_lits_j_in_i and len(canon_j) < len(canon_i):
-                                term_to_remove_idx = i
-                    
                     if term_to_remove_idx is not None:
-                        # Found absorption opportunity
-                        # First check if canonical forms match (for exact duplicates handled above)
+                        # Found absorption opportunity via literal check
+                        # Check if canonical forms match (for exact duplicates handled above)
                         if lits_i and lits_j and len(lits_i) == len(lits_j):
                             continue  # Already handled by idempotence
                         if canon_i == canon_j:
                             continue  # Already handled by idempotence
                             
-                            # Remove the superset term
-                            before_str, _ = pretty_with_tokens(working_ast)
-                            before_canon_val = canonical_str(working_ast)
-                            
-                            # Calculate span for the OR node being modified
-                            before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
-                            
-                            # Remove the term at term_to_remove_idx
-                            new_args = [args[k] for k in range(len(args)) if k != term_to_remove_idx]
-                            new_or_node = {"op": "OR", "args": new_args}
-                            working_ast = set_by_path(working_ast, path, new_or_node)
-                            working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
-                            after_str, _ = pretty_with_tokens(working_ast)
-                            after_canon_val = canonical_str(working_ast)
-                            
-                            # After span - same path
-                            after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
-                            
-                            # Verify TT equivalence
-                            is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
-                            
-                            step = Step(
-                                before_str=before_str,
-                                after_str=after_str,
-                                rule="Absorpcja (∨)",
-                                category="user",
-                                schema="X ∨ (X∧Y) ⇒ X",
-                                location=None,
-                                proof={"method": "tt-hash", "equal": is_equal},
-                                before_canon=before_canon_val,
-                                after_canon=after_canon_val,
-                                before_span=before_span,
-                                after_span=after_span
-                            )
-                            steps.append(step)
-                            changed = True
-                            break  # Restart search after each change
+                        # Remove the superset term
+                        before_str, _ = pretty_with_tokens(working_ast)
+                        before_canon_val = canonical_str(working_ast)
+                        before_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                        
+                        new_args = [args[k] for k in range(len(args)) if k != term_to_remove_idx]
+                        new_or_node = {"op": "OR", "args": new_args}
+                        working_ast = set_by_path(working_ast, path, new_or_node)
+                        working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                        after_str, _ = pretty_with_tokens(working_ast)
+                        after_canon_val = canonical_str(working_ast)
+                        after_span = find_subtree_span_by_path_cp(path, working_ast) if path else None
+                        
+                        is_equal = (truth_table_hash(vars_list, before_str) == truth_table_hash(vars_list, after_str))
+                        
+                        step = Step(
+                            before_str=before_str,
+                            after_str=after_str,
+                            rule="Absorpcja (∨)",
+                            category="user",
+                            schema="X ∨ (X∧Y) ⇒ X",
+                            location=None,
+                            proof={"method": "tt-hash", "equal": is_equal},
+                            before_canon=before_canon_val,
+                            after_canon=after_canon_val,
+                            before_span=before_span,
+                            after_span=after_span
+                        )
+                        steps.append(step)
+                        changed = True
+                        break  # Restart search after each change
                 
                 if changed:
                     break

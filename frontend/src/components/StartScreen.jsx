@@ -13,10 +13,12 @@ function StartScreen({ onSubmit, onDefinitions, onHistory }) {
     { re: /\|/g, to: '∨' },
     { re: /~/g, to: '¬' },
     { re: /!/g, to: '¬' },
-    { re: /=>/g, to: '→' },
-    { re: /->/g, to: '→' },
     { re: /<=>/g, to: '↔' },
     { re: /<->/g, to: '↔' },
+    { re: /=>/g, to: '→' },
+    { re: /->/g, to: '→' },
+    { re: /<=/g, to: '←' },
+    { re: /<-/g, to: '←' },
     { re: /\^/g, to: '⊕' },
   ];
 
@@ -76,7 +78,7 @@ function StartScreen({ onSubmit, onDefinitions, onHistory }) {
   // Kalkulator logiczny - przyciski
   const buttons = [
     'A', 'B', 'C', 'D', 'E', '0', '1',
-    '¬', '∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡', '(', ')',
+    '¬', '∧', '∨', '→', '←', '↔', '⊕', '↑', '↓', '≡', '(', ')',
     'spacja', 'usuń'
   ];
 

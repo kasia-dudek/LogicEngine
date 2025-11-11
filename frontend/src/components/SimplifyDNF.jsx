@@ -101,10 +101,10 @@ export default function SimplifyDNF({ expression, loading }) {
             </h3>
             <div className="text-xs text-gray-600 bg-gray-50 px-3 py-1.5 rounded-full border border-gray-200 flex items-center gap-2">
               <div className="flex items-center gap-2">
-                <span className="inline-block w-3 h-3 bg-red-500 rounded-full flex-shrink-0"></span>
-                <span className="inline-block w-3 h-3 bg-green-500 rounded-full flex-shrink-0"></span>
+                <span className="inline-block w-3 h-3 bg-rose-500 rounded-full flex-shrink-0"></span>
+                <span className="inline-block w-3 h-3 bg-emerald-500 rounded-full flex-shrink-0"></span>
               </div>
-              <span><span className="text-red-700 font-semibold">Czerwony</span> = fragment zmieniany (PRZED), <span className="text-green-700 font-semibold">Zielony</span> = nowy fragment (PO)</span>
+              <span><span className="text-rose-700 font-semibold">Czerwony</span> = fragment zmieniany (PRZED), <span className="text-emerald-700 font-semibold">Zielony</span> = nowy fragment (PO)</span>
             </div>
           </div>
           {steps.map((step, idx) => (
@@ -140,7 +140,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           {highlightBySpansCP(
                             step.before_str,
                             step.before_highlight_spans_cp,
-                            "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                            "bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-0.5"
                           )}
                         </div>
                       ) : step.before_span ? (
@@ -148,7 +148,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           {highlightBySpan(
                             step.before_str,
                             step.before_span,
-                            "bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                            "bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-0.5"
                           )}
                         </div>
                       ) : (
@@ -159,7 +159,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           highlightText={step.before_subexpr_canon || step.before_subexpr}
                           highlightSpan={step.before_highlight_span}
                           highlightSpansCp={step.before_highlight_spans_cp}
-                          highlightClass="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-0.5"
+                          highlightClass="bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-0.5"
                         />
                       )}
                     </div>
@@ -176,7 +176,7 @@ export default function SimplifyDNF({ expression, loading }) {
                             <React.Fragment key={idx}>
                               <ColoredExpression 
                                 expression={text} 
-                                className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" 
+                                className="bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-1" 
                               />
                               {idx < step.before_focus_texts.length - 1 && <span>∨</span>}
                             </React.Fragment>
@@ -185,7 +185,7 @@ export default function SimplifyDNF({ expression, loading }) {
                       ) : (
                         <ColoredExpression 
                           expression={step.before_subexpr || ''} 
-                          className="bg-red-50 text-red-800 ring-1 ring-red-200 rounded px-1" 
+                          className="bg-rose-100 text-rose-800 ring-1 ring-rose-200 rounded px-1" 
                         />
                       )}
                       <span className="mx-2">→</span>
@@ -195,7 +195,7 @@ export default function SimplifyDNF({ expression, loading }) {
                             <React.Fragment key={idx}>
                               <ColoredExpression 
                                 expression={text} 
-                                className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" 
+                                className="bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 rounded px-1" 
                               />
                               {idx < step.after_focus_texts.length - 1 && <span>∨</span>}
                             </React.Fragment>
@@ -204,7 +204,7 @@ export default function SimplifyDNF({ expression, loading }) {
                       ) : (
                         <ColoredExpression 
                           expression={step.after_subexpr || ''} 
-                          className="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-1" 
+                          className="bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 rounded px-1" 
                         />
                       )}
                     </div>
@@ -220,7 +220,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           {highlightBySpansCP(
                             step.after_str,
                             step.after_highlight_spans_cp,
-                            "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                            "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 rounded px-0.5"
                           )}
                         </div>
                       ) : step.after_span ? (
@@ -228,7 +228,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           {highlightBySpan(
                             step.after_str,
                             step.after_span,
-                            "bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                            "bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 rounded px-0.5"
                           )}
                         </div>
                       ) : (
@@ -239,7 +239,7 @@ export default function SimplifyDNF({ expression, loading }) {
                           highlightText={step.after_subexpr_canon || step.after_subexpr}
                           highlightSpan={step.after_highlight_span}
                           highlightSpansCp={step.after_highlight_spans_cp}
-                          highlightClass="bg-green-50 text-green-800 ring-1 ring-green-200 rounded px-0.5"
+                          highlightClass="bg-emerald-100 text-emerald-800 ring-1 ring-emerald-200 rounded px-0.5"
                         />
                       )}
                     </div>

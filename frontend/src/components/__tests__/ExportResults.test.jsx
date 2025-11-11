@@ -14,6 +14,7 @@ jest.mock('jspdf', () => {
 });
 
 global.URL.createObjectURL = jest.fn(() => 'blob:url');
+global.URL.revokeObjectURL = jest.fn();
 
 describe('ExportResults', () => {
   const data = {

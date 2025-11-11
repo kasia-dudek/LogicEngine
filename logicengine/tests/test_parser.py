@@ -9,6 +9,8 @@ from logicengine.parser import LogicParser, LogicExpressionError
     ("A & B", "A∧B"),
     ("A + B", "A∨B"),
     ("A => B", "A→B"),
+    ("A <= B", "A←B"),
+    ("A <- B", "A←B"),
     ("A <=> B", "A↔B"),
 ])
 def test_standardize_and_validate(expr, expected):
@@ -26,6 +28,6 @@ def test_standardize_and_validate(expr, expected):
     "A ∧ ∧ B",     # podwójny operator
 ])
 def test_invalid_expressions(expr):
-    std = LogicParser.standardize(expr)
     with pytest.raises(LogicExpressionError):
+        std = LogicParser.standardize(expr)
         LogicParser.validate(std) 

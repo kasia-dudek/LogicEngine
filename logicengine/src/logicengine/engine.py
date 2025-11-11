@@ -1,7 +1,8 @@
 ﻿# engine.py
 """Main logic engine integrating analysis steps."""
 
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional, Tuple
+import copy
 
 from .parser import validate_and_standardize, LogicExpressionError
 from .truth_table import generate_truth_table, TruthTableError
@@ -11,13 +12,592 @@ from .kmap import simplify_kmap, KMapError
 from .qm import simplify_qm, QMError
 from .tautology import is_tautology
 from .contradiction import is_contradiction
-from .laws import simplify_with_laws, measure
+from .laws import (
+    simplify_with_laws,
+    measure,
+    pretty_with_tokens,
+    laws_matches,
+    find_subtree_span_by_path_cp,
+    find_subtree_span_by_path,
+    pretty,
+    set_by_path,
+    iter_nodes,
+    NOT,
+    AND,
+    OR,
+    CONST,
+    to_lit,
+)
 from .ast import collect_variables, canonical_str, normalize_bool_ast, generate_ast
-from .utils import truth_table_hash, equivalent
+from .utils import truth_table_hash, equivalent, bin_to_expr
 from .steps import Step, RuleName, StepCategory
 from .derivation_builder import build_minterm_expansion_steps, build_merge_steps, build_absorb_steps, build_contradiction_steps, is_dnf, ensure_pair_present
-from .qm import simplify_qm
 from .minimal_forms import compute_minimal_forms
+
+
+TRIVIAL_LAW_NAMES = {
+    "Idempotentność (∨)",
+    "Idempotentność (∧)",
+    "Element neutralny (A∨0)",
+    "Element neutralny (A∧1)",
+    "Element pochłaniający (A∨1)",
+    "Element pochłaniający (A∧0)",
+    "Podwójna negacja",
+    "Absorpcja (∨)",
+    "Absorpcja (∧)",
+    "Absorpcja z negacją",
+    "Absorpcja z negacją (dual)",
+    "Kontradykcja (A ∧ ¬A)",
+    "Dopełnienie (A ∨ ¬A)",
+    "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B",
+    "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B",
+}
+
+COMPLEMENT_LAW_NAMES = {
+    "Dopełnienie (A ∨ ¬A)",
+    "Kontradykcja (A ∧ ¬A)",
+    "Element neutralny (A∨0)",
+    "Element neutralny (A∧1)",
+}
+
+LAW_PRIORITY_ORDER = [
+    "Kontradykcja (A ∧ ¬A)",
+    "Dopełnienie (A ∨ ¬A)",
+    "Element pochłaniający (A∧0)",
+    "Element pochłaniający (A∨1)",
+    "Element neutralny (A∧1)",
+    "Element neutralny (A∨0)",
+    "Idempotentność (∧)",
+    "Idempotentność (∨)",
+    "Absorpcja (∧)",
+    "Absorpcja (∨)",
+    "Absorpcja z negacją",
+    "Absorpcja z negacją (dual)",
+    "Dystrybutywność (A∨B)∧C",
+    "Dystrybutywność A∧(B∨C)",
+    "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B",
+    "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B",
+    "Podwójna negacja",
+]
+
+LAW_TO_RULE_NAME = {
+    "Idempotentność (∨)": "Idempotentność (∨)",
+    "Idempotentność (∧)": "Idempotentność (∧)",
+    "Element neutralny (A∨0)": "Element neutralny (A∨0)",
+    "Element neutralny (A∧1)": "Element neutralny (A∧1)",
+    "Element pochłaniający (A∨1)": "Element pochłaniający (A∨1)",
+    "Element pochłaniający (A∧0)": "Element pochłaniający (A∧0)",
+    "Podwójna negacja": "Podwójna negacja",
+    "Absorpcja (∨)": "Absorpcja (∨)",
+    "Absorpcja (∧)": "Absorpcja (∧)",
+    "Absorpcja z negacją": "Absorpcja z negacją",
+    "Absorpcja z negacją (dual)": "Absorpcja z negacją (dual)",
+    "Kontradykcja (A ∧ ¬A)": "Kontradykcja (A ∧ ¬A)",
+    "Dopełnienie (A ∨ ¬A)": "Dopełnienie (A ∨ ¬A)",
+    "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B": "De Morgan (¬(A∧B))",
+    "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B": "De Morgan (¬(A∨B))",
+    "Dystrybutywność (A∨B)∧C": "Dystrybutywność (A∨B)∧C",
+    "Dystrybutywność A∧(B∨C)": "Dystrybutywność A∧(B∨C)",
+}
+
+
+def _law_priority(law_name: str) -> int:
+    try:
+        return LAW_PRIORITY_ORDER.index(law_name)
+    except ValueError:
+        return len(LAW_PRIORITY_ORDER)
+
+
+def _law_to_rule_name(law_name: str) -> RuleName:
+    mapped = LAW_TO_RULE_NAME.get(law_name)
+    if mapped:
+        return mapped  # type: ignore[return-value]
+    if law_name in LAW_TO_RULE_NAME.values():
+        return law_name  # type: ignore[return-value]
+    return "Formatowanie"
+
+
+def _apply_law_match(
+    current_ast: Any,
+    match: Dict[str, Any],
+    vars_list: List[str],
+) -> Tuple[Optional[Step], Any]:
+    def _find_non_overlapping_span(base_arr: List[str], sub_arr: List[str], used_mask: List[bool]) -> Optional[Tuple[int, int]]:
+        if not sub_arr:
+            return None
+        max_start = len(base_arr) - len(sub_arr)
+        for i in range(max_start + 1):
+            if any(used_mask[i + j] for j in range(len(sub_arr))):
+                continue
+            if base_arr[i:i + len(sub_arr)] == sub_arr:
+                for j in range(len(sub_arr)):
+                    used_mask[i + j] = True
+                return (i, i + len(sub_arr))
+        return None
+
+    law_name = match.get("law")
+    path = match.get("path")
+    before_sub = match.get("before")
+    after_sub = match.get("after")
+    
+    if not law_name or before_sub is None or after_sub is None:
+        return (None, current_ast)
+    
+    rule_name = _law_to_rule_name(law_name)
+    
+    # Prepare BEFORE state
+    before_ast = copy.deepcopy(current_ast)
+    before_str, _ = pretty_with_tokens(before_ast)
+    before_canon = canonical_str(before_ast)
+    before_subexpr_str = pretty(before_sub)
+    before_subexpr_canon = canonical_str(before_sub)
+    
+    before_highlight_span = find_subtree_span_by_path_cp(path, before_ast) if path else None
+    before_highlight_spans_cp = None
+    if before_highlight_span:
+        before_highlight_spans_cp = [(before_highlight_span["start"], before_highlight_span["end"])]
+    
+    # Apply transformation
+    updated_ast = set_by_path(current_ast, path, after_sub) if path else after_sub
+    updated_ast = normalize_bool_ast(updated_ast, expand_imp_iff=True)
+    after_str, _ = pretty_with_tokens(updated_ast)
+    after_canon = canonical_str(updated_ast)
+    after_subexpr_str = pretty(after_sub)
+    after_subexpr_canon = canonical_str(after_sub)
+    
+    # Locate transformed subexpression in AFTER state
+    after_highlight_spans_cp = None
+    sub_after_norm = normalize_bool_ast(after_sub, expand_imp_iff=True)
+    target_canon = canonical_str(sub_after_norm)
+    for after_path, after_node in iter_nodes(updated_ast):
+        if canonical_str(after_node) == target_canon:
+            span = find_subtree_span_by_path_cp(after_path, updated_ast)
+            if span:
+                after_highlight_spans_cp = [(span["start"], span["end"])]
+            break
+    if after_highlight_spans_cp is None and path:
+        span = find_subtree_span_by_path_cp(path, updated_ast)
+        if span:
+            after_highlight_spans_cp = [(span["start"], span["end"])]
+    
+    if after_highlight_spans_cp:
+        spans_len = sum(max(0, end - start) for start, end in after_highlight_spans_cp)
+        if spans_len < len(after_subexpr_str):
+            after_highlight_spans_cp = None
+
+    if rule_name == "Dystrybutywność A∧(B∨C)":
+        distributed_terms = []
+        if isinstance(after_sub, dict) and after_sub.get("op") == "OR":
+            for term in after_sub.get("args", []):
+                term_norm = normalize_bool_ast(term, expand_imp_iff=True)
+                term_pretty, _ = pretty_with_tokens(term_norm)
+                distributed_terms.append(term_pretty)
+        if distributed_terms:
+            base_arr = list(after_str)
+            used_mask = [False] * len(base_arr)
+            spans = []
+            for term_str in distributed_terms:
+                span_tuple = _find_non_overlapping_span(base_arr, list(term_str), used_mask)
+                if span_tuple:
+                    spans.append(span_tuple)
+            if spans:
+                after_highlight_spans_cp = spans
+
+    if after_highlight_spans_cp is None and after_subexpr_str:
+        base_arr = list(after_str)
+        used_mask = [False] * len(base_arr)
+        span_tuple = _find_non_overlapping_span(base_arr, list(after_subexpr_str), used_mask)
+        if span_tuple:
+            after_highlight_spans_cp = [span_tuple]
+    elif (
+        after_highlight_spans_cp
+        and after_subexpr_str
+        and rule_name != "Dystrybutywność A∧(B∨C)"
+    ):
+        extracted = "".join(after_str[start:end] for start, end in after_highlight_spans_cp)
+        if after_subexpr_str not in extracted:
+            after_highlight_spans_cp = None
+
+    hash_before = truth_table_hash(vars_list, before_str)
+    hash_after = truth_table_hash(vars_list, after_str)
+    
+    step = Step(
+        before_str=before_str,
+        after_str=after_str,
+        rule=rule_name,
+        category="user",
+        proof={
+            "method": "tt-hash",
+            "equal": hash_before == hash_after,
+            "hash_before": hash_before,
+            "hash_after": hash_after,
+        },
+        before_canon=before_canon,
+        after_canon=after_canon,
+        before_subexpr=before_subexpr_str,
+        after_subexpr=after_subexpr_str,
+        before_subexpr_canon=before_subexpr_canon,
+        after_subexpr_canon=after_subexpr_canon,
+        before_highlight_spans_cp=before_highlight_spans_cp,
+        after_highlight_spans_cp=after_highlight_spans_cp,
+    )
+    
+    return step, updated_ast
+
+
+def run_fixpoint(
+    ast_node: Any,
+    vars_list: List[str],
+    allowed_laws: Optional[set] = None,
+    max_iterations: int = 64,
+) -> Tuple[Any, List[Step]]:
+    """
+    Apply selected Boolean laws iteratively until a fixpoint is reached.
+    Returns the transformed AST and list of generated steps.
+    """
+    if allowed_laws is None:
+        allowed_laws = TRIVIAL_LAW_NAMES
+    
+    current_ast = normalize_bool_ast(ast_node, expand_imp_iff=True)
+    steps: List[Step] = []
+    seen_canon = {canonical_str(current_ast)}
+    
+    for _ in range(max_iterations):
+        matches = [
+            m for m in laws_matches(current_ast)
+            if m.get("law") in allowed_laws
+        ]
+        if not matches:
+            break
+        
+        matches.sort(key=lambda m: (_law_priority(m.get("law", "")), measure(m.get("after"))))
+        
+        applied = False
+        for match in matches:
+            step, updated_ast = _apply_law_match(current_ast, match, vars_list)
+            if step is None:
+                continue
+            steps.append(step)
+            current_ast = updated_ast
+            canon = canonical_str(current_ast)
+            if canon in seen_canon:
+                applied = True
+                break
+            seen_canon.add(canon)
+            applied = True
+            break
+        
+        if not applied:
+            break
+    
+    return current_ast, steps
+
+
+def _ast_from_steps(current_ast: Any, new_steps: List[Step]) -> Any:
+    if not new_steps:
+        return current_ast
+    last = new_steps[-1]
+    after_str = last.after_str
+    if not after_str:
+        return current_ast
+    try:
+        return normalize_bool_ast(generate_ast(after_str), expand_imp_iff=True)
+    except Exception:
+        return current_ast
+
+
+def push_negations_to_literals(
+    ast_node: Any,
+    vars_list: List[str],
+) -> Tuple[Any, List[Step]]:
+    """Apply De Morgan and double-negation until negations touch only literals."""
+    current_ast = normalize_bool_ast(ast_node, expand_imp_iff=True)
+    steps: List[Step] = []
+    seen_canon = {canonical_str(current_ast)}
+
+    while True:
+        applied = False
+        for path, sub in iter_nodes(current_ast):
+            if not isinstance(sub, dict):
+                continue
+            if sub.get("op") != "NOT":
+                continue
+            
+            child = sub.get("child")
+            match: Optional[Dict[str, Any]] = None
+            
+            if isinstance(child, dict) and child.get("op") == "NOT":
+                match = {
+                    "law": "Podwójna negacja",
+                    "path": path,
+                    "before": copy.deepcopy(sub),
+                    "after": copy.deepcopy(child.get("child")),
+                }
+            elif isinstance(child, dict) and child.get("op") in {"AND", "OR"}:
+                inner_args = child.get("args", [])
+                if child.get("op") == "AND":
+                    after_args = [NOT(copy.deepcopy(arg)) for arg in inner_args]
+                    after = OR(after_args)
+                    law_name = "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B"
+                else:
+                    after_args = [NOT(copy.deepcopy(arg)) for arg in inner_args]
+                    after = AND(after_args)
+                    law_name = "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B"
+                match = {
+                    "law": law_name,
+                    "path": path,
+                    "before": copy.deepcopy(sub),
+                    "after": after,
+                }
+            
+            if not match:
+                continue
+            
+            step, current_ast = _apply_law_match(current_ast, match, vars_list)
+            if step:
+                steps.append(step)
+                applied = True
+            break
+        if not applied:
+            break
+    
+    return current_ast, steps
+
+
+def apply_complement_laws(
+    ast_node: Any,
+    vars_list: List[str],
+) -> Tuple[Any, List[Step]]:
+    """
+    Reduce subexpressions of the form A∨¬A and A∧¬A (plus resulting neutral elements)
+    before heavier transformations such as distribution.
+    """
+    current_ast = normalize_bool_ast(ast_node, expand_imp_iff=True)
+    steps: List[Step] = []
+    seen_canon = {canonical_str(current_ast)}
+
+    while True:
+        applied = False
+        for path, sub in iter_nodes(current_ast):
+            if not isinstance(sub, dict):
+                continue
+            op = sub.get("op")
+            if op not in {"OR", "AND"}:
+                continue
+
+            args = sub.get("args", [])
+            if len(args) < 2:
+                continue
+
+            lits = [to_lit(arg) for arg in args]
+            if None in lits:
+                continue
+            lit_set = set(lits)
+
+            if op == "OR" and any((name, not polarity) in lit_set for name, polarity in lits):
+                match = {
+                    "law": "Dopełnienie (A ∨ ¬A)",
+                    "path": path,
+                    "before": copy.deepcopy(sub),
+                    "after": CONST(1),
+                }
+            elif op == "AND" and any((name, not polarity) in lit_set for name, polarity in lits):
+                match = {
+                    "law": "Kontradykcja (A ∧ ¬A)",
+                    "path": path,
+                    "before": copy.deepcopy(sub),
+                    "after": CONST(0),
+                }
+            else:
+                continue
+
+            step, current_ast = _apply_law_match(current_ast, match, vars_list)
+            if step:
+                steps.append(step)
+                canon = canonical_str(current_ast)
+                if canon in seen_canon:
+                    return current_ast, steps
+                seen_canon.add(canon)
+                applied = True
+            break
+
+        if not applied:
+            break
+
+    return current_ast, steps
+
+
+def distribute_to_dnf(
+    ast_node: Any,
+    vars_list: List[str],
+) -> Tuple[Any, List[Step]]:
+    """Distribute conjunction over disjunction to reach DNF using Boolean laws."""
+    current_ast = normalize_bool_ast(ast_node, expand_imp_iff=True)
+    steps: List[Step] = []
+    seen_canon = {canonical_str(current_ast)}
+
+    while True:
+        applied = False
+        for path, sub in iter_nodes(current_ast):
+            if not isinstance(sub, dict):
+                continue
+            if sub.get("op") != "AND":
+                continue
+
+            args = sub.get("args", [])
+            target_idx = None
+            for idx, arg in enumerate(args):
+                if isinstance(arg, dict) and arg.get("op") == "OR" and len(arg.get("args", [])) >= 2:
+                    target_idx = idx
+                    break
+            if target_idx is None:
+                continue
+
+            or_node = args[target_idx]
+            other_args = [copy.deepcopy(a) for i, a in enumerate(args) if i != target_idx]
+            distributed_terms = []
+            for or_arg in or_node.get("args", []):
+                term_args = [copy.deepcopy(or_arg)] + [copy.deepcopy(a) for a in other_args]
+                if len(term_args) == 1:
+                    distributed_terms.append(term_args[0])
+                else:
+                    distributed_terms.append({"op": "AND", "args": term_args})
+
+            match = {
+                "law": "Dystrybutywność A∧(B∨C)",
+                "path": path,
+                "before": copy.deepcopy(sub),
+                "after": {"op": "OR", "args": distributed_terms},
+            }
+            step, current_ast = _apply_law_match(current_ast, match, vars_list)
+            if step:
+                steps.append(step)
+                canon = canonical_str(current_ast)
+                if canon in seen_canon:
+                    return current_ast, steps
+                seen_canon.add(canon)
+                applied = True
+            break
+        if not applied:
+            break
+    
+    return current_ast, steps
+
+
+def _simplify_with_dnf_pipeline(expr: str, var_limit: int) -> Dict[str, Any]:
+    input_std = validate_and_standardize(expr)
+    legacy_ast = generate_ast(input_std)
+    current_ast = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
+    
+    vars_list = collect_variables(current_ast)
+    if len(vars_list) > var_limit:
+        raise TooManyVariables(f"Expression has {len(vars_list)} variables, maximum is {var_limit}")
+    
+    initial_canon = canonical_str(current_ast)
+    step_objects: List[Step] = []
+    
+    legacy_pretty, _ = pretty_with_tokens(legacy_ast)
+    normalized_pretty, _ = pretty_with_tokens(current_ast)
+    if legacy_pretty != normalized_pretty and ("→" in legacy_pretty or "↔" in legacy_pretty or "⊕" in legacy_pretty or "↑" in legacy_pretty or "↓" in legacy_pretty):
+        elim_step = Step(
+            before_str=legacy_pretty,
+            after_str=normalized_pretty,
+            rule="Eliminacja złożonych operatorów",
+            category="user",
+            proof={"method": "rewrite"},
+            before_canon=canonical_str(legacy_ast),
+            after_canon=initial_canon,
+            before_subexpr=legacy_pretty,
+            after_subexpr=normalized_pretty,
+            before_subexpr_canon=canonical_str(legacy_ast),
+            after_subexpr_canon=initial_canon,
+        )
+        step_objects.append(elim_step)
+    
+    current_ast, fix_steps = run_fixpoint(current_ast, vars_list, TRIVIAL_LAW_NAMES)
+    step_objects.extend(fix_steps)
+    
+    current_ast, nnf_steps = push_negations_to_literals(current_ast, vars_list)
+    step_objects.extend(nnf_steps)
+    
+    current_ast, complement_steps_1 = apply_complement_laws(current_ast, vars_list)
+    step_objects.extend(complement_steps_1)
+    
+    current_ast, post_complement_fix = run_fixpoint(current_ast, vars_list, TRIVIAL_LAW_NAMES)
+    step_objects.extend(post_complement_fix)
+    
+    current_ast, complement_steps_2 = apply_complement_laws(current_ast, vars_list)
+    step_objects.extend(complement_steps_2)
+    
+    current_ast, distribution_steps = distribute_to_dnf(current_ast, vars_list)
+    step_objects.extend(distribution_steps)
+    
+    current_ast, complement_steps_3 = apply_complement_laws(current_ast, vars_list)
+    step_objects.extend(complement_steps_3)
+    
+    current_ast, final_cleanup_steps = run_fixpoint(current_ast, vars_list, TRIVIAL_LAW_NAMES)
+    step_objects.extend(final_cleanup_steps)
+    
+    current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+    if not is_dnf(current_ast):
+        raise RuntimeError("DNF conversion did not finish")
+    
+    dnf_str, _ = pretty_with_tokens(current_ast)
+    dnf_canon = canonical_str(current_ast)
+    
+    pre_steps_dicts: List[Dict[str, Any]] = [copy.deepcopy(step.__dict__) for step in step_objects]
+    
+    result_vars = collect_variables(current_ast)
+    if len(result_vars) == 0:
+        return {
+            "input_std": input_std,
+            "vars": vars_list,
+            "initial_canon": initial_canon,
+            "steps": pre_steps_dicts,
+            "result_dnf": dnf_str,
+            "is_already_minimal": len(step_objects) == 0,
+        }
+    
+    legacy_result = _legacy_simplify_to_minimal_dnf(dnf_str, var_limit)
+    legacy_steps = copy.deepcopy(legacy_result.get("steps", []))
+    combined_steps = pre_steps_dicts + legacy_steps
+    
+    if legacy_steps:
+        expected_before = pre_steps_dicts[-1]["after_str"] if pre_steps_dicts else dnf_str
+        if legacy_steps[0].get("before_str") != expected_before:
+            legacy_steps[0]["before_str"] = expected_before
+            legacy_steps[0]["before_canon"] = dnf_canon
+        combined_steps = pre_steps_dicts + legacy_steps
+    
+    result_dnf = legacy_result.get("result_dnf", dnf_str)
+    final_ast = normalize_bool_ast(generate_ast(result_dnf), expand_imp_iff=True)
+    final_canon = canonical_str(final_ast)
+    final_measure = measure(final_ast)
+    
+    try:
+        qm_result = simplify_qm(input_std)
+        qm_summary = qm_result.get("summary", {})
+        qm_expr = qm_result.get("result", result_dnf)
+        qm_ast = normalize_bool_ast(generate_ast(qm_expr), expand_imp_iff=True)
+        qm_canon = canonical_str(qm_ast)
+        qm_measure_vals = measure(qm_ast)
+    except Exception:
+        qm_summary = {}
+        qm_expr = result_dnf
+        qm_canon = final_canon
+        qm_measure_vals = final_measure
+    
+    original_ast = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
+    is_already_minimal = canonical_str(original_ast) == final_canon and not step_objects
+    
+    return {
+        "input_std": input_std,
+        "vars": vars_list,
+        "initial_canon": initial_canon,
+        "steps": combined_steps,
+        "result_dnf": result_dnf,
+        "is_already_minimal": is_already_minimal,
+    }
 
 
 class TooManyVariables(Exception):
@@ -99,7 +679,7 @@ def simplify(expr: str, mode: str = "mixed") -> Dict[str, Any]:
     return simplify_with_laws(expr, mode=mode)
 
 
-def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
+def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
     """
     Simplify expression to minimal DNF with complete step trace.
     
@@ -165,23 +745,30 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
     # Convert laws result steps to our Step model with verification
     # Only include laws steps if they lead to a result that's at least as minimal as QM
     laws_steps_to_include = []
+    essential_law_names = {
+        "De Morgan: ¬(A ∧ B) → ¬A ∨ ¬B",
+        "De Morgan: ¬(A ∨ B) → ¬A ∧ ¬B",
+    }
     laws_result_final = laws_result.get("result", "")
     
-    # Check if laws result is worse than QM - if so, skip all laws steps
-    skip_all_laws_steps = False
+    # Check if laws result is worse than QM - if so, skip only non-essential laws steps
+    skip_nonessential_law_steps = False
     if qm_measure and laws_result_final and laws_result_final not in ["?", ""]:
         try:
             laws_final_ast = generate_ast(laws_result_final)
             laws_final_ast = normalize_bool_ast(laws_final_ast, expand_imp_iff=True)
             laws_final_measure = measure(laws_final_ast)
-            # If laws result has significantly more literals than QM, skip all laws steps
+            # If laws result has significantly more literals than QM, skip non-essential laws steps
             if laws_final_measure[0] > qm_measure[0] * 1.2:  # 20% tolerance
-                print(f"Skipping all laws steps: laws result has {laws_final_measure[0]} literals, QM has {qm_measure[0]}")
-                skip_all_laws_steps = True
+                print(
+                    f"Skipping non-essential laws steps: laws result has {laws_final_measure[0]} literals, "
+                    f"QM has {qm_measure[0]}"
+                )
+                skip_nonessential_law_steps = True
         except Exception:
             pass
     
-    if not skip_all_laws_steps and "steps" in laws_result:
+    if "steps" in laws_result:
         # Check if final result is good - if so, include all steps regardless of intermediate measures
         final_result_is_good = False
         if qm_measure and laws_result_final and laws_result_final not in ["?", ""]:
@@ -198,14 +785,18 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
             before_str = law_step.get("before_tree", "")
             after_str = law_step.get("after_tree", "")
             law_name = law_step.get("law", "")
+            is_essential_law = law_name in essential_law_names
             
             # Skip oscillation steps
             if law_name == "Zatrzymano (oscylacja)":
                 continue
             
+            if skip_nonessential_law_steps and not is_essential_law:
+                continue
+            
             # Only check intermediate measures if final result is not good
             # If final result is good, include all steps (they may have intermediate larger measures)
-            if not final_result_is_good and qm_measure and after_str:
+            if not is_essential_law and not final_result_is_good and qm_measure and after_str:
                 try:
                     after_ast = generate_ast(after_str)
                     after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
@@ -319,20 +910,37 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                 # Check if current expression is in DNF but not minimal
                 # If so, apply absorption to reach minimal DNF
                 current_is_dnf_after_laws = is_dnf(current_ast)
-                if current_is_dnf_after_laws and steps:
-                    # Compare with QM result to check if minimal
-                    current_canon_after_laws = canonical_str(current_ast)
-                    qm_result_str_check = qm_result.get("result", "")
+                
+                # Always check if we need to continue simplification, even if not in DNF yet
+                # Get QM result for comparison
+                qm_result_str_check = qm_result.get("result", "") if qm_result else ""
+                qm_result_ast_check = None
+                qm_result_canon_check = None
+                qm_measure_check = None
+                if qm_result_str_check:
                     qm_result_ast_check = generate_ast(qm_result_str_check)
                     qm_result_ast_check = normalize_bool_ast(qm_result_ast_check, expand_imp_iff=True)
                     qm_result_canon_check = canonical_str(qm_result_ast_check)
-                    current_measure_after_laws = measure(current_ast)
                     qm_measure_check = measure(qm_result_ast_check)
+                
+                # Always try to continue simplification if we have steps and QM result
+                # This ensures we continue even if expression is not yet in DNF
+                if steps and qm_result_ast_check:
+                    # Compare with QM result to check if minimal
+                    current_canon_after_laws = canonical_str(current_ast)
+                    current_measure_after_laws = measure(current_ast)
                     
                     # If not minimal, apply absorption iteratively until minimal DNF is reached
-                    if current_canon_after_laws != qm_result_canon_check or current_measure_after_laws[0] > qm_measure_check[0]:
+                    # Also continue if expression is in DNF but not minimal
+                    needs_simplification = (
+                        not qm_result_ast_check or 
+                        current_canon_after_laws != qm_result_canon_check or 
+                        current_measure_after_laws[0] > qm_measure_check[0]
+                    )
+                    
+                    if needs_simplification:
                         # Iteratively apply absorption until we reach minimal DNF
-                        max_absorb_iterations = 20
+                        max_absorb_iterations = 50  # Increased to allow more iterations
                         for absorb_iteration in range(max_absorb_iterations):
                             # Check if we've reached minimal DNF
                             current_canon_iter = canonical_str(current_ast)
@@ -341,12 +949,16 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                 # Reached minimal DNF
                                 break
                             
+                            # Track if we made any progress in this iteration
+                            made_progress = False
+                            
                             # Apply absorption
                             absorb_steps = build_absorb_steps(current_ast, vars_list, selected_pi, pi_to_minterms)
                             if absorb_steps:
                                 steps.extend(absorb_steps)
                                 current_ast = generate_ast(absorb_steps[-1].after_str)
                                 current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
+                                made_progress = True
                                 
                                 # Remove contradictions that may have been created
                                 contradiction_steps = build_contradiction_steps(current_ast, vars_list)
@@ -354,9 +966,121 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                     steps.extend(contradiction_steps)
                                     current_ast = generate_ast(contradiction_steps[-1].after_str)
                                     current_ast = normalize_bool_ast(current_ast, expand_imp_iff=True)
-                            else:
-                                # No more absorption steps can be generated
-                                break
+                                
+                                # After absorption, try to apply more laws to simplify complex terms
+                                # This helps with cases like ¬(B∧¬C) that can be expanded
+                                from .laws import pretty
+                                current_expr_str = pretty(current_ast)
+                                additional_laws = simplify_with_laws(current_expr_str, max_steps=20, mode="mixed")
+                                if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
+                                    # Only add steps that actually simplify (reduce literal count)
+                                    current_measure = measure(current_ast)
+                                    for law_step in additional_laws["steps"]:
+                                        after_str = law_step.get("after_tree", "")
+                                        if after_str and after_str not in ["?", ""]:
+                                            try:
+                                                after_ast = generate_ast(after_str)
+                                                after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                                                after_measure = measure(after_ast)
+                                                # Only include if it reduces literal count or keeps same but changes structure
+                                                if after_measure[0] <= current_measure[0]:
+                                                    from .utils import truth_table_hash
+                                                    hash_before = truth_table_hash(vars_list, current_expr_str)
+                                                    hash_after = truth_table_hash(vars_list, after_str)
+                                                    if hash_before == hash_after and len(hash_before) > 0:
+                                                        before_str, _ = pretty_with_tokens(current_ast)
+                                                        after_str, _ = pretty_with_tokens(after_ast)
+                                                        step = Step(
+                                                            before_str=before_str,
+                                                            after_str=after_str,
+                                                            rule=law_step.get("law", "Prawa logiczne"),
+                                                            location=law_step.get("path"),
+                                                            details={},
+                                                            proof={"method": "tt-hash", "equal": True},
+                                                            before_subexpr=law_step.get("before_subexpr"),
+                                                            after_subexpr=law_step.get("after_subexpr"),
+                                                            before_canon=canonical_str(current_ast),
+                                                            after_canon=canonical_str(after_ast),
+                                                            before_subexpr_canon=law_step.get("before_subexpr_canon"),
+                                                            after_subexpr_canon=law_step.get("after_subexpr_canon"),
+                                                            before_highlight_span=law_step.get("before_highlight_span"),
+                                                            after_highlight_span=law_step.get("after_highlight_span")
+                                                        )
+                                                        steps.append(step)
+                                                        current_ast = after_ast
+                                                        current_expr_str = after_str
+                                                        current_measure = after_measure
+                                                        made_progress = True
+                                                        # Check if we've reached minimal DNF
+                                                        current_canon_check = canonical_str(current_ast)
+                                                        if current_canon_check == qm_result_canon_check and current_measure[0] <= qm_measure_check[0]:
+                                                            break
+                                            except Exception:
+                                                continue
+                            
+                            # If no progress was made, try one more time with laws only
+                            if not made_progress:
+                                from .laws import pretty
+                                current_expr_str = pretty(current_ast)
+                                # Try with more steps to allow complex transformations
+                                additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
+                                    current_measure = measure(current_ast)
+                                    for law_step in additional_laws["steps"]:
+                                        after_str = law_step.get("after_tree", "")
+                                        if after_str and after_str not in ["?", ""]:
+                                            try:
+                                                after_ast = generate_ast(after_str)
+                                                after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                                                after_measure = measure(after_ast)
+                                                # Accept if it doesn't increase literal count
+                                                if after_measure[0] <= current_measure[0]:
+                                                    from .utils import truth_table_hash
+                                                    hash_before = truth_table_hash(vars_list, current_expr_str)
+                                                    hash_after = truth_table_hash(vars_list, after_str)
+                                                    if hash_before == hash_after and len(hash_before) > 0:
+                                                        before_str, _ = pretty_with_tokens(current_ast)
+                                                        after_str, _ = pretty_with_tokens(after_ast)
+                                                        step = Step(
+                                                            before_str=before_str,
+                                                            after_str=after_str,
+                                                            rule=law_step.get("law", "Prawa logiczne"),
+                                                            location=law_step.get("path"),
+                                                            details={},
+                                                            proof={"method": "tt-hash", "equal": True},
+                                                            before_subexpr=law_step.get("before_subexpr"),
+                                                            after_subexpr=law_step.get("after_subexpr"),
+                                                            before_canon=canonical_str(current_ast),
+                                                            after_canon=canonical_str(after_ast),
+                                                            before_subexpr_canon=law_step.get("before_subexpr_canon"),
+                                                            after_subexpr_canon=law_step.get("after_subexpr_canon"),
+                                                            before_highlight_span=law_step.get("before_highlight_span"),
+                                                            after_highlight_span=law_step.get("after_highlight_span")
+                                                        )
+                                                        steps.append(step)
+                                                        current_ast = after_ast
+                                                        current_expr_str = after_str
+                                                        current_measure = after_measure
+                                                        made_progress = True
+                                                        # Re-check if we've reached minimal DNF
+                                                        current_canon_check = canonical_str(current_ast)
+                                                        if current_canon_check == qm_result_canon_check and current_measure[0] <= qm_measure_check[0]:
+                                                            break
+                                            except Exception:
+                                                continue
+                            
+                            # If still no progress after trying laws, check if we're done
+                            if not made_progress:
+                                # Final check: are we at minimal DNF?
+                                final_canon_check = canonical_str(current_ast)
+                                final_measure_check = measure(current_ast)
+                                if final_canon_check == qm_result_canon_check and final_measure_check[0] <= qm_measure_check[0]:
+                                    break
+                                # If not minimal and no progress, don't break - continue to next iteration
+                                # The problem might be that build_absorb_steps needs to be called again
+                                # after laws have been applied, or we need to force absorption detection
+                                # Continue to next iteration to try again
+                                continue
                         
                         # After iterative absorption, update current_ast to reflect final state
                         if steps:
@@ -633,6 +1357,13 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                          current_canon_check == qm_result_canon_check and 
                                          current_measure_check[0] == qm_measure_check[0])
                 
+                # IMPORTANT: Even if expression is in DNF, if it's not minimal, we must continue
+                # This ensures we continue simplification after laws steps even if expression is already in DNF
+                if current_is_dnf and not is_already_minimal_dnf:
+                    # Expression is in DNF but not minimal - force continuation with absorption
+                    # This handles cases where laws steps end with DNF but not minimal DNF
+                    pass  # Will continue to next section
+                
                 # Continue with merge steps if available, OR generate simplification steps if already in DNF
                 if not is_already_minimal_dnf and merge_edges:
                     # Iteratively apply merges until we reach QM's minimal DNF
@@ -747,7 +1478,7 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                             working_ast = current_ast
                             
                             # Iteratively apply absorption until we reach minimal DNF
-                            max_absorb_iterations = 20
+                            max_absorb_iterations = 50  # Increased from 20
                             for absorb_iteration in range(max_absorb_iterations):
                                 # Check if we've reached minimal DNF
                                 current_canon_iter = canonical_str(working_ast)
@@ -770,9 +1501,109 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
                                         steps.extend(contradiction_steps)
                                         working_ast = generate_ast(contradiction_steps[-1].after_str)
                                         working_ast = normalize_bool_ast(working_ast, expand_imp_iff=True)
+                                    
+                                    # After absorption, try to apply more laws to simplify complex terms
+                                    from .laws import pretty
+                                    current_expr_str = pretty(working_ast)
+                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                    if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
+                                        current_measure = measure(working_ast)
+                                        for law_step in additional_laws["steps"]:
+                                            after_str = law_step.get("after_tree", "")
+                                            if after_str and after_str not in ["?", ""]:
+                                                try:
+                                                    after_ast = generate_ast(after_str)
+                                                    after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                                                    after_measure = measure(after_ast)
+                                                    # Accept if it doesn't increase literal count
+                                                    if after_measure[0] <= current_measure[0]:
+                                                        from .utils import truth_table_hash
+                                                        hash_before = truth_table_hash(vars_list, current_expr_str)
+                                                        hash_after = truth_table_hash(vars_list, after_str)
+                                                        if hash_before == hash_after and len(hash_before) > 0:
+                                                            before_str, _ = pretty_with_tokens(working_ast)
+                                                            after_str, _ = pretty_with_tokens(after_ast)
+                                                            step = Step(
+                                                                before_str=before_str,
+                                                                after_str=after_str,
+                                                                rule=law_step.get("law", "Prawa logiczne"),
+                                                                location=law_step.get("path"),
+                                                                details={},
+                                                                proof={"method": "tt-hash", "equal": True},
+                                                                before_subexpr=law_step.get("before_subexpr"),
+                                                                after_subexpr=law_step.get("after_subexpr"),
+                                                                before_canon=canonical_str(working_ast),
+                                                                after_canon=canonical_str(after_ast),
+                                                                before_subexpr_canon=law_step.get("before_subexpr_canon"),
+                                                                after_subexpr_canon=law_step.get("after_subexpr_canon"),
+                                                                before_highlight_span=law_step.get("before_highlight_span"),
+                                                                after_highlight_span=law_step.get("after_highlight_span")
+                                                            )
+                                                            steps.append(step)
+                                                            working_ast = after_ast
+                                                            current_expr_str = after_str
+                                                            current_measure = after_measure
+                                                            # Re-check if we've reached minimal DNF
+                                                            current_canon_check = canonical_str(working_ast)
+                                                            if current_canon_check == qm_result_canon and current_measure[0] <= qm_measure[0]:
+                                                                break
+                                                except Exception:
+                                                    continue
                                 else:
-                                    # No more absorption steps can be generated
-                                    break
+                                    # No more absorption steps - try laws one more time
+                                    from .laws import pretty
+                                    current_expr_str = pretty(working_ast)
+                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                    if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
+                                        current_measure = measure(working_ast)
+                                        for law_step in additional_laws["steps"]:
+                                            after_str = law_step.get("after_tree", "")
+                                            if after_str and after_str not in ["?", ""]:
+                                                try:
+                                                    after_ast = generate_ast(after_str)
+                                                    after_ast = normalize_bool_ast(after_ast, expand_imp_iff=True)
+                                                    after_measure = measure(after_ast)
+                                                    if after_measure[0] <= current_measure[0]:
+                                                        from .utils import truth_table_hash
+                                                        hash_before = truth_table_hash(vars_list, current_expr_str)
+                                                        hash_after = truth_table_hash(vars_list, after_str)
+                                                        if hash_before == hash_after and len(hash_before) > 0:
+                                                            before_str, _ = pretty_with_tokens(working_ast)
+                                                            after_str, _ = pretty_with_tokens(after_ast)
+                                                            step = Step(
+                                                                before_str=before_str,
+                                                                after_str=after_str,
+                                                                rule=law_step.get("law", "Prawa logiczne"),
+                                                                location=law_step.get("path"),
+                                                                details={},
+                                                                proof={"method": "tt-hash", "equal": True},
+                                                                before_subexpr=law_step.get("before_subexpr"),
+                                                                after_subexpr=law_step.get("after_subexpr"),
+                                                                before_canon=canonical_str(working_ast),
+                                                                after_canon=canonical_str(after_ast),
+                                                                before_subexpr_canon=law_step.get("before_subexpr_canon"),
+                                                                after_subexpr_canon=law_step.get("after_subexpr_canon"),
+                                                                before_highlight_span=law_step.get("before_highlight_span"),
+                                                                after_highlight_span=law_step.get("after_highlight_span")
+                                                            )
+                                                            steps.append(step)
+                                                            working_ast = after_ast
+                                                            current_expr_str = after_str
+                                                            current_measure = after_measure
+                                                            # Re-check if we've reached minimal DNF
+                                                            current_canon_check = canonical_str(working_ast)
+                                                            if current_canon_check == qm_result_canon and current_measure[0] <= qm_measure[0]:
+                                                                break
+                                                except Exception:
+                                                    continue
+                                    else:
+                                        # No more laws steps - check if we're done
+                                        final_canon_check = canonical_str(working_ast)
+                                        final_measure_check = measure(working_ast)
+                                        if final_canon_check == qm_result_canon and final_measure_check[0] <= qm_measure[0]:
+                                            break
+                                        # If not minimal and no progress, break to avoid infinite loop
+                                        break
                             
                             # Update current_ast to final state
                             current_ast = working_ast
@@ -959,3 +1790,11 @@ def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
         "result_dnf": result_dnf,
         "is_already_minimal": is_already_minimal,  # Flag indicating expression was already minimal
     }
+
+
+def simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, Any]:
+    try:
+        return _simplify_with_dnf_pipeline(expr, var_limit)
+    except Exception as pipeline_error:
+        print(f"Warning: new DNF pipeline failed ({pipeline_error}), falling back to legacy")
+        return _legacy_simplify_to_minimal_dnf(expr, var_limit)

@@ -17,10 +17,10 @@ class ASTError(Exception):
 
 # Pratt parser config
 PRECEDENCE: Dict[str, int] = {
-    '¬': 5, '∧': 4, '↑': 4, '∨': 3, '⊕': 3, '↓': 3, '→': 2, '↔': 1, '≡': 1,
+    '¬': 5, '∧': 4, '↑': 4, '∨': 3, '⊕': 3, '↓': 3, '→': 2, '←': 2, '↔': 1, '≡': 1,
 }
-RIGHT_ASSOC = {'→'}  # Removed ¬, ↔, ≡ as per requirements
-BINARY_OPS = {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}
+RIGHT_ASSOC = {'→', '←'}  # Removed ¬, ↔, ≡ as per requirements
+BINARY_OPS = {'∧', '∨', '→', '←', '↔', '⊕', '↑', '↓', '≡'}
 
 
 class TokenStream:
@@ -198,6 +198,10 @@ def _to_bool_norm(node: Any) -> Any:
             left = _to_bool_norm(node.get('left'))
             right = _to_bool_norm(node.get('right'))
             return {'op': 'IMP', 'left': left, 'right': right}
+        if op == '←':
+            left = _to_bool_norm(node.get('left'))
+            right = _to_bool_norm(node.get('right'))
+            return {'op': 'IMP', 'left': right, 'right': left}
         if op in {'↔', '≡'}:
             left = _to_bool_norm(node.get('left'))
             right = _to_bool_norm(node.get('right'))
@@ -353,6 +357,11 @@ def _expand_imp_iff(ast: Any) -> Any:
             left = _expand_imp_iff(ast.get('left'))
             right = _expand_imp_iff(ast.get('right'))
             return {'op': 'OR', 'args': [{'op': 'NOT', 'child': left}, right]}
+        if node_op == '←':
+            left = _expand_imp_iff(ast.get('left'))
+            right = _expand_imp_iff(ast.get('right'))
+            # B ← A == A → B
+            return {'op': 'OR', 'args': [{'op': 'NOT', 'child': right}, left]}
         elif node_op in {'↔', '≡'}:
             left = _expand_imp_iff(ast.get('left'))
             right = _expand_imp_iff(ast.get('right'))
@@ -561,7 +570,7 @@ def canonical_str(node: Any) -> str:
         op = node['node']
         if op == '¬':
             return f"¬({canonical_str(_guess_unary_child(node))})"
-        if op in {'∧', '∨', '→', '↔', '⊕', '↑', '↓', '≡'}:
+        if op in {'∧', '∨', '→', '←', '↔', '⊕', '↑', '↓', '≡'}:
             left = canonical_str(node.get('left'))
             right = canonical_str(node.get('right'))
             return f"({left} {op} {right})"

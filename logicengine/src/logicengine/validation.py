@@ -5,7 +5,7 @@ Supported tokens:
 - Variables:    A–Z (optionally extended to identifiers via VAR_REGEX)
 - Constants:    0, 1
 - Unary:        ¬, !
-- Binary:       ∧, ∨, ⊕, →, ↔  and ASCII forms: &, &&, |, ||, ^, ->, <->
+- Binary:       ∧, ∨, ⊕, →, ←, ↔  and ASCII forms: &, &&, |, ||, ^, ->, <=, <-, <->
 - Parentheses:  ( )
 
 Whitespace is ignored.
@@ -52,11 +52,12 @@ OPERATOR_MAP = {
 
     # binary
     '&': '∧',  '&&': '∧',  '∧': '∧',
-    '|': '∨',  '||': '∨',  '∨': '∨',
+    '|': '∨',  '||': '∨',  '∨': '∨',  '+': '∨',
     '^': '⊕',  '⊕': '⊕',
     '↑': '↑',  '↓': '↓',
-    '->': '→', '→': '→',
-    '<->': '↔','↔': '↔',
+    '=>': '→', '->': '→', '→': '→',
+    '<=': '←', '<-': '←', '←': '←',
+    '<=>': '↔', '<->': '↔','↔': '↔',
     '≡': '≡',
 }
 

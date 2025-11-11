@@ -4,7 +4,7 @@ export function getAstExpr(node) {
   if (!node) return '?';
   if (typeof node === 'string') return node;
   if (node.node === '¬') return `¬(${getAstExpr(node.child)})`;
-  if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(node.node)) {
+  if (['∧', '∨', '⊕', '↑', '↓', '→', '←', '↔', '≡'].includes(node.node)) {
     return `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
   }
   return '?';
@@ -24,7 +24,7 @@ export function getAstStepsNoVars(ast) {
         steps.push({ expr, node });
         seen.add(expr);
       }
-    } else if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(node.node)) {
+    } else if (['∧', '∨', '⊕', '↑', '↓', '→', '←', '↔', '≡'].includes(node.node)) {
       traverse(node.left);
       traverse(node.right);
       const expr = `(${getAstExpr(node.left)} ${node.node} ${getAstExpr(node.right)})`;
@@ -60,6 +60,7 @@ export function evalAst(node, row) {
   if (node.node === '↑') return (left === 1 && right === 1) ? 0 : 1; // NAND
   if (node.node === '↓') return (left === 1 || right === 1) ? 0 : 1; // NOR
   if (node.node === '→') return (left === 0 || right === 1) ? 1 : 0;
+  if (node.node === '←') return (right === 0 || left === 1) ? 1 : 0;
   if (node.node === '↔') return (left === right) ? 1 : 0;
   if (node.node === '≡') return (left === right) ? 1 : 0;
   
@@ -79,7 +80,7 @@ export function getStepArgs(step) {
   if (typeof step.node === 'string') return [step.node];
   
   // For binary operators, return direct left and right subexpressions
-  if (['∧', '∨', '⊕', '↑', '↓', '→', '↔', '≡'].includes(step.node.node)) {
+  if (['∧', '∨', '⊕', '↑', '↓', '→', '←', '↔', '≡'].includes(step.node.node)) {
     const leftExpr = getAstExpr(step.node.left);
     const rightExpr = getAstExpr(step.node.right);
     return [leftExpr, rightExpr];
