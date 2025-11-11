@@ -659,7 +659,11 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         else:
                             y_part = {"op": "OR", "args": rest_a}
 
-                        new_and_args = [copy.deepcopy(arg) for k, arg in enumerate(args) if k not in {idx_a, idx_b}]
+                        new_and_args = [
+                            copy.deepcopy(arg)
+                            for k, arg in enumerate(args)
+                            if k not in {idx_a, idx_b}
+                        ]
                         new_and_args.append(y_part)
 
                         if not new_and_args:
@@ -669,11 +673,22 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         else:
                             after_node = {"op": "AND", "args": new_and_args}
 
+                        before_focus_paths = [
+                            path + [("args", idx_a)],
+                            path + [("args", idx_b)],
+                        ]
+                        if isinstance(after_node, dict) and after_node.get("op") == "AND":
+                            after_focus_paths = [path + [("args", len(new_and_args) - 1)]]
+                        else:
+                            after_focus_paths = [path]
+
                         out.append({
                             "law": "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
                             "path": path,
                             "before": sub,
                             "after": after_node,
+                            "before_focus_paths": before_focus_paths,
+                            "after_focus_paths": after_focus_paths,
                             "note": "Wspólna część Y zostaje.",
                         })
 

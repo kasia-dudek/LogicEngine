@@ -155,10 +155,20 @@ def _apply_law_match(
     before_subexpr_str = pretty(before_sub)
     before_subexpr_canon = canonical_str(before_sub)
     
-    before_highlight_span = find_subtree_span_by_path_cp(path, before_ast) if path else None
+    before_focus_paths = match.get("before_focus_paths")
     before_highlight_spans_cp = None
-    if before_highlight_span:
-        before_highlight_spans_cp = [(before_highlight_span["start"], before_highlight_span["end"])]
+    if before_focus_paths:
+        spans: List[Tuple[int, int]] = []
+        for focus_path in before_focus_paths:
+            span = find_subtree_span_by_path_cp(focus_path, before_ast)
+            if span:
+                spans.append((span["start"], span["end"]))
+        if spans:
+            before_highlight_spans_cp = spans
+    else:
+        before_highlight_span = find_subtree_span_by_path_cp(path, before_ast) if path else None
+        if before_highlight_span:
+            before_highlight_spans_cp = [(before_highlight_span["start"], before_highlight_span["end"])]
     
     # Apply transformation
     updated_ast = set_by_path(current_ast, path, after_sub) if path else after_sub
@@ -170,14 +180,24 @@ def _apply_law_match(
     
     # Locate transformed subexpression in AFTER state
     after_highlight_spans_cp = None
-    sub_after_norm = normalize_bool_ast(after_sub, expand_imp_iff=True)
-    target_canon = canonical_str(sub_after_norm)
-    for after_path, after_node in iter_nodes(updated_ast):
-        if canonical_str(after_node) == target_canon:
-            span = find_subtree_span_by_path_cp(after_path, updated_ast)
+    after_focus_paths = match.get("after_focus_paths")
+    if after_focus_paths:
+        spans: List[Tuple[int, int]] = []
+        for focus_path in after_focus_paths:
+            span = find_subtree_span_by_path_cp(focus_path, updated_ast)
             if span:
-                after_highlight_spans_cp = [(span["start"], span["end"])]
-            break
+                spans.append((span["start"], span["end"]))
+        if spans:
+            after_highlight_spans_cp = spans
+    if after_highlight_spans_cp is None:
+        sub_after_norm = normalize_bool_ast(after_sub, expand_imp_iff=True)
+        target_canon = canonical_str(sub_after_norm)
+        for after_path, after_node in iter_nodes(updated_ast):
+            if canonical_str(after_node) == target_canon:
+                span = find_subtree_span_by_path_cp(after_path, updated_ast)
+                if span:
+                    after_highlight_spans_cp = [(span["start"], span["end"])]
+                break
     if after_highlight_spans_cp is None and path:
         span = find_subtree_span_by_path_cp(path, updated_ast)
         if span:
