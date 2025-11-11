@@ -152,8 +152,11 @@ def _apply_law_match(
     before_ast = copy.deepcopy(current_ast)
     before_str, _ = pretty_with_tokens(before_ast)
     before_canon = canonical_str(before_ast)
-    before_subexpr_str = pretty(before_sub)
-    before_subexpr_canon = canonical_str(before_sub)
+    before_display = match.get("before_display")
+    if before_display is None:
+        before_display = before_sub
+    before_subexpr_str = pretty(before_display)
+    before_subexpr_canon = canonical_str(before_display)
     
     before_focus_paths = match.get("before_focus_paths")
     before_highlight_spans_cp = None
@@ -175,8 +178,11 @@ def _apply_law_match(
     updated_ast = normalize_bool_ast(updated_ast, expand_imp_iff=True)
     after_str, _ = pretty_with_tokens(updated_ast)
     after_canon = canonical_str(updated_ast)
-    after_subexpr_str = pretty(after_sub)
-    after_subexpr_canon = canonical_str(after_sub)
+    after_display = match.get("after_display")
+    if after_display is None:
+        after_display = after_sub
+    after_subexpr_str = pretty(after_display)
+    after_subexpr_canon = canonical_str(after_display)
     
     # Locate transformed subexpression in AFTER state
     after_highlight_spans_cp = None

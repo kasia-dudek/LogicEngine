@@ -682,6 +682,15 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                         else:
                             after_focus_paths = [path]
 
+                        before_display = {
+                            "op": "AND",
+                            "args": [
+                                copy.deepcopy(or_a),
+                                copy.deepcopy(or_b),
+                            ],
+                        }
+                        after_display = y_part
+
                         out.append({
                             "law": "Redukcja klauzul (x∨Y)∧(¬x∨Y)",
                             "path": path,
@@ -689,6 +698,8 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                             "after": after_node,
                             "before_focus_paths": before_focus_paths,
                             "after_focus_paths": after_focus_paths,
+                            "before_display": before_display,
+                            "after_display": after_display,
                             "note": "Wspólna część Y zostaje.",
                         })
 
