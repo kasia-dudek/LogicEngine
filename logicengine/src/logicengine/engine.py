@@ -749,7 +749,7 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
     
     # Step 3: Use existing laws-based simplification
     # This gives us the step-by-step process
-    laws_result = simplify_with_laws(input_std, max_steps=100, mode="mixed")
+    laws_result = simplify_with_laws(input_std, max_steps=100, mode="mixed", enable_qm_fallback=False)
     
     # Get QM result early to compare with laws result
     qm_result = None
@@ -1003,7 +1003,7 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
                                 # This helps with cases like ¬(B∧¬C) that can be expanded
                                 from .laws import pretty
                                 current_expr_str = pretty(current_ast)
-                                additional_laws = simplify_with_laws(current_expr_str, max_steps=20, mode="mixed")
+                                additional_laws = simplify_with_laws(current_expr_str, max_steps=20, mode="mixed", enable_qm_fallback=False)
                                 if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
                                     # Only add steps that actually simplify (reduce literal count)
                                     current_measure = measure(current_ast)
@@ -1055,7 +1055,7 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
                                 from .laws import pretty
                                 current_expr_str = pretty(current_ast)
                                 # Try with more steps to allow complex transformations
-                                additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed", enable_qm_fallback=False)
                                 if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
                                     current_measure = measure(current_ast)
                                     for law_step in additional_laws["steps"]:
@@ -1537,7 +1537,7 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
                                     # After absorption, try to apply more laws to simplify complex terms
                                     from .laws import pretty
                                     current_expr_str = pretty(working_ast)
-                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed", enable_qm_fallback=False)
                                     if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
                                         current_measure = measure(working_ast)
                                         for law_step in additional_laws["steps"]:
@@ -1585,7 +1585,7 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
                                     # No more absorption steps - try laws one more time
                                     from .laws import pretty
                                     current_expr_str = pretty(working_ast)
-                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed")
+                                    additional_laws = simplify_with_laws(current_expr_str, max_steps=30, mode="mixed", enable_qm_fallback=False)
                                     if additional_laws.get("steps") and len(additional_laws["steps"]) > 0:
                                         current_measure = measure(working_ast)
                                         for law_step in additional_laws["steps"]:
@@ -1790,11 +1790,19 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
         except Exception as e:
             # Fallback to minimal_forms if QM fails
             minimal_result = compute_minimal_forms(input_std)
-            result_dnf = minimal_result.get("dnf", {}).get("expr", initial_canon)
+            minimal_expr = minimal_result.get("dnf", {}).get("expr")
+            if minimal_expr and minimal_expr != "Za złożone":
+                result_dnf = minimal_expr
+            else:
+                result_dnf = input_std
     else:
         # Simple case - use minimal_forms
         minimal_result = compute_minimal_forms(input_std)
-        result_dnf = minimal_result.get("dnf", {}).get("expr", initial_canon)
+        minimal_expr = minimal_result.get("dnf", {}).get("expr")
+        if minimal_expr and minimal_expr != "Za złożone":
+            result_dnf = minimal_expr
+        else:
+            result_dnf = input_std
     
     # Check if expression was already minimal DNF (no steps generated)
     # Use the flag set earlier if available, otherwise check again

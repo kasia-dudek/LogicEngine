@@ -5,8 +5,20 @@ from __future__ import annotations
 from typing import Any, Dict, List, Tuple, Optional, Iterable
 from itertools import combinations
 import copy
+import logging
+import contextlib
+import io
 
-from .ast import generate_ast, normalize_bool_ast, canonical_str, canonical_str_minimal
+from .ast import (
+    generate_ast,
+    normalize_bool_ast,
+    canonical_str,
+    canonical_str_minimal,
+    collect_variables,
+)
+
+
+logger = logging.getLogger(__name__)
 
 
 def VAR(name: str) -> Dict[str, Any]:
@@ -502,12 +514,37 @@ def canon(n: Any) -> str:
     return canonical_str(n)
 
 
+def _or_is_tautology(node: Any) -> bool:
+    if not isinstance(node, dict) or node.get("op") != "OR":
+        return False
+    lits_list = [to_lit(x) for x in node.get("args", [])]
+    if not lits_list or any(l is None for l in lits_list):
+        return False
+    return or_factor_is_tautology([l for l in lits_list if l])
+
+
 def _multiset_signature(items: Iterable[Any]) -> Dict[str, int]:
     sig: Dict[str, int] = {}
     for item in items:
         key = canon(item)
         sig[key] = sig.get(key, 0) + 1
     return sig
+
+
+def _collect_tautology_or_matches(node: Any) -> List[Dict[str, Any]]:
+    matches: List[Dict[str, Any]] = []
+    for path, sub in iter_nodes(node):
+        if _or_is_tautology(sub):
+            matches.append({
+                "law": "Dopełnienie (A ∨ ¬A)",
+                "path": path,
+                "before": copy.deepcopy(sub),
+                "after": CONST(1),
+                "note": "Tautologia: A∨¬A = 1",
+                "source": "algebraic",
+                "force_measure": True,
+            })
+    return matches
 
 
 def laws_matches(node: Any) -> List[Dict[str, Any]]:
@@ -608,6 +645,18 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
             
             # REMOVED: General _is_absorbed_by check - it was too broad and produced incorrect results
             # The correct absorption rules are checked below with specific conditions
+            
+            # Detect tautology arguments (B ∨ ¬B) inside conjunctions
+            for idx, arg in enumerate(sub.get("args", [])):
+                if _or_is_tautology(arg):
+                    out.append({
+                        "law": "Dopełnienie (A ∨ ¬A)",
+                        "path": path + [("args", idx)],
+                        "before": arg,
+                        "after": CONST(1),
+                        "note": "Tautologia: A∨¬A = 1",
+                        "force_measure": True,
+                    })
             
             args = sub.get("args", [])
             for i, a in enumerate(args):
@@ -1241,7 +1290,7 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
         elif "Konsensus" in rule_name:
             return 7
         else:
-            return 8
+            return 7
     
     best: Optional[Dict[str, Any]] = None
     best_measure = None
@@ -1281,7 +1330,12 @@ def pick_best(node: Any, matches: List[Dict[str, Any]]) -> Optional[Dict[str, An
     
     return best
 
-def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> Dict[str, Any]:
+def simplify_with_laws(
+    expr: str,
+    max_steps: int = 80,
+    mode: str = "mixed",
+    enable_qm_fallback: bool = True,
+) -> Dict[str, Any]:
     legacy_ast = generate_ast(expr)
     node = normalize_bool_ast(legacy_ast, expand_imp_iff=True)
 
@@ -1302,6 +1356,11 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
                 from .axioms import DERIVED_FROM_AXIOMS
                 match["derived_from_axioms"] = DERIVED_FROM_AXIOMS.get(match.get("law", ""), [])
             matches.extend(algebraic_matches)
+            
+            # Explicitly detect tautologies (A∨¬A) in deeply nested structures
+            tautology_matches = _collect_tautology_or_matches(node)
+            if tautology_matches:
+                matches.extend(tautology_matches)
         
         if mode in ("axioms", "mixed"):
             from .axioms import axioms_matches
@@ -1476,7 +1535,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         # - OR it increases both node count AND string length by significant amounts
         # EXCEPTION: Distribution/Expansion (priority 1 rules) can increase literals temporarily
         is_worse = False
-        if choice.get("source") != "axiom":
+        if choice.get("source") != "axiom" and not choice.get("force_measure"):
             law_name = choice.get("law", "")
             is_expansion_rule = ("Dystrybutywność" in law_name or "Rozdzielność" in law_name)
             
@@ -1503,7 +1562,7 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         
         # If measure is the same or slightly worse (neutral/acceptable transformation),
         # allow it but check for oscillation to avoid infinite loops
-        if after_canon in seen_expressions and choice.get("source") != "axiom":
+        if after_canon in seen_expressions and choice.get("source") != "axiom" and not choice.get("force_measure"):
             # We've seen this result before - don't repeat
             sub_before_canon = canonical_str(sub_before)
             sub_after_canon = canonical_str(sub_after)
@@ -1555,8 +1614,69 @@ def simplify_with_laws(expr: str, max_steps: int = 80, mode: str = "mixed") -> D
         if before_str == after_str:
             break
 
+    fallback_steps: List[Dict[str, Any]] = []
+    result_pretty = pretty(node)
+    result_canon = canonical_str(node)
+
+    try:
+        result_vars = collect_variables(node)
+        if enable_qm_fallback and steps and len(result_vars) <= 8:  # Only attempt fallback if manageable for QM
+            from importlib import import_module
+            engine_module = import_module("logicengine.engine")
+            with contextlib.redirect_stdout(io.StringIO()):
+                legacy_minimal = engine_module._legacy_simplify_to_minimal_dnf(result_pretty)
+            minimal_expr = legacy_minimal.get("result_dnf") or result_pretty
+            minimal_ast = normalize_bool_ast(generate_ast(minimal_expr), expand_imp_iff=True)
+            minimal_canon = canonical_str(minimal_ast)
+
+            if minimal_canon != result_canon:
+                if steps:
+                    last_step = steps[-1]
+                    before_str = last_step.get("after_str", result_pretty)
+                    before_canon = last_step.get("after_canon", result_canon)
+                else:
+                    before_str = result_pretty
+                    before_canon = result_canon
+                before_len = len(list(before_str))
+                after_str = pretty(minimal_ast)
+                after_len = len(list(after_str))
+                fallback_steps.append({
+                    "law": "QM minimalizacja",
+                    "note": "Minimalna postać DNF obliczona algorytmem Quine’a–McCluskeya.",
+                    "path": [],
+                    "before_tree": before_str,
+                    "after_tree": after_str,
+                    "before_str": before_str,
+                    "after_str": after_str,
+                    "before_subexpr": before_str,
+                    "after_subexpr": after_str,
+                    "before_canon": before_canon,
+                    "after_canon": minimal_canon,
+                    "before_subexpr_canon": before_canon,
+                    "after_subexpr_canon": minimal_canon,
+                    "before_span": {"start": 0, "end": before_len},
+                    "after_span": {"start": 0, "end": after_len},
+                    "before_highlight_span": {"start": 0, "end": before_len},
+                    "after_highlight_span": {"start": 0, "end": after_len},
+                    "before_highlight_spans_cp": [(0, before_len)],
+                    "after_highlight_spans_cp": [(0, after_len)],
+                    "applicable_here": [],
+                    "source": "qm-fallback",
+                    "axiom_id": None,
+                    "axiom_subst": None,
+                    "derived_from_axioms": [],
+                })
+                node = minimal_ast
+                result_pretty = after_str
+                result_canon = minimal_canon
+    except Exception as fallback_error:
+        logger.warning("QM fallback failed: %s", fallback_error)
+
+    if fallback_steps:
+        steps.extend(fallback_steps)
+
     return {
-        "result": pretty(node),
+        "result": result_pretty,
         "steps": steps,
         "normalized_ast": node,
         "mode": "pedantic",
