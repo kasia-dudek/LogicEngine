@@ -1758,28 +1758,67 @@ def _legacy_simplify_to_minimal_dnf(expr: str, var_limit: int = 8) -> Dict[str, 
                             
                             is_minimal = (final_measure[0] == qm_measure[0])
                             
+                            qm_expr_str = qm_result.get("result", initial_canon)
+                            qm_canon_val = qm_dnf_canon
+                            if not qm_canon_val and qm_expr_str:
+                                try:
+                                    qm_canon_val = canonical_str(normalize_bool_ast(generate_ast(qm_expr_str), expand_imp_iff=True))
+                                except Exception:
+                                    qm_canon_val = qm_expr_str
+                            
+                            def _append_qm_step(before: str, after: str, before_canon_val: str, after_canon_val: str) -> None:
+                                span_before = (0, len(list(before)))
+                                span_after = (0, len(list(after)))
+                                steps.append(Step(
+                                    before_str=before,
+                                    after_str=after,
+                                    rule="QM minimalizacja",
+                                    category="user",
+                                    proof={"method": "tt-hash", "equal": True},
+                                    before_canon=before_canon_val,
+                                    after_canon=after_canon_val,
+                                    before_subexpr=before,
+                                    after_subexpr=after,
+                                    before_subexpr_canon=before_canon_val,
+                                    after_subexpr_canon=after_canon_val,
+                                    before_highlight_spans_cp=[span_before],
+                                    after_highlight_spans_cp=[span_after],
+                                ))
+
                             if final_hash != qm_hash:
                                 print(f"Warning: Laws couldn't reach minimal DNF, using QM result (TT mismatch)")
                                 print(f"  Last laws step: {result_dnf}")
-                                print(f"  QM result: {qm_result.get('result')}")
-                                result_dnf = qm_result.get("result", initial_canon)
+                                print(f"  QM result: {qm_expr_str}")
+                                _append_qm_step(result_dnf, qm_expr_str, final_canon, qm_canon_val or qm_expr_str)
+                                result_dnf = qm_expr_str
                             elif not is_minimal:
                                 print(f"Warning: Laws result not minimal, using QM result (literal count)")
                                 print(f"  Last laws: {result_dnf} (literals={final_measure[0]})")
-                                print(f"  QM result: {qm_result.get('result')} (literals={qm_measure[0]})")
-                                result_dnf = qm_result.get("result", initial_canon)
+                                print(f"  QM result: {qm_expr_str} (literals={qm_measure[0]})")
+                                _append_qm_step(result_dnf, qm_expr_str, final_canon, qm_canon_val or qm_expr_str)
+                                result_dnf = qm_expr_str
                         except (ASTError, LogicExpressionError) as ast_err:
                             # If we can't parse one of the results (e.g., "1" or "0"), 
                             # compare hashes and use QM if they differ or if QM is simpler
                             if final_hash != qm_hash:
                                 # Different hashes, use QM
                                 print(f"Warning: Cannot parse result, using QM (TT mismatch)")
-                                result_dnf = qm_result.get("result", initial_canon)
+                                qm_expr_str = qm_result.get("result", initial_canon)
+                                try:
+                                    qm_canon_val = canonical_str(normalize_bool_ast(generate_ast(qm_expr_str), expand_imp_iff=True))
+                                except Exception:
+                                    qm_canon_val = qm_expr_str
+                                _append_qm_step(result_dnf, qm_expr_str, final_canon, qm_canon_val)
+                                result_dnf = qm_expr_str
                             else:
                                 # Same hashes, prefer QM since it's more canonical
-                                qm_expr_str = qm_result.get("result", "")
                                 if qm_expr_str in ["0", "1"] or qm_expr_str != result_dnf:
                                     print(f"Warning: Cannot parse result, using QM (prefer canonical)")
+                                    try:
+                                        qm_canon_val = canonical_str(normalize_bool_ast(generate_ast(qm_expr_str), expand_imp_iff=True))
+                                    except Exception:
+                                        qm_canon_val = qm_expr_str
+                                    _append_qm_step(result_dnf, qm_expr_str, final_canon, qm_canon_val)
                                     result_dnf = qm_expr_str
                     except Exception as e:
                         print(f"Warning: Could not verify equivalence: {e}")
