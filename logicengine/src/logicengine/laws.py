@@ -659,6 +659,38 @@ def laws_matches(node: Any) -> List[Dict[str, Any]]:
                     })
             
             args = sub.get("args", [])
+            # Nested absorption: convert X∨(¬X∧Y) appearing inside an AND
+            for idx, arg in enumerate(args):
+                if not isinstance(arg, dict) or arg.get("op") != "OR":
+                    continue
+                or_args = arg.get("args", [])
+                literal_args = [lit for lit in (to_lit(x) for x in or_args) if lit]
+                for lit in literal_args:
+                    complement = (lit[0], not lit[1])
+                    for or_child in or_args:
+                        if not isinstance(or_child, dict) or or_child.get("op") != "AND":
+                            continue
+                        child_lits = [t for t in (to_lit(x) for x in or_child.get("args", [])) if t]
+                        if complement not in child_lits:
+                            continue
+                        rest_nodes = [lit_to_node(l) for l in child_lits if l != complement]
+                        if rest_nodes:
+                            simplified_or = {"op": "OR", "args": [lit_to_node(lit)] + rest_nodes}
+                        else:
+                            simplified_or = lit_to_node(lit)
+                        new_and_args = copy.deepcopy(args)
+                        new_and_args[idx] = simplified_or
+                        after_node = {"op": "AND", "args": new_and_args}
+                        out.append({
+                            "law": "Absorpcja z negacją",
+                            "path": path,
+                            "before": sub,
+                            "after": after_node,
+                            "note": "X∨(¬X∧Y)=X∨Y",
+                            "force_measure": True,
+                        })
+                        break
+
             for i, a in enumerate(args):
                 if isinstance(a, dict) and a.get("op") == "NOT":
                     child = a.get("child")
@@ -1620,7 +1652,7 @@ def simplify_with_laws(
 
     try:
         result_vars = collect_variables(node)
-        if enable_qm_fallback and steps and len(result_vars) <= 8:  # Only attempt fallback if manageable for QM
+        if enable_qm_fallback and len(result_vars) <= 8:  # Only attempt fallback if manageable for QM
             from importlib import import_module
             engine_module = import_module("logicengine.engine")
             with contextlib.redirect_stdout(io.StringIO()):
